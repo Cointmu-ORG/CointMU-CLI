@@ -93,6 +93,6 @@ describe("explainInstallFailure", () => {
 
   it("falls back to a generic message for unrelated npm failures", () => {
     const message = explainInstallFailure("npm error code EACCES");
-    expect(message).toBe("npm install failed (see the npm output above).");
+    expect(message).toBe("npm install failed; see the npm output above.");
   });
 });

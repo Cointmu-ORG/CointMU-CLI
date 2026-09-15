@@ -41,7 +41,9 @@ export async function resolveTargetVersion(
 ): Promise<string> {
   if (requested !== undefined && !VALID_TO.test(requested)) {
     throw new Error(
-      `Invalid --to value "${requested}". Expected a semver version, range, or npm dist-tag (e.g. "1.3.2", ">=1.3.0", "latest").`,
+      `Invalid --to value "${requested}".\n` +
+        `\x1b[2mhint:\x1b[0m ` +
+        `expected a semver version, range, or npm dist-tag (e.g. "1.3.2", ">=1.3.0", "latest").`,
     );
   }
 
@@ -63,7 +65,7 @@ export async function resolveTargetVersion(
       .filter(Boolean);
 
     if (lines.length === 0) {
-      throw new Error("registry returned no version");
+      throw new Error("the npm registry returned no version");
     }
 
     const last = lines[lines.length - 1];
@@ -72,7 +74,8 @@ export async function resolveTargetVersion(
   } catch (error) {
     if (requested) {
       throw new Error(
-        `Version "${requested}" is not available on the npm registry for ${PACKAGE_NAME}.`,
+        `Version "${requested}" is not available on the npm registry for ${PACKAGE_NAME}.\n` +
+          `\x1b[2mhint:\x1b[0m list the published versions with \`npm view ${PACKAGE_NAME} versions\`.`,
         { cause: error },
       );
     }
@@ -104,7 +107,7 @@ export function explainInstallFailure(stderr: string): string {
       `  npm install -g ${PACKAGE_NAME}@latest`,
     ].join("\n");
   }
-  return "npm install failed (see the npm output above).";
+  return "npm install failed; see the npm output above.";
 }
 
 /**
@@ -117,7 +120,7 @@ async function runUpdate(options: UpdateOptions = {}): Promise<void> {
     const { spawnSync } = await import("child_process");
 
     const current = await resolveCurrentVersion();
-    console.log("Checking the npm registry for the target version...");
+    console.log("Checking the npm registry...");
     const target = await resolveTargetVersion(options.to);
 
     console.log(`current version : ${current}`);
@@ -128,7 +131,7 @@ async function runUpdate(options: UpdateOptions = {}): Promise<void> {
       return;
     }
 
-    console.log(`\nExecuting: ${buildInstallCommand(target)}`);
+    console.log(`\nRunning: ${buildInstallCommand(target)}`);
     // ponytail: spawnSync (no shell) blocks command injection; win32 needs
     // "npm.cmd". If Node ever refuses .cmd via spawn, switch to a resolved
     // npm-cli.js path invoked through process.execPath.
@@ -152,9 +155,9 @@ async function runUpdate(options: UpdateOptions = {}): Promise<void> {
       throw new Error(explainInstallFailure(stderr));
     }
 
-    console.log("\nUpdate completed successfully!");
+    console.log(`\nUpdated ${PACKAGE_NAME} to ${target}.`);
   } catch (error) {
-    console.error("\n\x1b[31m[!] Update failed:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m update failed");
     if (options.verbose) {
       console.error(error);
     } else {
@@ -165,12 +168,10 @@ async function runUpdate(options: UpdateOptions = {}): Promise<void> {
 }
 
 export const updateCommand = new Command("update")
-  .description(
-    "Updates the CointMU CLI to the latest release from the npm registry",
-  )
+  .description("Update the CointMU CLI from the npm registry")
   .option(
     "--to <version>",
     "Install a specific published version instead of the latest",
   )
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(runUpdate);

@@ -120,7 +120,7 @@ export async function generateConfigFiles(
     );
   } catch (error) {
     throw new Error(
-      `Failed to generate config files: ${error instanceof Error ? error.message : String(error)}`,
+      `could not write the project config files: ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
   }

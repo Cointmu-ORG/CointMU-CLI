@@ -50,7 +50,7 @@ describe("confirmProjectTrust", () => {
     prompt.mockResolvedValue({ proceed: false });
     const { confirmProjectTrust } = await loadTrust();
 
-    await expect(confirmProjectTrust([SCRIPT])).rejects.toThrow(/Aborted/);
+    await expect(confirmProjectTrust([SCRIPT])).rejects.toThrow(/aborted/i);
   });
 
   it("skips the prompt entirely when --yes is passed", async () => {

@@ -29,7 +29,8 @@ export async function loadConfig(): Promise<CmuConfig> {
 
   if (!(await fs.pathExists(configPath))) {
     throw new Error(
-      `Error: ${CONFIG_FILE_NAME} not found. Are you in a CointMU project?`,
+      `${CONFIG_FILE_NAME} not found.\n` +
+        "\x1b[2mhint:\x1b[0m run this command from the root of your CointMU project.",
     );
   }
 

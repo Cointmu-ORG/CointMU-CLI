@@ -23,25 +23,27 @@ async function runNodeConnect(options: { network?: string }): Promise<void> {
     const networkConfig = await getDynamicNetwork(options.network);
     const rpcUrl = networkConfig.url;
 
-    console.log(`Pinging CointMU node at ${rpcUrl}...`);
+    console.log(`Pinging ${rpcUrl}...`);
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const network = await provider.getNetwork();
     const blockNumber = await provider.getBlockNumber();
 
-    console.log("Successfully connected to the CointMU node!");
-    console.log(`Network Name: ${network.name}`);
-    console.log(`Chain ID:      ${network.chainId}`);
-    console.log(`Block Number: ${blockNumber}`);
+    console.log("Connected to the CointMU node.");
+    console.log(`Network      : ${network.name}`);
+    console.log(`Chain ID     : ${network.chainId}`);
+    console.log(`Block number : ${blockNumber}`);
   } catch (error) {
-    console.error(
-      "\n\x1b[31m[!] Failed to connect to the CointMU node. Is the node running?\x1b[0m",
-    );
+    console.error("\n\x1b[31merror:\x1b[0m node connect failed");
 
     if (isVerbose) {
       console.error(error);
     } else {
       console.error(error instanceof Error ? error.message : String(error));
     }
+
+    console.error(
+      "\x1b[2mhint:\x1b[0m start a local node with `cmu node start`, or check the endpoint with `cmu network info`.",
+    );
 
     process.exit(EXIT_FAILURE);
   }
@@ -65,7 +67,10 @@ async function runNodeStart(options: {
     const port = !isNaN(parsedPort) ? parsedPort : DEFAULT_PORT;
 
     if (isNaN(port) || port <= 0 || port > MAX_PORT) {
-      throw new Error("Invalid port specified.");
+      throw new Error(
+        `invalid port '${options.port}'.\n` +
+          `\x1b[2mhint:\x1b[0m pass a port between 1 and ${MAX_PORT}, e.g. \`cmu node start -p 8585\`.`,
+      );
     }
 
     await killPort(port);
@@ -119,9 +124,9 @@ async function runNodeStart(options: {
         if (options.log) {
           const match = msg.match(/(eth_|net_|web3_)[a-zA-Z0-9_]+/);
           if (match) {
-            originalConsoleLog(`[RPC] ${match[0]}`);
+            originalConsoleLog(`\x1b[2mrpc:\x1b[0m ${match[0]}`);
           } else {
-            originalConsoleLog(`[RPC] ${msg.trim()}`);
+            originalConsoleLog(`\x1b[2mrpc:\x1b[0m ${msg.trim()}`);
           }
         }
         return;
@@ -168,15 +173,13 @@ async function runNodeStart(options: {
     // Enable internal hardhat logging so we can intercept it, unless we are totally quiet
     hre.config.networks.hardhat.loggingEnabled = !!options.log || !!isVerbose;
 
-    originalConsoleLog(
-      `\nLocal CointMU DevNet is successfully running on http://${host}:${port}`,
-    );
+    originalConsoleLog(`\nCointMU DevNet listening on http://${host}:${port}`);
     originalConsoleLog(`Chain ID: ${DEFAULT_CHAIN_ID}\n`);
     originalConsoleLog(`Mnemonic: ${resolvedMnemonic}`);
     originalConsoleLog(
-      `WARNING: This is a development mnemonic. DO NOT use it on a mainnet.\n`,
+      `\x1b[33mwarning:\x1b[0m development mnemonic - never use it on a live network.\n`,
     );
-    originalConsoleLog("\nPre-funded Developer Accounts (100 ETH each):");
+    originalConsoleLog("\nPre-funded developer accounts (100 ETH each):");
 
     let index = 0;
     const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic!);
@@ -185,16 +188,16 @@ async function runNodeStart(options: {
         mnemonicObj,
         `m/44'/60'/0'/0/${i}`,
       );
-      originalConsoleLog(`\n[ Account #${index} ]`);
+      originalConsoleLog(`\nAccount #${index}`);
       originalConsoleLog(`Address     : ${wallet.address}`);
-      originalConsoleLog(`Private Key : ${wallet.privateKey}`);
+      originalConsoleLog(`Private key : ${wallet.privateKey}`);
       index++;
     }
     originalConsoleLog("\n");
 
     process.on("SIGINT", () => {
-      originalConsoleLog("\nShutting down CointMU DevNet...");
-      originalConsoleLog("DevNet shutdown complete. Goodbye!");
+      originalConsoleLog("\nStopping the CointMU DevNet...");
+      originalConsoleLog("CointMU DevNet stopped.");
       process.exit(EXIT_SUCCESS);
     });
 
@@ -204,9 +207,7 @@ async function runNodeStart(options: {
       port: port,
     });
   } catch (error) {
-    console.error(
-      "\n\x1b[31m[!] Failed to initialize the CointMU DevNet simulator:\x1b[0m",
-    );
+    console.error("\n\x1b[31merror:\x1b[0m node start failed");
 
     if (isVerbose) {
       console.error(error);
@@ -219,18 +220,18 @@ async function runNodeStart(options: {
 }
 
 export const nodeCommand = new Command("node")
-  .description("Manages the local EVM node for development and testing")
+  .description("Manage the local EVM node")
   .option("-v, --verbose", "Enable verbose logging for all node commands");
 
 nodeCommand
   .command("connect")
-  .description("Pings the configured RPC endpoint to test connectivity")
-  .option("-n, --network <name>", "Specify the network to connect to")
+  .description("Ping the configured RPC endpoint")
+  .option("-n, --network <name>", "Network to connect to")
   .action(runNodeConnect);
 
 nodeCommand
   .command("start")
-  .description("Starts a local development network with pre-funded accounts")
+  .description("Start a local DevNet with pre-funded accounts")
   .option("--host <host>", "Host to bind the server to", DEFAULT_HOST)
   .option(
     "-p, --port <number>",
@@ -239,7 +240,7 @@ nodeCommand
   )
   .option(
     "-m, --mnemonic <phrase>",
-    "12-word mnemonic seed phrase to generate deterministic accounts",
+    "12-word mnemonic for deterministic accounts",
   )
-  .option("-l, --log", "Enable real-time RPC transaction logging")
+  .option("-l, --log", "Log RPC calls as they arrive")
   .action(runNodeStart);

@@ -9,7 +9,10 @@ export function checkNodeVersion(version: string): string | null {
   const major = Number(version.replace(/^v/, "").split(".")[0]);
   // Unparseable version: assume it is fine rather than block a working runtime.
   if (Number.isNaN(major) || major >= MIN_NODE_MAJOR) return null;
-  return `cmu-cli butuh Node.js ${MIN_NODE_MAJOR} atau lebih baru, kamu pakai Node ${version}. Upgrade dulu ya.`;
+  return (
+    `\x1b[31merror:\x1b[0m cmu requires Node.js ${MIN_NODE_MAJOR} or newer, but this is Node ${version}.\n` +
+    "\x1b[2mhint:\x1b[0m upgrade Node.js, or install a version manager such as nvm or fnm."
+  );
 }
 
 const problem = checkNodeVersion(process.version);

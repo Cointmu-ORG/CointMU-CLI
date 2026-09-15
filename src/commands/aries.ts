@@ -16,13 +16,13 @@ async function runAries(options: { verbose?: boolean } = {}): Promise<void> {
     const { getRandomSadQuote } = await import("../utils/quotes");
 
     console.log(
-      `${DIM_COLOR}[INIT] Connecting to peer: 127.0.0.1:8333...${RESET_COLOR}`,
+      `${DIM_COLOR}init: connecting to peer 127.0.0.1:8333...${RESET_COLOR}`,
     );
     console.log(
-      `${DIM_COLOR}[INIT] Bypassing standard consensus protocols...${RESET_COLOR}`,
+      `${DIM_COLOR}init: bypassing standard consensus protocols...${RESET_COLOR}`,
     );
     console.log(
-      `${DIM_COLOR}[INIT] Accessing Genesis Block data...${RESET_COLOR}`,
+      `${DIM_COLOR}init: accessing genesis block data...${RESET_COLOR}`,
     );
     console.log("");
     console.log(
@@ -33,7 +33,7 @@ async function runAries(options: { verbose?: boolean } = {}): Promise<void> {
     );
     console.log(`${GREEN_COLOR} > ${getRandomSadQuote()}${RESET_COLOR}`);
   } catch (error) {
-    console.error("\n\x1b[31m[!] Execution failed:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m aries failed");
     if (options.verbose) {
       console.error(error);
     } else {
@@ -44,6 +44,6 @@ async function runAries(options: { verbose?: boolean } = {}): Promise<void> {
 }
 
 export const ariesCommand = new Command("aries")
-  .description("Hidden easter egg command.")
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Hidden easter egg command")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(runAries);

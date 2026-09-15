@@ -35,7 +35,7 @@ function runDeployScript(
   const args = ext === ".ts" ? ["ts-node", scriptPath] : [scriptPath];
 
   console.log(`\n========================================`);
-  console.log(`Executing: ${path.basename(scriptPath)}`);
+  console.log(`Running ${path.basename(scriptPath)}`);
   console.log(`========================================\n`);
 
   execFileSync(runner, args, {
@@ -62,7 +62,7 @@ export function maskPrivateKey(pk: string): string {
  */
 export async function pingNetwork(rpcUrl: string): Promise<void> {
   const { ethers } = await import("ethers");
-  console.log(`Pinging RPC URL: ${rpcUrl}...`);
+  console.log(`Pinging ${rpcUrl}...`);
   try {
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const networkData: any = await Promise.race([
@@ -72,10 +72,13 @@ export async function pingNetwork(rpcUrl: string): Promise<void> {
       ),
     ]);
     console.log(
-      `[SUCCESS] Connected to network '${networkData.name}' (Chain ID: ${networkData.chainId})`,
+      `Connected to '${networkData.name}' (chain ID ${networkData.chainId}).`,
     );
   } catch {
-    throw new Error(`Unreachable RPC URL: ${rpcUrl}`);
+    throw new Error(
+      `RPC endpoint ${rpcUrl} is unreachable (timed out after ${NETWORK_TIMEOUT_MS}ms).\n` +
+        "\x1b[2mhint:\x1b[0m check the node is running and the endpoint is correct - `cmu network list`.",
+    );
   }
 }
 
@@ -94,7 +97,8 @@ async function runDeploy(options: DeployOptions): Promise<void> {
 
     if (!(await fs.pathExists(deployDir))) {
       throw new Error(
-        `'deploy' directory not found at ${deployDir}.\nPlease run this command from the root of your CointMU project.`,
+        `deploy/ directory not found at ${deployDir}.\n` +
+          "\x1b[2mhint:\x1b[0m run `cmu deploy` from the root of your CointMU project.",
       );
     }
 
@@ -115,7 +119,7 @@ async function runDeploy(options: DeployOptions): Promise<void> {
       { yes: options.yes },
     );
 
-    console.log("Triggering automated contract compilation...");
+    console.log("Compiling contracts...");
     const { runCompile } = await import("./compile");
     await runCompile({ yes: options.yes });
 
@@ -137,7 +141,8 @@ async function runDeploy(options: DeployOptions): Promise<void> {
 
     if (!privateKey) {
       throw new Error(
-        "PRIVATE_KEY is not defined in the configuration or .env file.",
+        "no private key available for signing.\n" +
+          "\x1b[2mhint:\x1b[0m run `cmu wallet login`, or set PRIVATE_KEY in .env or cmu.config.ts.",
       );
     }
 
@@ -146,30 +151,33 @@ async function runDeploy(options: DeployOptions): Promise<void> {
     try {
       wallet = new ethers.Wallet(privateKey);
     } catch {
-      throw new Error("Invalid PRIVATE_KEY provided.");
+      throw new Error(
+        "invalid private key.\n" +
+          "\x1b[2mhint:\x1b[0m expected a 32-byte hex key (0x-prefixed); run `cmu wallet login` to store one.",
+      );
     }
 
-    console.log(`\n--- Deployment Metadata ---`);
-    console.log(`Network Name  : ${network.name}`);
-    console.log(`RPC URL       : ${network.url}`);
-    console.log(`Chain ID      : ${network.chainId}`);
-    console.log(`Deployer      : ${wallet.address}`);
+    console.log(`\n--- Deploy configuration ---`);
+    console.log(`Network      : ${network.name}`);
+    console.log(`RPC endpoint : ${network.url}`);
+    console.log(`Chain ID     : ${network.chainId}`);
+    console.log(`Deployer     : ${wallet.address}`);
     if (options.config) {
-      console.log(`Private Key   : ${maskPrivateKey(privateKey)}`);
+      console.log(`Private key  : ${maskPrivateKey(privateKey)}`);
     }
-    console.log(`---------------------------\n`);
+    console.log(`----------------------------\n`);
 
     if (options.config) {
       process.exit(EXIT_SUCCESS);
     }
 
     if (scripts.length === 0) {
-      console.log("No deployment scripts found in deploy/ directory.");
+      console.log("No deploy scripts found in deploy/.");
       return;
     }
 
     console.log(
-      `Found ${scripts.length} deployment script(s). Starting sequential deployment...`,
+      `Found ${scripts.length} deploy script(s); running them in order...`,
     );
 
     const injectedEnv = {
@@ -184,9 +192,9 @@ async function runDeploy(options: DeployOptions): Promise<void> {
       runDeployScript(fullPath, injectedEnv);
     }
 
-    console.log("\nAll deployment scripts executed successfully.");
+    console.log("\nAll deploy scripts completed.");
   } catch (error) {
-    console.error("\n\x1b[31m[!] Deployment failed:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m deploy failed");
 
     if (options.verbose) {
       console.error(error);
@@ -199,25 +207,19 @@ async function runDeploy(options: DeployOptions): Promise<void> {
 }
 
 export const deployCommand = new Command("deploy")
-  .description("Executes deployment scripts to broadcast contracts on-chain")
-  .option(
-    "-c, --config",
-    "Display the current deployment configuration and exit",
-  )
-  .option(
-    "-p, --ping",
-    "Ping the configured RPC network to check connectivity and exit",
-  )
-  .option("-n, --network <name>", "Specify the network to deploy to")
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Run the deploy scripts that broadcast contracts on-chain")
+  .option("-c, --config", "Show the resolved deploy configuration and exit")
+  .option("-p, --ping", "Ping the configured RPC endpoint and exit")
+  .option("-n, --network <name>", "Network to deploy to")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .option(
     "-y, --yes",
     "Skip the confirmation prompt before executing project code",
   )
   .addHelpText(
     "after",
-    "\nWarning: every script in deploy/ is executed as code and receives your\n" +
-      "decrypted PRIVATE_KEY via the environment. Only deploy projects you trust.\n" +
-      "See the README 'Trust Model' section.",
+    "\nEvery script in deploy/ is executed as code and receives your decrypted\n" +
+      "PRIVATE_KEY through the environment. Only deploy projects you trust; see the\n" +
+      "'Trust Model' section of the README.",
   )
   .action(runDeploy);

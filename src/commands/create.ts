@@ -33,10 +33,10 @@ async function runCreate(
         {
           type: "input",
           name: "projectName",
-          message: "Enter project name:",
+          message: "Project name:",
           validate: (value: string) =>
             /^[a-zA-Z0-9_-]+$/.test(value.trim()) ||
-            "Project name can only contain alphanumeric characters, hyphens, and underscores.",
+            "project name may only contain letters, digits, hyphens and underscores.",
         },
       ]);
 
@@ -45,14 +45,17 @@ async function runCreate(
 
     if (!/^[a-zA-Z0-9_-]+$/.test(projectName)) {
       throw new Error(
-        "Project name can only contain alphanumeric characters, hyphens, and underscores.",
+        "project name may only contain letters, digits, hyphens and underscores.",
       );
     }
 
     const projectPath = path.resolve(process.cwd(), projectName);
 
     if (await fs.pathExists(projectPath)) {
-      throw new Error(`Directory '${projectName}' already exists.`);
+      throw new Error(
+        `directory '${projectName}' already exists.\n` +
+          "\x1b[2mhint:\x1b[0m choose another name, or remove the existing directory first.",
+      );
     }
 
     let template: string = options.template ?? "";
@@ -64,7 +67,7 @@ async function runCreate(
       questions.push({
         type: "list",
         name: "language",
-        message: "Select your preferred language:",
+        message: "Language:",
         choices: [
           { name: "TypeScript", value: "typescript" },
           { name: "JavaScript", value: "javascript" },
@@ -76,7 +79,7 @@ async function runCreate(
       questions.push({
         type: "list",
         name: "template",
-        message: "Select a template:",
+        message: "Template:",
         choices: templateChoices,
       });
     }
@@ -93,7 +96,9 @@ async function runCreate(
 
     if (!validTemplates.includes(template)) {
       throw new Error(
-        `Invalid template '${template}'. Valid options are: ${validTemplates.join(", ")}`,
+        `unknown template '${template}'.\n` +
+          `\x1b[2mhint:\x1b[0m ` +
+          `choose one of: ${validTemplates.join(", ")}`,
       );
     }
 
@@ -101,7 +106,9 @@ async function runCreate(
 
     if (!validLanguages.includes(language)) {
       throw new Error(
-        `Invalid language '${language}'. Valid options are: ${validLanguages.join(", ")}`,
+        `unknown language '${language}'.\n` +
+          `\x1b[2mhint:\x1b[0m ` +
+          `choose one of: ${validLanguages.join(", ")}`,
       );
     }
 
@@ -121,10 +128,10 @@ async function runCreate(
     console.log(cyan(bold(asciiArt)));
     console.log("");
     console.log(
-      `${green(bold("[SUCCESS]"))} CointMU project '${cyan(projectName)}' initialized!\n`,
+      `${green(bold("Created"))} CointMU project '${cyan(projectName)}'\n`,
     );
 
-    console.log(bold("[>] Next steps to start building:"));
+    console.log(bold("Next steps:"));
     console.log(`  1. cd ${projectName}`);
     console.log(`  2. cmu compile`);
     console.log(`  3. cmu deploy\n`);
@@ -132,7 +139,7 @@ async function runCreate(
     const randomQuote = getRandomQuote();
     console.log(`${cyan(randomQuote)}\n`);
   } catch (error) {
-    console.error("\n\x1b[31m[!] Failed to initialize project.\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m create failed");
 
     if (options.verbose) {
       console.error(error);
@@ -145,9 +152,7 @@ async function runCreate(
 }
 
 export const createCommand = new Command("create")
-  .description(
-    "Initializes a new CointMU workspace with pre-configured templates",
-  )
+  .description("Create a new CointMU workspace from a template")
   .argument("[project]", "Name of the project directory to create")
   .option(
     "-t, --template <template>",
@@ -157,5 +162,5 @@ export const createCommand = new Command("create")
     "-l, --language <language>",
     "Language to use (typescript, javascript)",
   )
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(runCreate);

@@ -58,29 +58,28 @@ export async function confirmProjectTrust(
   if (confirmed || targets.length === 0) return;
 
   console.log(
-    "\n\x1b[33m[!] The following project files will be executed as code:\x1b[0m",
+    "\n\x1b[33mwarning:\x1b[0m the following project files will be executed as code:",
   );
   for (const target of targets) {
     console.log(`      ${path.basename(target)}  ->  ${target}`);
   }
   console.log(
-    "\n    They run with your full environment - including PRIVATE_KEY, decrypted\n" +
-      "    from your session and injected for deploy scripts - and can do anything\n" +
-      "    your user account can. This is the same trust model as Hardhat, Foundry\n" +
-      "    and Truffle. Never run this in a project you do not trust.\n" +
-      "    See the 'Trust Model' section of the README for details.\n",
+    "\n    They run with your full environment, including the PRIVATE_KEY decrypted from\n" +
+      "    your session and injected for deploy scripts, and can do anything your user\n" +
+      "    account can. This is the same trust model as Hardhat, Foundry and Truffle;\n" +
+      "    see the 'Trust Model' section of the README.\n",
   );
 
   if (options.yes) {
-    console.log("    --yes supplied: continuing without confirmation.\n");
+    console.log("    --yes: continuing without confirmation\n");
     confirmed = true;
     return;
   }
 
   if (!process.stdin.isTTY) {
     throw new Error(
-      "Refusing to execute project code without confirmation in a non-interactive " +
-        "session.\nRe-run with --yes if you trust the files listed above.",
+      "refusing to execute project code without confirmation in a non-interactive session.\n" +
+        "\x1b[2mhint:\x1b[0m re-run with --yes if you trust the files listed above.",
     );
   }
 
@@ -95,7 +94,7 @@ export async function confirmProjectTrust(
   ]);
 
   if (!proceed) {
-    throw new Error("Aborted: no project code was executed.");
+    throw new Error("aborted: no project code was executed");
   }
   confirmed = true;
 }

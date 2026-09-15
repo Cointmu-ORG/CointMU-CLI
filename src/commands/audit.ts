@@ -13,7 +13,7 @@ async function runCommand(command: string, args: string[]): Promise<void> {
   const { spawn } = await import("child_process");
 
   return new Promise((resolve, reject) => {
-    console.log(`\x1b[36m> Executing: ${command} ${args.join(" ")}\x1b[0m`);
+    console.log(`\x1b[36m> ${command} ${args.join(" ")}\x1b[0m`);
 
     const executable =
       process.platform === "win32" ? `${command}.cmd` : command;
@@ -29,7 +29,7 @@ async function runCommand(command: string, args: string[]): Promise<void> {
 
     child.on("close", (code) => {
       if (code !== EXIT_SUCCESS) {
-        reject(new Error(`Command failed with exit code ${code}`));
+        reject(new Error(`${command} exited with code ${code}`));
       } else {
         resolve();
       }
@@ -38,15 +38,13 @@ async function runCommand(command: string, args: string[]): Promise<void> {
 }
 
 export const auditCommand = new Command("audit")
-  .description(
-    "Performs static security analysis on contracts and dependencies",
-  )
-  .option("--fix", "Automatically apply safe fixes for vulnerabilities")
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Run static security analysis on contracts and dependencies")
+  .option("--fix", "Apply safe fixes automatically")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(async (options: { fix?: boolean; verbose?: boolean }) => {
     try {
       console.log(
-        "\n\x1b[1m\x1b[34m[1/2] Auditing Node.js Dependencies\x1b[0m",
+        "\n\x1b[1m\x1b[34m[1/2] Auditing Node.js dependencies\x1b[0m",
       );
 
       const npmArgs = ["audit"];
@@ -56,13 +54,11 @@ export const auditCommand = new Command("audit")
 
       await runCommand("npm", npmArgs).catch(() => {
         console.warn(
-          "\x1b[33mWarning: Node dependency audit reported issues.\x1b[0m",
+          "\x1b[33mwarning:\x1b[0m npm audit reported issues in the dependency tree.",
         );
       });
 
-      console.log(
-        "\n\x1b[1m\x1b[34m[2/2] Static Analysis of Solidity Contracts\x1b[0m",
-      );
+      console.log("\n\x1b[1m\x1b[34m[2/2] Analysing Solidity contracts\x1b[0m");
 
       const solhintArgs = ["solhint", "contracts/**/*.sol"];
       if (options.fix) {
@@ -71,13 +67,13 @@ export const auditCommand = new Command("audit")
 
       await runCommand("npx", solhintArgs).catch(() => {
         console.warn(
-          "\x1b[33mWarning: Solidity static analysis found vulnerabilities or formatting issues.\x1b[0m",
+          "\x1b[33mwarning:\x1b[0m solhint reported issues in the Solidity sources.",
         );
       });
 
-      console.log("\n\x1b[1m\x1b[32m[+] Audit process completed.\x1b[0m\n");
+      console.log("\n\x1b[1m\x1b[32mAudit complete.\x1b[0m\n");
     } catch (error) {
-      console.error("\n\x1b[31m[!] Audit failed to execute completely.\x1b[0m");
+      console.error("\n\x1b[31merror:\x1b[0m audit failed");
 
       if (options.verbose) {
         console.error(error);

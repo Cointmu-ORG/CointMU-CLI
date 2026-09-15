@@ -33,15 +33,13 @@ export async function killPort(port: number): Promise<void> {
         const pid = parts[parts.length - 1];
 
         if (pid) {
-          console.log(
-            `Checking port ${port}... Port occupied by PID ${pid}, killing process...`,
-          );
+          console.log(`Port ${port} is in use by PID ${pid}; stopping it...`);
           try {
             await execAsync(`${TASKKILL_CMD}${pid}`);
             processKilled = true;
           } catch {
             console.warn(
-              `Warning: Failed to kill process ${pid} on port ${port}.`,
+              `\x1b[33mwarning:\x1b[0m could not free port ${port}; PID ${pid} is still listening.`,
             );
           }
         }

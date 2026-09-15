@@ -94,7 +94,7 @@ export async function runVersion(
     console.log(`ethers       : ${ethers.version}`);
     console.log(`git commit   : ${gitCommit}`);
   } catch (error) {
-    console.error("\n\x1b[31m[!] Failed to retrieve version info:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m version failed");
     if (options.verbose) {
       console.error(error);
     } else {
@@ -105,6 +105,6 @@ export async function runVersion(
 }
 
 export const versionCommand = new Command("version")
-  .description("Displays detailed CLI, runtime, and dependency versions")
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Show CLI, runtime and dependency versions")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(runVersion);
