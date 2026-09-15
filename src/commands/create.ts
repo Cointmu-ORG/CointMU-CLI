@@ -9,6 +9,42 @@ interface CreateOptions {
   verbose?: boolean;
 }
 
+const green = (text: string) => `\x1b[32m${text}\x1b[0m`;
+const cyan = (text: string) => `\x1b[36m${text}\x1b[0m`;
+const bold = (text: string) => `\x1b[1m${text}\x1b[0m`;
+
+const ASCII_ART = `   ______      _       __  _____  __ 
+  / ____/___  (_)___  / /_/ __  \\/ / /
+ / /   / __ \\/ / __ \\/ __/ / / / / / /
+/ /___/ /_/ / / / / / /_/ / / / / /_/ /
+\\____/\\____/_/_/ /_/\\__/_/ /_/_/\\____/`;
+
+/**
+ * Prints the banner shown once a project has been scaffolded.
+ *
+ * The quote is passed in rather than drawn here so the output is a function of
+ * its arguments.
+ *
+ * @param {string} projectName - The directory that was created.
+ * @param {string} quote - Closing line to sign off with.
+ * @returns {void}
+ */
+export function printWelcomeBanner(projectName: string, quote: string): void {
+  console.log("");
+  console.log(cyan(bold(ASCII_ART)));
+  console.log("");
+  console.log(
+    `${green(bold("Created"))} CointMU project '${cyan(projectName)}'\n`,
+  );
+
+  console.log(bold("Next steps:"));
+  console.log(`  1. cd ${projectName}`);
+  console.log(`  2. cmu compile`);
+  console.log(`  3. cmu deploy\n`);
+
+  console.log(`${cyan(quote)}\n`);
+}
+
 /**
  * Executes the project creation flow.
  * @param {string | undefined} project - The name of the project.
@@ -115,30 +151,7 @@ async function runCreate(
 
     await generateProject(projectPath, template, language);
 
-    console.log("");
-    const asciiArt = `   ______      _       __  _____  __ 
-  / ____/___  (_)___  / /_/ __  \\/ / /
- / /   / __ \\/ / __ \\/ __/ / / / / / /
-/ /___/ /_/ / / / / / /_/ / / / / /_/ /
-\\____/\\____/_/_/ /_/\\__/_/ /_/_/\\____/`;
-
-    const green = (text: string) => `\x1b[32m${text}\x1b[0m`;
-    const cyan = (text: string) => `\x1b[36m${text}\x1b[0m`;
-    const bold = (text: string) => `\x1b[1m${text}\x1b[0m`;
-
-    console.log(cyan(bold(asciiArt)));
-    console.log("");
-    console.log(
-      `${green(bold("Created"))} CointMU project '${cyan(projectName)}'\n`,
-    );
-
-    console.log(bold("Next steps:"));
-    console.log(`  1. cd ${projectName}`);
-    console.log(`  2. cmu compile`);
-    console.log(`  3. cmu deploy\n`);
-
-    const randomQuote = getRandomQuote();
-    console.log(`${cyan(randomQuote)}\n`);
+    printWelcomeBanner(projectName, getRandomQuote());
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m create failed");
 
