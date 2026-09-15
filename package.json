@@ -22,7 +22,7 @@
   "author": "tvrststtp",
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "main": "dist/index.js",
   "bin": {
