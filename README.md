@@ -192,7 +192,17 @@ Here is a standard, lightning-fast workflow to get a new CointMU project up and 
 cmu wallet create
 ```
 
-_(Make sure to save your private key securely in a safe place!)_
+_(Make sure to save your private key securely in a safe place! The key and mnemonic
+stay in your terminal scrollback, so clear it if you ran this somewhere shared.)_
+
+To keep the key off the screen entirely, let `cmu` encrypt it into a session instead:
+
+```bash
+cmu wallet create --login
+```
+
+The key is never printed on that path — it exists only inside `.cmu-session`, so
+there is no printed backup to fall back on if you lose that file or its password.
 
 2. **Scaffold a new CointMU project**: ✨
 
