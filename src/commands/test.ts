@@ -70,21 +70,24 @@ async function runTest(
   const allowCors = Boolean(options.allowCors);
   if (allowCors) {
     console.warn(
-      "\x1b[33m[!] --allow-cors: the test RPC proxy on 127.0.0.1:" +
-        `${TEST_PORT} now accepts requests from any browser origin.\x1b[0m`,
+      "\x1b[33mwarning:\x1b[0m --allow-cors - the test RPC proxy on 127.0.0.1:" +
+        `${TEST_PORT} accepts requests from any browser origin`,
     );
   }
   try {
     const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     const path = await import("path");
 
-    console.log("Triggering automated contract compilation...");
+    console.log("Compiling contracts...");
     const { runCompile } = await import("./compile");
     await runCompile({ yes: options.yes });
 
     const testDir = path.resolve(process.cwd(), TEST_DIR_NAME);
     if (!(await fs.pathExists(testDir))) {
-      throw new Error(`'test' directory not found at ${testDir}.`);
+      throw new Error(
+        `test/ directory not found at ${testDir}.\n` +
+          "\x1b[2mhint:\x1b[0m run `cmu test` from the root of your CointMU project.",
+      );
     }
 
     const suppressWarning = (args: any[]) => {
@@ -119,7 +122,7 @@ async function runTest(
       originalConsoleLog(...args);
     };
 
-    console.log("Starting ephemeral CointMU DevNet for testing...");
+    console.log("Starting the CointMU DevNet...");
 
     const importDynamic = new Function(
       "modulePath",
@@ -159,7 +162,7 @@ async function runTest(
           res.statusCode = 403;
           res.setHeader("Content-Type", "application/json");
           return res.end(
-            `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Forbidden: cross-origin or non-local request rejected. Pass --allow-cors to cmu test for browser access."}}`,
+            `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Forbidden: cross-origin or non-local request rejected. Pass --allow-cors to cmu test to allow browser access."}}`,
           );
         }
         if (req.method === "OPTIONS") {
@@ -223,7 +226,10 @@ async function runTest(
 
     try {
       if (!resolvedMnemonic) {
-        throw new Error("Failed to generate mnemonic for test accounts.");
+        throw new Error(
+          "could not generate a mnemonic for the test accounts.\n" +
+            "\x1b[2mhint:\x1b[0m this usually means the crypto module is unavailable; check your Node.js install.",
+        );
       }
 
       const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic);
@@ -251,7 +257,7 @@ async function runTest(
         : ["mocha", "test/**/*.js"];
 
       console.log(`\n========================================`);
-      console.log(`Running tests via Mocha`);
+      console.log(`Running tests with Mocha`);
       console.log(`========================================\n`);
 
       const { spawn } = require("child_process");
@@ -263,19 +269,19 @@ async function runTest(
         });
         child.on("close", (code: number) => {
           if (code === 0) resolve();
-          else reject(new Error(`Test command failed with exit code ${code}`));
+          else reject(new Error(`test run exited with code ${code}`));
         });
         child.on("error", (err: Error) => reject(err));
       });
 
-      console.log("\nAll tests executed successfully.");
+      console.log("\nAll tests passed.");
     } finally {
       if (options.gas) {
         try {
           console.log(
             "\n=========================================================================================",
           );
-          console.log("Gas Profiler Report");
+          console.log("Gas profile");
           console.log(
             "=========================================================================================",
           );
@@ -311,9 +317,11 @@ async function runTest(
           console.log(
             "-----------------------------------------------------------------------------------------",
           );
-          console.log(`Total Gas Used: ${totalGas.toString()}\n`);
+          console.log(`Total gas used: ${totalGas.toString()}\n`);
         } catch (e) {
-          console.error("Failed to generate gas report");
+          console.error(
+            "\x1b[33mwarning:\x1b[0m could not produce the gas report; the tests themselves were unaffected.",
+          );
           if (isVerbose) {
             console.error(e);
           }
@@ -322,10 +330,10 @@ async function runTest(
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
       });
-      console.log("Ephemeral test network successfully shut down.");
+      console.log("CointMU DevNet stopped.");
     }
   } catch (error) {
-    console.error("\n\x1b[31m[!] Test suite failed:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m test failed");
     if (isVerbose) {
       console.error(error);
     } else {
@@ -336,15 +344,12 @@ async function runTest(
 }
 
 export const testCommand = new Command("test")
-  .description("Executes the automated smart contract test suite")
-  .option(
-    "--gas",
-    "Enable gas profiler to report gas used by transactions during tests",
-  )
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Run the smart contract test suite")
+  .option("--gas", "Report gas used by transactions during the run")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .option(
     "--allow-cors",
-    "Allow browser (cross-origin) access to the local test RPC proxy; off by default to prevent DNS-rebinding attacks",
+    "Allow cross-origin browser access to the test RPC proxy; off by default to prevent DNS rebinding",
   )
   .option(
     "-y, --yes",

@@ -124,7 +124,7 @@ async function main(): Promise<void> {
     await program.parseAsync(process.argv);
   } catch (error) {
     console.error(
-      "Fatal Execution Error:",
+      "\x1b[31merror:\x1b[0m command failed:",
       error instanceof Error ? error.message : String(error),
     );
     process.exit(EXIT_FAILURE);
@@ -138,7 +138,7 @@ try {
   });
 } catch (fatalError) {
   console.error(
-    "Fatal CLI Initialization Error:",
+    "\x1b[31merror:\x1b[0m cmu failed to start:",
     fatalError instanceof Error ? fatalError.message : String(fatalError),
   );
   process.exit(EXIT_FAILURE);

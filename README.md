@@ -158,13 +158,14 @@ This is by design and cannot be removed without breaking deployment itself — i
 To make the boundary explicit, the CLI lists every file it is about to execute and asks for confirmation first:
 
 ```text
-[!] The following project files will be executed as code:
+warning: the following project files will be executed as code:
       cmu.config.ts  ->  /home/you/my-dapp/cmu.config.ts
       00_deploy.ts   ->  /home/you/my-dapp/deploy/00_deploy.ts
 
-    They run with your full environment - including PRIVATE_KEY, decrypted
-    from your session and injected for deploy scripts - and can do anything
-    your user account can. ...
+    They run with your full environment, including the PRIVATE_KEY decrypted from
+    your session and injected for deploy scripts, and can do anything your user
+    account can. This is the same trust model as Hardhat, Foundry and Truffle;
+    see the 'Trust Model' section of the README.
 
 ? Execute these files? (y/N)
 ```

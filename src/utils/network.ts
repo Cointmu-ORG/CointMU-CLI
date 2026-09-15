@@ -58,7 +58,8 @@ export async function getDynamicNetwork(
 
   if (!network) {
     throw new Error(
-      `Network configuration for '${networkName}' not found in saved networks.`,
+      `network '${networkName}' is not saved.\n` +
+        "\x1b[2mhint:\x1b[0m list saved networks with `cmu network --list`, or add one with `cmu network --save <url> --name <name>`.",
     );
   }
 
@@ -121,7 +122,8 @@ export async function getDeployNetwork(
   if (!config) {
     if (targetNetwork && targetNetwork !== DEFAULT_NETWORK) {
       throw new Error(
-        `Configuration file not found, but a specific network '${targetNetwork}' was requested for deployment.`,
+        `network '${targetNetwork}' was requested, but no cmu.config.ts was found.\n` +
+          "\x1b[2mhint:\x1b[0m run this from a CointMU project, or drop -n to deploy to the local network.",
       );
     }
     return {
@@ -137,7 +139,8 @@ export async function getDeployNetwork(
 
   if (!network) {
     throw new Error(
-      `Static deployment network configuration for '${networkName}' not found in ${TS_CONFIG_FILE}.`,
+      `network '${networkName}' is not defined in ${TS_CONFIG_FILE}.\n` +
+        "\x1b[2mhint:\x1b[0m add it under `networks`, or pick one that is already defined.",
     );
   }
 

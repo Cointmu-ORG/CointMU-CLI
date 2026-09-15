@@ -18,9 +18,7 @@ describe("loadConfig", () => {
   });
 
   it("throws a clear error when cmu.config.ts is absent from the cwd", async () => {
-    await expect(loadConfig()).rejects.toThrow(
-      /cmu\.config\.ts not found\. Are you in a CointMU project\?/,
-    );
+    await expect(loadConfig()).rejects.toThrow(/cmu\.config\.ts not found/);
   });
 
   it("loads a real cmu.config.ts without the invalid 'typescript@5' module error", async () => {

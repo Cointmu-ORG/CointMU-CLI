@@ -66,16 +66,16 @@ export interface EncryptedKey {
  */
 export function validatePasswordStrength(password: string): true | string {
   if (password.length < MIN_PASSWORD_LENGTH) {
-    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`;
+    return `password must be at least ${MIN_PASSWORD_LENGTH} characters long.`;
   }
   if (COMMON_WEAK_PASSWORDS.has(password.toLowerCase())) {
-    return "That password is too common. Choose something less predictable.";
+    return "password is too common - choose something less predictable.";
   }
   const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((re) =>
     re.test(password),
   ).length;
   if (classes < 2) {
-    return "Password must mix at least two of: lowercase, uppercase, digits, symbols.";
+    return "password must mix at least two of: lowercase, uppercase, digits, symbols.";
   }
   return true;
 }
@@ -158,7 +158,8 @@ export function decryptSessionKey(
     !session.authTag
   ) {
     throw new Error(
-      "Session file does not contain an encrypted key. Run 'cmu wallet login' first.",
+      "the session file does not contain an encrypted key.\n" +
+        "\x1b[2mhint:\x1b[0m run `cmu wallet login` to create one.",
     );
   }
 
@@ -181,8 +182,8 @@ export function decryptSessionKey(
     return decrypted;
   } catch {
     throw new Error(
-      "Invalid session password, or the .cmu-session file is from an older " +
-        "version or has been tampered with. Run 'cmu wallet login' again to recreate it.",
+      "Invalid session password, or .cmu-session is from an older version or has been tampered with.\n" +
+        "\x1b[2mhint:\x1b[0m run `cmu wallet login` again to recreate the session.",
     );
   }
 }
@@ -232,7 +233,7 @@ export async function resolvePrivateKey(
     {
       type: "password",
       name: "password",
-      message: `Enter session password for ${session.address}:`,
+      message: `Session password for ${session.address}:`,
       mask: "*",
     },
   ]);

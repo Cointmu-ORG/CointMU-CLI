@@ -83,14 +83,15 @@ export async function runCompile(
         compilerSettings = cmuConfig?.compiler?.settings ?? {};
       } catch {
         console.warn(
-          `Warning: failed to load ${path.basename(configPath)}. Using defaults.`,
+          `\x1b[33mwarning:\x1b[0m could not load ${path.basename(configPath)}; using default compiler settings.`,
         );
       }
     }
 
     if (!(await fs.pathExists(contractsDir))) {
       throw new Error(
-        "contracts directory not found. Are you in a CointMU project?",
+        "contracts/ directory not found.\n" +
+          "\x1b[2mhint:\x1b[0m run `cmu compile` from the root of your CointMU project.",
       );
     }
 
@@ -98,7 +99,7 @@ export async function runCompile(
     const solFiles = files.filter((f: string) => f.endsWith(".sol"));
 
     if (solFiles.length === 0) {
-      console.log("No Solidity files found to compile.");
+      console.log("No Solidity files found in contracts/.");
       return;
     }
 
@@ -125,7 +126,7 @@ export async function runCompile(
       settings: finalSettings,
     };
 
-    console.log("Compiling contracts...");
+    console.log(`Compiling ${solFiles.length} Solidity file(s)...`);
     const output = JSON.parse(
       solc.compile(JSON.stringify(input), { import: findImports }),
     );
@@ -137,7 +138,10 @@ export async function runCompile(
         if (err.severity === "error") hasError = true;
       }
       if (hasError) {
-        throw new Error("Compilation failed due to Solidity errors.");
+        throw new Error(
+          "compilation aborted on Solidity errors.\n" +
+            "\x1b[2mhint:\x1b[0m fix the errors reported above, then run `cmu compile` again.",
+        );
       }
     }
 
@@ -148,13 +152,11 @@ export async function runCompile(
         const contract = output.contracts[file][contractName];
         const artifactPath = path.join(artifactsDir, `${contractName}.json`);
         await fs.writeJson(artifactPath, contract, { spaces: JSON_SPACES });
-        console.log(`Compiled ${contractName} successfully.`);
+        console.log(`Compiled ${contractName}`);
       }
     }
   } catch (error) {
-    console.error(
-      "\n\x1b[31m[!] Compilation failed to execute completely.\x1b[0m",
-    );
+    console.error("\n\x1b[31merror:\x1b[0m compile failed");
 
     if (options.verbose) {
       console.error(error);
@@ -167,16 +169,16 @@ export async function runCompile(
 }
 
 export const compileCommand = new Command("compile")
-  .description("Compiles smart contracts into ABI and bytecode artifacts")
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Compile smart contracts into ABI and bytecode artifacts")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .option(
     "-y, --yes",
     "Skip the confirmation prompt before executing project code",
   )
   .addHelpText(
     "after",
-    "\nWarning: cmu.config.ts/js is executed as code from the project directory.\n" +
-      "Only compile projects you trust. See the README 'Trust Model' section.",
+    "\ncmu.config.ts/js is executed as code from the project directory. Only\n" +
+      "compile projects you trust; see the 'Trust Model' section of the README.",
   )
   .action(async (options: { verbose?: boolean; yes?: boolean }) => {
     await runCompile(options);

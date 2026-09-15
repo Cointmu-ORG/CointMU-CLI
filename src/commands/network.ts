@@ -26,14 +26,16 @@ async function runNetworkInfo(
 
     if (!(await fs.pathExists(sessionFile))) {
       throw new Error(
-        "No active wallet session found. Please run 'cmu wallet login' and then 'cmu network --use <name>'.",
+        "no active session.\n" +
+          "\x1b[2mhint:\x1b[0m run `cmu wallet login`, then `cmu network --use <name>`.",
       );
     }
 
     const session = await fs.readJson(sessionFile);
     if (!session.activeNetwork) {
       throw new Error(
-        "No active network defined in session. Please run 'cmu network --use <name>' to select one.",
+        "no active network in the session.\n" +
+          "\x1b[2mhint:\x1b[0m select one with `cmu network --use <name>`.",
       );
     }
 
@@ -45,16 +47,17 @@ async function runNetworkInfo(
 
     if (!activeNetwork) {
       throw new Error(
-        `Active network '${session.activeNetwork}' not found in saved networks. Please run 'cmu network --use <name>' to select a valid network.`,
+        `active network '${session.activeNetwork}' is no longer saved.\n` +
+          "\x1b[2mhint:\x1b[0m pick an existing one with `cmu network --use <name>`, or re-add it with `cmu network --save <url> --name <name>`.",
       );
     }
 
-    console.log("--- Active Network Info ---");
-    console.log(`Network Name : ${activeNetwork.name}`);
-    console.log(`RPC URL      : ${activeNetwork.rpcUrl}`);
-    console.log("---------------------------");
+    console.log("--- Active network ---");
+    console.log(`Network      : ${activeNetwork.name}`);
+    console.log(`RPC endpoint : ${activeNetwork.rpcUrl}`);
+    console.log("----------------------");
   } catch (error) {
-    console.error("\n\x1b[31m[!] Failed to retrieve network info:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m network info failed");
 
     if (options.verbose) {
       console.error(error);
@@ -87,7 +90,10 @@ async function runNetworkPing(
       const networks = await loadNetworks();
       const network = networks.find((n: any) => n.name === name);
       if (!network) {
-        throw new Error(`Network '${name}' not found.`);
+        throw new Error(
+          `network '${name}' is not saved.\n` +
+            "\x1b[2mhint:\x1b[0m list saved networks with `cmu network --list`.",
+        );
       }
       rpcUrl = network.rpcUrl;
       networkName = network.name;
@@ -95,13 +101,17 @@ async function runNetworkPing(
       const sessionFile = getSessionFilePath();
       if (!(await fs.pathExists(sessionFile))) {
         throw new Error(
-          "No active wallet session found. Please specify a network name or run 'cmu wallet login' first.",
+          "no active session.\n" +
+            "\x1b[2mhint:\x1b[0m pass a network name, or run `cmu wallet login` first.",
         );
       }
 
       const session = await fs.readJson(sessionFile);
       if (!session.activeNetwork) {
-        throw new Error("No active network defined in session.");
+        throw new Error(
+          "no active network in the session.\n" +
+            "\x1b[2mhint:\x1b[0m select one with `cmu network --use <name>`.",
+        );
       }
 
       const networks = await loadNetworks();
@@ -110,7 +120,10 @@ async function runNetworkPing(
       );
 
       if (!activeNetwork) {
-        throw new Error(`Active network '${session.activeNetwork}' not found.`);
+        throw new Error(
+          `active network '${session.activeNetwork}' is no longer saved.\n` +
+            "\x1b[2mhint:\x1b[0m pick an existing one with `cmu network --use <name>`.",
+        );
       }
 
       rpcUrl = activeNetwork.rpcUrl;
@@ -125,13 +138,13 @@ async function runNetworkPing(
     const blockNumber = await provider.getBlockNumber();
     const latency = Date.now() - startTime;
 
-    console.log("--- Ping Results ---");
-    console.log(`Network Name : ${networkName}`);
-    console.log(`Block Number : ${blockNumber}`);
+    console.log("--- Ping result ---");
+    console.log(`Network      : ${networkName}`);
+    console.log(`Block number : ${blockNumber}`);
     console.log(`Latency      : ${latency}ms`);
-    console.log("--------------------");
+    console.log("-------------------");
   } catch (error) {
-    console.error("\n\x1b[31m[!] Failed to ping network:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m network ping failed");
 
     if (options.verbose) {
       console.error(error);
@@ -165,12 +178,13 @@ async function runNetworkManage(options: {
 
     if (options.save) {
       if (!options.name) {
-        throw new Error("--name is required when using --save.");
+        throw new Error(
+          "--name is required with --save.\n" +
+            "\x1b[2mhint:\x1b[0m e.g. `cmu network --save http://127.0.0.1:8585 --name local`.",
+        );
       }
       await saveNetwork(options.name, options.save);
-      console.log(
-        `Successfully saved network '${options.name}' (${options.save})`,
-      );
+      console.log(`Saved network '${options.name}' (${options.save})`);
       return;
     }
 
@@ -180,23 +194,27 @@ async function runNetworkManage(options: {
       const network = networks.find((n: any) => n.name === targetName);
 
       if (!network) {
-        throw new Error(`Network '${targetName}' not found.`);
+        throw new Error(
+          `network '${targetName}' is not saved.\n` +
+            "\x1b[2mhint:\x1b[0m list saved networks with `cmu network --list`.",
+        );
       }
 
       if (await fs.pathExists(sessionFile)) {
         const session = await fs.readJson(sessionFile);
         if (session.activeNetwork === targetName) {
           throw new Error(
-            `Cannot delete the currently active network ('${targetName}'). Please switch to another network first using 'cmu network --use <name>'.`,
+            `network '${targetName}' is currently active and cannot be deleted.\n` +
+              "\x1b[2mhint:\x1b[0m switch away first with `cmu network --use <name>`.",
           );
         }
       }
 
       const success = await deleteNetwork(targetName);
       if (success) {
-        console.log(`Successfully deleted network '${targetName}'.`);
+        console.log(`Deleted network '${targetName}'`);
       } else {
-        throw new Error(`Failed to delete network '${targetName}'.`);
+        throw new Error(`could not delete network '${targetName}'.`);
       }
       return;
     }
@@ -205,17 +223,21 @@ async function runNetworkManage(options: {
       const networks = await loadNetworks();
       const network = networks.find((n: any) => n.name === options.use);
       if (!network) {
-        throw new Error(`Network '${options.use}' not found.`);
+        throw new Error(
+          `network '${options.use}' is not saved.\n` +
+            "\x1b[2mhint:\x1b[0m list saved networks with `cmu network --list`.",
+        );
       }
 
       if (await fs.pathExists(sessionFile)) {
         const session = await fs.readJson(sessionFile);
         session.activeNetwork = options.use;
         await writeSessionFile(sessionFile, session);
-        console.log(`Successfully switched active network to: ${network.name}`);
+        console.log(`Active network is now ${network.name}`);
       } else {
         throw new Error(
-          "No active wallet session found. Please run 'cmu wallet login' first.",
+          "no active session.\n" +
+            "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
         );
       }
       return;
@@ -236,11 +258,11 @@ async function runNetworkManage(options: {
         }
       }
 
-      console.log("\nSaved Networks");
+      console.log("\nSaved networks");
       console.log(
         "==========================================================================",
       );
-      console.log("| Active | Name                 | RPC URL");
+      console.log("| Active | Name                 | RPC endpoint");
       console.log(
         "--------------------------------------------------------------------------",
       );
@@ -254,11 +276,9 @@ async function runNetworkManage(options: {
       return;
     }
 
-    console.log(
-      "Please provide a valid network command option. Run 'cmu network --help' for usage.",
-    );
+    console.log("No network option given. Run `cmu network --help` for usage.");
   } catch (error) {
-    console.error("\n\x1b[31m[!] Network management failed:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m network failed");
 
     if (options.verbose) {
       console.error(error);
@@ -271,23 +291,23 @@ async function runNetworkManage(options: {
 }
 
 export const networkCommand = new Command("network")
-  .description("Manage active RPC networks locally")
+  .description("Manage saved RPC networks")
   .option("-s, --save <url>", "Save a new network or update an existing one")
-  .option("-n, --name <name>", "The name of the network to save")
-  .option("-u, --use <name>", "Switch the active network to the specified name")
+  .option("-n, --name <name>", "Name of the network to save")
+  .option("-u, --use <name>", "Switch the active network")
   .option("-l, --list", "List all saved networks")
   .option("-D, --delete <name>", "Delete a saved network")
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(runNetworkManage);
 
 networkCommand
   .command("info")
-  .description("Display the active network configuration")
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Show the active network")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(runNetworkInfo);
 
 networkCommand
   .command("ping [name]")
-  .description("Pings a network to check connectivity and latency")
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Ping a network to check connectivity and latency")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(runNetworkPing);

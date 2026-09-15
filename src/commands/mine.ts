@@ -27,7 +27,8 @@ async function runMineStart(
 
     if (!(await fs.pathExists(sessionFile))) {
       throw new Error(
-        "No active session found. Please run 'cmu wallet login' first.",
+        "no active session.\n" +
+          "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
       );
     }
 
@@ -44,10 +45,10 @@ async function runMineStart(
     console.log(`Starting miner on ${network.name}...`);
     await provider.send("miner_start", [MINER_THREAD_COUNT]);
 
-    console.log("Successfully started mining!");
-    console.log(`Rewards are being routed to: ${session.address}`);
+    console.log("Mining started.");
+    console.log(`Rewards are routed to ${session.address}`);
   } catch (error) {
-    console.error("\n\x1b[31m[!] Failed to start mining:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m mine start failed");
 
     if (options.verbose) {
       console.error(error);
@@ -71,7 +72,8 @@ async function runMineStop(options: { verbose?: boolean } = {}): Promise<void> {
 
     if (!(await fs.pathExists(sessionFile))) {
       throw new Error(
-        "No active session found. Please run 'cmu wallet login' first.",
+        "no active session.\n" +
+          "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
       );
     }
 
@@ -85,9 +87,9 @@ async function runMineStop(options: { verbose?: boolean } = {}): Promise<void> {
     console.log(`Stopping miner on ${network.name}...`);
     await provider.send("miner_stop", []);
 
-    console.log("Successfully stopped mining.");
+    console.log("Mining stopped.");
   } catch (error) {
-    console.error("\n\x1b[31m[!] Failed to stop mining:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m mine stop failed");
 
     if (options.verbose) {
       console.error(error);
@@ -100,19 +102,17 @@ async function runMineStop(options: { verbose?: boolean } = {}): Promise<void> {
 }
 
 export const mineCommand = new Command("mine").description(
-  "Mining control commands",
+  "Control mining on the active network",
 );
 
 mineCommand
   .command("start")
-  .description(
-    "Starts mining blocks on the active network using the logged-in wallet",
-  )
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Start mining with the logged-in wallet")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(runMineStart);
 
 mineCommand
   .command("stop")
-  .description("Stops mining blocks on the active network")
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Stop mining")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(runMineStop);

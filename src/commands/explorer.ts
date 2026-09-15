@@ -41,11 +41,12 @@ async function runExplorerOpen(
 
     if (!isValidHttpUrl(explorerUrl)) {
       throw new Error(
-        `Invalid explorer URL '${explorerUrl}'. Only http and https URLs are allowed.`,
+        `invalid explorer URL '${explorerUrl}'.\n` +
+          "\x1b[2mhint:\x1b[0m set network.explorerUrl in cmu.config.ts to an http or https URL.",
       );
     }
 
-    console.log(`Opening CointMU explorer at ${explorerUrl}...`);
+    console.log(`Opening the CointMU explorer at ${explorerUrl}...`);
 
     const child =
       process.platform === "win32"
@@ -58,14 +59,14 @@ async function runExplorerOpen(
 
     child.on("error", (error) => {
       console.error(
-        "\x1b[33mWarning: Failed to spawn explorer process.\x1b[0m",
+        "\x1b[33mwarning:\x1b[0m could not open a browser; open the URL above manually.",
       );
       if (options.verbose) {
         console.error(error);
       }
     });
   } catch (error) {
-    console.error("\n\x1b[31m[!] Explorer launch failed:\x1b[0m");
+    console.error("\n\x1b[31merror:\x1b[0m explorer open failed");
 
     if (options.verbose) {
       console.error(error);
@@ -78,11 +79,11 @@ async function runExplorerOpen(
 }
 
 export const explorerCommand = new Command("explorer").description(
-  "Interacts with the block explorer for on-chain data retrieval",
+  "Work with the block explorer",
 );
 
 explorerCommand
   .command("open")
-  .description("Opens the local CointMU block explorer UI")
-  .option("-v, --verbose", "Enable verbose logging for debugging")
+  .description("Open the CointMU block explorer in a browser")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .action(runExplorerOpen);

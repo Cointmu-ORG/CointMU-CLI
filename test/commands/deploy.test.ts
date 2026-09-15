@@ -19,7 +19,7 @@ describe("pingNetwork", () => {
     vi.resetModules();
   });
 
-  it("throws 'Unreachable RPC URL' when the provider is slower than NETWORK_TIMEOUT_MS", async () => {
+  it("reports an unreachable endpoint when the provider outlasts NETWORK_TIMEOUT_MS", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.doMock("ethers", () => ({
       ethers: {
@@ -33,7 +33,7 @@ describe("pingNetwork", () => {
     }));
 
     await expect(pingNetwork("http://192.0.2.1:8545")).rejects.toThrow(
-      /Unreachable RPC URL/,
+      /is unreachable/,
     );
   });
 });

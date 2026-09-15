@@ -107,7 +107,7 @@ describe("runCompile trust gate", () => {
     expect(prompt).not.toHaveBeenCalled();
     expect(fs.existsSync(marker)).toBe(true);
     expect((console.error as any).mock.calls.flat().join("\n")).toMatch(
-      /contracts directory not found/,
+      /contracts\/ directory not found/,
     );
   });
 });

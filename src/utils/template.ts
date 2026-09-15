@@ -7,15 +7,15 @@ const PATH_PKG = "path";
 const CHILD_PROCESS_PKG = "child_process";
 
 export const templateChoices = [
-  { name: "Blank (Empty project with basic structure)", value: "blank" },
-  { name: "ERC20 (Standard ERC20 Token)", value: "erc20" },
-  { name: "ERC721 (Standard NFT Collection)", value: "erc721" },
-  { name: "ERC1155 (Multi-Token Standard)", value: "erc1155" },
-  { name: "DAO (Basic Decentralized Autonomous Organization)", value: "dao" },
-  { name: "Marketplace (NFT Marketplace)", value: "marketplace" },
+  { name: "Blank (empty project with basic structure)", value: "blank" },
+  { name: "ERC20 (standard fungible token)", value: "erc20" },
+  { name: "ERC721 (standard NFT collection)", value: "erc721" },
+  { name: "ERC1155 (multi-token standard)", value: "erc1155" },
+  { name: "DAO (basic decentralized autonomous organization)", value: "dao" },
+  { name: "Marketplace (NFT marketplace)", value: "marketplace" },
   { name: "Staking (ERC20 staking and yield farming)", value: "staking" },
   { name: "Airdrop (Merkle tree token airdrop)", value: "airdrop" },
-  { name: "Vault (Multisig timelock treasury)", value: "vault" },
+  { name: "Vault (multisig timelock treasury)", value: "vault" },
   { name: "Kyberion (PQC research prototype)", value: "kyberion" },
 ] as const;
 
@@ -44,7 +44,7 @@ async function main() {
   
   const artifactPath = path.resolve(__dirname, '../artifacts/${contractName}.json');
   if (!fs.existsSync(artifactPath)) {
-    throw new Error('Artifact not found. Please compile the contract first.');
+    throw new Error('Artifact not found. Run \`cmu compile\` first.');
   }
 
   const artifact = await fs.readJson(artifactPath);
@@ -52,7 +52,7 @@ async function main() {
   const bytecode = artifact.evm?.bytecode?.object || artifact.bytecode;
 
   const privateKey = process.env.PRIVATE_KEY;
-  if (!privateKey) throw new Error('PRIVATE_KEY environment variable is required');
+  if (!privateKey) throw new Error('PRIVATE_KEY is not set in the environment.');
   
   const provider = new ethers.JsonRpcProvider(process.env.CMU_RPC_URL || 'http://localhost:8545');
   const wallet = new ethers.Wallet(privateKey, provider);
@@ -62,7 +62,7 @@ async function main() {
   await contract.waitForDeployment();
   
   const address = await contract.getAddress();
-  console.log(\`${contractName} deployed successfully at address: \${address}\`);
+  console.log(\`${contractName} deployed at \${address}\`);
 
   // Save artifact
   const deploymentDir = path.resolve(__dirname, '../deployments');
@@ -74,7 +74,7 @@ async function main() {
     abi,
     network: await provider.getNetwork().then(n => ({ chainId: Number(n.chainId), name: n.name }))
   }, { spaces: 2 });
-  console.log(\`Deployment artifacts saved to \${deploymentPath}\`);
+  console.log(\`Deployment saved to \${deploymentPath}\`);
 }
 
 main().catch(console.error);
@@ -85,7 +85,7 @@ const blankDeployTemplate = (language: string): string =>
   `import { ethers } from 'ethers';
 
 async function main() {
-  console.log('Deploy script executed!');
+  console.log('Deploy script executed.');
   const provider = new ethers.JsonRpcProvider(process.env.CMU_RPC_URL || 'http://localhost:8545');
   // Add your deployment logic here
 }
@@ -279,7 +279,7 @@ describe("Deployment Template Test", function () {
   });
 
   if (language === TYPESCRIPT_LANG) {
-    console.log("Installing development dependencies...");
+    console.log("Installing dev dependencies...");
     execSync(
       "npm install --save-dev @types/node mocha chai @types/mocha @types/chai ts-node typescript@5",
       {
@@ -288,7 +288,7 @@ describe("Deployment Template Test", function () {
       },
     );
   } else {
-    console.log("Installing development dependencies...");
+    console.log("Installing dev dependencies...");
     execSync("npm install --save-dev mocha chai", {
       cwd: projectPath,
       stdio: "inherit",
