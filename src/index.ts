@@ -18,7 +18,6 @@ const PKG_FILE = "package.json";
 const FLAG_VERSION_SHORT = "-V";
 const FLAG_VERSION_LONG = "--version";
 const FLAG_HELP_SHORT = "-h";
-const FLAG_HELP_LONG = "--help";
 
 require("dotenv").config({ quiet: DOTENV_QUIET });
 process.env[HARDHAT_CONFIG_ENV] = path.resolve(__dirname, HARDHAT_CONFIG_PATH);
@@ -33,6 +32,49 @@ program
   .description(
     `${pkg.description}\nTip: Run ${CLI_NAME} <command> ${FLAG_HELP_SHORT} to see detailed options for a specific command.`,
   );
+
+/**
+ * Every command the CLI can register, keyed by the name typed on the command
+ * line. The import specifiers stay literal: tsup bundles from a single entry
+ * with code splitting off, and esbuild cannot follow a computed path.
+ */
+const commandMap: Record<string, () => Promise<Record<string, any>>> = {
+  compile: () => import("./commands/compile"),
+  deploy: () => import("./commands/deploy"),
+  wallet: () => import("./commands/wallet"),
+  create: () => import("./commands/create"),
+  explorer: () => import("./commands/explorer"),
+  node: () => import("./commands/node"),
+  audit: () => import("./commands/audit"),
+  aries: () => import("./commands/aries"),
+  version: () => import("./commands/version"),
+  test: () => import("./commands/test"),
+  mine: () => import("./commands/mine"),
+  network: () => import("./commands/network"),
+  update: () => import("./commands/update"),
+};
+
+/** Commands that work but are deliberately left out of the help output. */
+const HIDDEN_COMMANDS = new Set(["aries"]);
+
+/**
+ * Loads the named command modules and registers each one on the program.
+ * Every module exports its command as `<name>Command`.
+ *
+ * @param {string[]} names - Keys of commandMap to register.
+ * @returns {Promise<void>} Resolves once all of them are registered.
+ */
+async function registerCommands(names: string[]): Promise<void> {
+  await Promise.all(
+    names.map(async (name) => {
+      const module: Record<string, any> =
+        await commandMap[name as keyof typeof commandMap]();
+      program.addCommand(module[`${name}Command`], {
+        hidden: HIDDEN_COMMANDS.has(name),
+      });
+    }),
+  );
+}
 
 /**
  * Loads the requested command module, or all modules if help is requested.
@@ -52,67 +94,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  const commandMap: Record<string, () => Promise<void>> = {
-    compile: async () => {
-      const m = await import("./commands/compile");
-      program.addCommand(m.compileCommand);
-    },
-    deploy: async () => {
-      const m = await import("./commands/deploy");
-      program.addCommand(m.deployCommand);
-    },
-    wallet: async () => {
-      const m = await import("./commands/wallet");
-      program.addCommand(m.walletCommand);
-    },
-    create: async () => {
-      const m = await import("./commands/create");
-      program.addCommand(m.createCommand);
-    },
-    explorer: async () => {
-      const m = await import("./commands/explorer");
-      program.addCommand(m.explorerCommand);
-    },
-    node: async () => {
-      const m = await import("./commands/node");
-      program.addCommand(m.nodeCommand);
-    },
-    audit: async () => {
-      const m = await import("./commands/audit");
-      program.addCommand(m.auditCommand);
-    },
-    aries: async () => {
-      const m = await import("./commands/aries");
-      program.addCommand(m.ariesCommand, { hidden: true });
-    },
-    version: async () => {
-      const m = await import("./commands/version");
-      program.addCommand(m.versionCommand);
-    },
-    test: async () => {
-      const m = await import("./commands/test");
-      program.addCommand(m.testCommand);
-    },
-    mine: async () => {
-      const m = await import("./commands/mine");
-      program.addCommand(m.mineCommand);
-    },
-    network: async () => {
-      const m = await import("./commands/network");
-      program.addCommand(m.networkCommand);
-    },
-    update: async () => {
-      const m = await import("./commands/update");
-      program.addCommand(m.updateCommand);
-    },
-  };
-
-  if (!cmdStr || cmdStr === FLAG_HELP_SHORT || cmdStr === FLAG_HELP_LONG) {
-    await Promise.all(Object.values(commandMap).map((loader) => loader()));
-  } else if (commandMap[cmdStr]) {
-    await commandMap[cmdStr]();
+  if (!cmdStr || commandMap[cmdStr]) {
+    await registerCommands(cmdStr ? [cmdStr] : Object.keys(commandMap));
   } else {
-    await Promise.all(Object.values(commandMap).map((loader) => loader()));
+    // An unknown command, -h/--help, or a bare flag: load everything so
+    // commander can render full help or report the command as unknown.
+    await registerCommands(Object.keys(commandMap));
   }
 
   if (args.length === 0) {

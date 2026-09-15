@@ -168,60 +168,10 @@ describe("Deployment Template Test", function () {
     });
   }
 
-  let contractSrc = "";
-  let contractName = "";
-  let deployArgs = "";
+  const spec = templates[aliases[template] ?? template];
 
-  if (template === "erc20") {
-    const { erc20Template } = await import("../templates/erc20");
-    contractSrc = erc20Template;
-    contractName = "StandardERC20";
-    deployArgs = "'MyToken', 'MTK', 1000000";
-  } else if (template === "erc721" || template === "nft") {
-    const { erc721Template } = await import("../templates/erc721");
-    contractSrc = erc721Template;
-    contractName = "StandardERC721";
-    deployArgs = "'MyNFT', 'MNFT'";
-  } else if (template === "erc1155") {
-    const { erc1155Template } = await import("../templates/erc1155");
-    contractSrc = erc1155Template;
-    contractName = "StandardERC1155";
-    deployArgs = "'MyTokens', 'MTKS'";
-  } else if (template === "dao") {
-    const { daoTemplate } = await import("../templates/dao");
-    contractSrc = daoTemplate;
-    contractName = "StandardDAO";
-    deployArgs = "'MyDAO'";
-  } else if (template === "marketplace") {
-    const { marketplaceTemplate } = await import("../templates/marketplace");
-    contractSrc = marketplaceTemplate;
-    contractName = "StandardMarketplace";
-    deployArgs = "";
-  } else if (template === "staking") {
-    const { stakingTemplate } = await import("../templates/staking");
-    contractSrc = stakingTemplate;
-    contractName = "StandardStaking";
-    deployArgs =
-      "'0x0000000000000000000000000000000000000001', '0x0000000000000000000000000000000000000002', 1";
-  } else if (template === "airdrop") {
-    const { airdropTemplate } = await import("../templates/airdrop");
-    contractSrc = airdropTemplate;
-    contractName = "StandardAirdrop";
-    deployArgs =
-      "'0x0000000000000000000000000000000000000001', '0x0000000000000000000000000000000000000000000000000000000000000000'";
-  } else if (template === "vault") {
-    const { vaultTemplate } = await import("../templates/vault");
-    contractSrc = vaultTemplate;
-    contractName = "StandardVault";
-    deployArgs = "['0x0000000000000000000000000000000000000001'], 1, 0";
-  } else if (template === "kyberion") {
-    const { kyberionTemplate } = await import("../templates/kyberion");
-    contractSrc = kyberionTemplate;
-    contractName = "Kyberion";
-    deployArgs = "";
-  }
-
-  if (template === "blank") {
+  if (!spec?.load) {
+    // "blank", and anything else with no contract behind it.
     await fs.writeFile(
       path.join(projectPath, "contracts", ".gitkeep"),
       "",
@@ -233,9 +183,10 @@ describe("Deployment Template Test", function () {
       ENCODING,
     );
   } else {
+    const contractName = spec.contract!;
     await fs.writeFile(
       path.join(projectPath, "contracts", `${contractName}.sol`),
-      contractSrc,
+      await spec.load(),
       ENCODING,
     );
     await fs.writeFile(
@@ -244,7 +195,7 @@ describe("Deployment Template Test", function () {
         "deploy",
         `01_${contractName.toLowerCase()}.${ext}`,
       ),
-      getDeployScript(contractName, deployArgs, language),
+      getDeployScript(contractName, spec.deployArgs ?? "", language),
       ENCODING,
     );
   }

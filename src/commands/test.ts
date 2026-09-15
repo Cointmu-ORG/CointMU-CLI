@@ -1,11 +1,13 @@
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
+import {
+  bootHardhat,
+  DEFAULT_CHAIN_ID,
+  silenceHardhatNoise,
+} from "../utils/hardhat";
 
 const EXIT_FAILURE = 1;
 const TEST_PORT = 8555;
-const DEFAULT_CHAIN_ID = 1912;
-const ACCOUNT_COUNT = 10;
-const ACCOUNT_BALANCE = "100000000000000000000";
 const TEST_DIR_NAME = "test";
 
 const RPC_ALLOWED_HOSTS = new Set([
@@ -55,6 +57,215 @@ export function isRpcRequestAllowed(
 }
 
 /**
+ * Minimal surface this proxy needs from a provider: Hardhat's EIP-1193 request
+ * method. Narrowed so the proxy can be tested without a Hardhat runtime.
+ */
+export interface RpcProvider {
+  request(payload: { method: string; params: unknown[] }): Promise<unknown>;
+}
+
+/**
+ * Serves the in-process Hardhat network over HTTP so the spawned mocha run, and
+ * anything else speaking JSON-RPC, can reach it on loopback.
+ *
+ * Every request passes isRpcRequestAllowed() first; see its notes for why a
+ * browser-reachable localhost JSON-RPC server needs a gate at all (issue #83).
+ * Batched requests are answered element by element, and a provider error is
+ * reported per element rather than failing the whole batch.
+ *
+ * Always binds TEST_PORT: isRpcRequestAllowed()'s Host allowlist is built from
+ * that same port, so a proxy on any other port would reject every request.
+ *
+ * @param {RpcProvider} provider - The provider to forward calls to.
+ * @param {object} [options]
+ * @param {boolean} [options.allowCors] - Serve browser origins (`--allow-cors`).
+ * @returns {Promise<any>} The listening http.Server.
+ */
+export async function startRpcProxy(
+  provider: RpcProvider,
+  options: { allowCors?: boolean } = {},
+): Promise<any> {
+  const http = require("http");
+  const allowCors = Boolean(options.allowCors);
+
+  const server = http.createServer((req: any, res: any) => {
+    let body = "";
+    req.on("data", (chunk: any) => {
+      body += chunk.toString();
+    });
+    req.on("end", async () => {
+      if (!isRpcRequestAllowed(req.headers, allowCors)) {
+        res.statusCode = 403;
+        res.setHeader("Content-Type", "application/json");
+        return res.end(
+          `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Forbidden: cross-origin or non-local request rejected. Pass --allow-cors to cmu test to allow browser access."}}`,
+        );
+      }
+      if (req.method === "OPTIONS") {
+        if (allowCors) {
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          res.setHeader("Access-Control-Allow-Headers", "*");
+          res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+          res.statusCode = 204;
+        } else {
+          res.statusCode = 403;
+        }
+        return res.end();
+      }
+      if (!body) {
+        res.statusCode = 400;
+        return res.end();
+      }
+      try {
+        const json = JSON.parse(body);
+        const isArray = Array.isArray(json);
+        const reqs = isArray ? json : [json];
+        const responses = [];
+
+        for (const r of reqs) {
+          try {
+            const result = await provider.request({
+              method: r.method,
+              params: r.params || [],
+            });
+            responses.push({ jsonrpc: "2.0", id: r.id, result });
+          } catch (error: any) {
+            responses.push({
+              jsonrpc: "2.0",
+              id: r.id,
+              error: { code: error.code || -32603, message: error.message },
+            });
+          }
+        }
+
+        res.setHeader("Content-Type", "application/json");
+        if (allowCors) res.setHeader("Access-Control-Allow-Origin", "*");
+        res.end(JSON.stringify(isArray ? responses : responses[0]));
+      } catch {
+        res.statusCode = 400;
+        res.end(
+          `{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}`,
+        );
+      }
+    });
+  });
+
+  const { killPort } = await import("../utils/process");
+  await killPort(TEST_PORT);
+
+  await new Promise<void>((resolve, reject) => {
+    server.listen(TEST_PORT, "127.0.0.1", (err?: Error) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+
+  return server;
+}
+
+/**
+ * Prints per-transaction gas usage for every block the test run produced.
+ *
+ * Reporting is a convenience, not part of the run: a failure here is downgraded
+ * to a warning so it never masks the test result that was already decided.
+ *
+ * @param {number} port - Port the test RPC proxy is listening on.
+ * @param {object} [options]
+ * @param {boolean} [options.verbose] - Print the full error if the report fails.
+ * @returns {Promise<void>} Always resolves.
+ */
+export async function printGasReport(
+  port: number,
+  options: { verbose?: boolean } = {},
+): Promise<void> {
+  const RULE =
+    "=========================================================================================";
+  const THIN_RULE =
+    "-----------------------------------------------------------------------------------------";
+
+  try {
+    console.log(`\n${RULE}`);
+    console.log("Gas profile");
+    console.log(RULE);
+    console.log(
+      "| Block | Transaction Hash                                                   | Gas Used |",
+    );
+    console.log(THIN_RULE);
+
+    const { ethers } = await import("ethers");
+    const rpcProvider = new ethers.JsonRpcProvider(`http://127.0.0.1:${port}`);
+    const latestBlock = await rpcProvider.getBlockNumber();
+    let totalGas = 0n;
+
+    for (let i = 1; i <= latestBlock; i++) {
+      const block = await rpcProvider.getBlock(i);
+      if (!block?.transactions) continue;
+
+      for (const txHash of block.transactions) {
+        const receipt = await rpcProvider.getTransactionReceipt(txHash);
+        if (!receipt) continue;
+
+        totalGas += receipt.gasUsed;
+        console.log(
+          `| ${i.toString().padEnd(5)} | ${txHash} | ${receipt.gasUsed.toString().padEnd(8)} |`,
+        );
+      }
+    }
+
+    console.log(THIN_RULE);
+    console.log(`Total gas used: ${totalGas.toString()}\n`);
+  } catch (error) {
+    console.error(
+      "\x1b[33mwarning:\x1b[0m could not produce the gas report; the tests themselves were unaffected.",
+    );
+    if (options.verbose) {
+      printCliError(error, true);
+    }
+  }
+}
+
+/**
+ * Runs the project's mocha suite against the test RPC proxy.
+ *
+ * The runner is picked from what is in test/: a TypeScript suite needs
+ * ts-node/register, a JavaScript one must not have it.
+ *
+ * @param {string} testDir - Absolute path to the project's test directory.
+ * @param {Record<string, string | undefined>} env - Environment for the child.
+ * @returns {Promise<void>} Resolves when mocha exits 0, rejects otherwise.
+ */
+async function runMochaSuite(
+  testDir: string,
+  env: Record<string, string | undefined>,
+): Promise<void> {
+  const fs = (await import("fs-extra")).default || (await import("fs-extra"));
+  const hasTsFiles = fs
+    .readdirSync(testDir)
+    .some((f: string) => f.endsWith(".ts"));
+  const runnerArgs = hasTsFiles
+    ? ["mocha", "-r", "ts-node/register", "test/**/*.ts"]
+    : ["mocha", "test/**/*.js"];
+
+  console.log(`\n========================================`);
+  console.log(`Running tests with Mocha`);
+  console.log(`========================================\n`);
+
+  const { spawn } = require("child_process");
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("npx", runnerArgs, {
+      stdio: "inherit",
+      env,
+      shell: process.platform === "win32",
+    });
+    child.on("close", (code: number) => {
+      if (code === 0) resolve();
+      else reject(new Error(`test run exited with code ${code}`));
+    });
+    child.on("error", (err: Error) => reject(err));
+  });
+}
+
+/**
  * Executes the automated smart contract test suite.
  * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when tests complete.
@@ -91,141 +302,21 @@ async function runTest(
       );
     }
 
-    const suppressWarning = (args: any[]) => {
-      if (isVerbose) return false;
-      const msg = args.join(" ");
-      return (
-        msg.includes("uws_win32") ||
-        msg.includes("Falling back to a NodeJS implementation") ||
-        msg.includes("This version of \u00B5WS") ||
-        msg.includes("This version of") ||
-        msg.includes("uws-js-unofficial") ||
-        msg.includes("Require stack:") ||
-        msg.includes("Cannot find module")
-      );
-    };
-
-    const originalConsoleError = console.error;
-    console.error = (...args: any[]) => {
-      if (suppressWarning(args)) return;
-      originalConsoleError(...args);
-    };
-
-    const originalConsoleWarn = console.warn;
-    console.warn = (...args: any[]) => {
-      if (suppressWarning(args)) return;
-      originalConsoleWarn(...args);
-    };
-
-    const originalConsoleLog = console.log;
-    console.log = (...args: any[]) => {
-      if (suppressWarning(args)) return;
-      originalConsoleLog(...args);
-    };
+    silenceHardhatNoise({ verbose: isVerbose });
 
     console.log("Starting the CointMU DevNet...");
 
-    const importDynamic = new Function(
-      "modulePath",
-      "return import(modulePath)",
-    );
-    const hre =
-      (await importDynamic("hardhat")).default ||
-      (await importDynamic("hardhat"));
-    const { ethers } = require("ethers");
-    const resolvedMnemonic =
-      ethers.Wallet.createRandom().mnemonic?.phrase || "";
-
-    if (!hre.config.networks) hre.config.networks = {};
-    if (!hre.config.networks.hardhat)
-      hre.config.networks.hardhat = { type: "hardhat" } as any;
-
-    hre.config.networks.hardhat.chainId = DEFAULT_CHAIN_ID;
-    hre.config.networks.hardhat.accounts = {
-      mnemonic: resolvedMnemonic,
-      accountsBalance: ACCOUNT_BALANCE,
-      count: ACCOUNT_COUNT,
-    };
-    hre.config.networks.hardhat.loggingEnabled = false;
+    const { hre, mnemonic: resolvedMnemonic } = await bootHardhat({
+      loggingEnabled: false,
+    });
 
     const connection = await hre.network.getOrCreate();
     const provider = connection.provider;
 
-    const http = require("http");
-
-    const server = http.createServer((req: any, res: any) => {
-      let body = "";
-      req.on("data", (chunk: any) => {
-        body += chunk.toString();
-      });
-      req.on("end", async () => {
-        if (!isRpcRequestAllowed(req.headers, allowCors)) {
-          res.statusCode = 403;
-          res.setHeader("Content-Type", "application/json");
-          return res.end(
-            `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Forbidden: cross-origin or non-local request rejected. Pass --allow-cors to cmu test to allow browser access."}}`,
-          );
-        }
-        if (req.method === "OPTIONS") {
-          if (allowCors) {
-            res.setHeader("Access-Control-Allow-Origin", "*");
-            res.setHeader("Access-Control-Allow-Headers", "*");
-            res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-            res.statusCode = 204;
-          } else {
-            res.statusCode = 403;
-          }
-          return res.end();
-        }
-        if (!body) {
-          res.statusCode = 400;
-          return res.end();
-        }
-        try {
-          const json = JSON.parse(body);
-          const isArray = Array.isArray(json);
-          const reqs = isArray ? json : [json];
-          const responses = [];
-
-          for (const r of reqs) {
-            try {
-              const result = await provider.request({
-                method: r.method,
-                params: r.params || [],
-              });
-              responses.push({ jsonrpc: "2.0", id: r.id, result });
-            } catch (error: any) {
-              responses.push({
-                jsonrpc: "2.0",
-                id: r.id,
-                error: { code: error.code || -32603, message: error.message },
-              });
-            }
-          }
-
-          res.setHeader("Content-Type", "application/json");
-          if (allowCors) res.setHeader("Access-Control-Allow-Origin", "*");
-          res.end(JSON.stringify(isArray ? responses : responses[0]));
-        } catch {
-          res.statusCode = 400;
-          res.end(
-            `{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}`,
-          );
-        }
-      });
-    });
-
-    const { killPort } = await import("../utils/process");
-    await killPort(TEST_PORT);
-
-    await new Promise<void>((resolve, reject) => {
-      server.listen(TEST_PORT, "127.0.0.1", (err?: Error) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    const server = await startRpcProxy(provider, { allowCors });
 
     try {
+      const { ethers } = await import("ethers");
       if (!resolvedMnemonic) {
         throw new Error(
           "could not generate a mnemonic for the test accounts.\n" +
@@ -247,86 +338,12 @@ async function runTest(
         PRIVATE_KEY: privateKey,
       };
 
-      const isWin = process.platform === "win32";
-
-      // Check if there are JS or TS files in the test directory
-      const hasTsFiles = fs
-        .readdirSync(testDir)
-        .some((f: string) => f.endsWith(".ts"));
-      const runnerArgs = hasTsFiles
-        ? ["mocha", "-r", "ts-node/register", "test/**/*.ts"]
-        : ["mocha", "test/**/*.js"];
-
-      console.log(`\n========================================`);
-      console.log(`Running tests with Mocha`);
-      console.log(`========================================\n`);
-
-      const { spawn } = require("child_process");
-      await new Promise<void>((resolve, reject) => {
-        const child = spawn("npx", runnerArgs, {
-          stdio: "inherit",
-          env: injectedEnv,
-          shell: isWin,
-        });
-        child.on("close", (code: number) => {
-          if (code === 0) resolve();
-          else reject(new Error(`test run exited with code ${code}`));
-        });
-        child.on("error", (err: Error) => reject(err));
-      });
+      await runMochaSuite(testDir, injectedEnv);
 
       console.log("\nAll tests passed.");
     } finally {
       if (options.gas) {
-        try {
-          console.log(
-            "\n=========================================================================================",
-          );
-          console.log("Gas profile");
-          console.log(
-            "=========================================================================================",
-          );
-          console.log(
-            "| Block | Transaction Hash                                                   | Gas Used |",
-          );
-          console.log(
-            "-----------------------------------------------------------------------------------------",
-          );
-
-          const { ethers } = require("ethers");
-          const rpcProvider = new ethers.JsonRpcProvider(
-            `http://127.0.0.1:${TEST_PORT}`,
-          );
-          const latestBlock = await rpcProvider.getBlockNumber();
-          let totalGas = 0n;
-
-          for (let i = 1; i <= latestBlock; i++) {
-            const block = await rpcProvider.getBlock(i);
-            if (block && block.transactions) {
-              for (const txHash of block.transactions) {
-                const receipt = await rpcProvider.getTransactionReceipt(txHash);
-                if (receipt) {
-                  const gasUsed = receipt.gasUsed;
-                  totalGas += gasUsed;
-                  console.log(
-                    `| ${i.toString().padEnd(5)} | ${txHash} | ${gasUsed.toString().padEnd(8)} |`,
-                  );
-                }
-              }
-            }
-          }
-          console.log(
-            "-----------------------------------------------------------------------------------------",
-          );
-          console.log(`Total gas used: ${totalGas.toString()}\n`);
-        } catch (e) {
-          console.error(
-            "\x1b[33mwarning:\x1b[0m could not produce the gas report; the tests themselves were unaffected.",
-          );
-          if (isVerbose) {
-            printCliError(e, true);
-          }
-        }
+        await printGasReport(TEST_PORT, { verbose: isVerbose });
       }
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
