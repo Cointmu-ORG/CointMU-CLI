@@ -1,3 +1,9 @@
+/**
+ * Bumps package.json version + Makefile version, rebuilds, commits, tags, and pushes.
+ * @example
+ * node scripts/bump-version.js patch my-codename
+ * node scripts/bump-version.js minor my-codename beta.1
+ */
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
