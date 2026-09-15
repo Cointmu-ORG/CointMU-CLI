@@ -1,4 +1,12 @@
 import { defineConfig } from "tsup";
+import fs from "fs";
+
+let buildId = "unknown";
+try {
+  buildId = JSON.parse(fs.readFileSync("build-info.json", "utf-8")).build;
+} catch {
+  // no build-info.json yet, ship "unknown"
+}
 
 export default defineConfig({
   entry: ["src/index.ts"],
@@ -10,4 +18,7 @@ export default defineConfig({
   sourcemap: false,
   clean: true,
   shims: true,
+  define: {
+    __CMU_BUILD_ID__: JSON.stringify(buildId),
+  },
 });

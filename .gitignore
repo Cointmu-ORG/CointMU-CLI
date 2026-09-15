@@ -124,6 +124,7 @@ dist
 my-project/
 graphify-out
 .claude/settings.local.json
+.claude
 
 # CointMU local session & network state (holds an encrypted private key)
 .cmu-session
