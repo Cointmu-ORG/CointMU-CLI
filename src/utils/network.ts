@@ -57,7 +57,7 @@ export async function getDynamicNetwork(
   if (!network) {
     throw new Error(
       `network '${networkName}' is not saved.\n` +
-        "\x1b[2mhint:\x1b[0m list saved networks with `cmu network --list`, or add one with `cmu network --save <url> --name <name>`.",
+        "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`, or add one with `cmu network save <url> --name <name>`.",
     );
   }
 

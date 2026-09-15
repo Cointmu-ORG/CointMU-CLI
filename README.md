@@ -134,15 +134,22 @@ Commands:
     start                     Starts mining blocks on the active network using the logged-in wallet
     stop                      Stops mining blocks on the active network
   network [options]           Manage active RPC networks locally
-    --save <url>              Save a new network or update an existing one (with -n <name>)
-    --use <name>              Switch the active network to the specified name
-    --list                    List all saved networks
-    --delete <name>           Delete a saved network
+    save <url> -n <name>      Save a new network or update an existing one
+    use <name>                Switch the active network to the specified name
+    list                      List all saved networks
+    delete <name>             Delete a saved network
     info                      Display the active network configuration
     ping [name]               Ping a network to check connectivity and latency
   update [options]            Updates the CointMU CLI to the latest release from the npm registry
   help [command]              display help for command
 ```
+
+> **Deprecated in 1.4.0:** `cmu network` used to take `--save`, `--use`, `--list`
+> and `--delete` as flags. They still work and still do the same thing, but they
+> now print a deprecation notice and will be removed in **2.0.0**. Use the
+> subcommands above instead — `cmu network save <url> --name <name>` in place of
+> `cmu network --save <url> --name <name>`, and so on. `cmu network` on its own
+> still lists the saved networks.
 
 ## 🔐 Trust Model
 
