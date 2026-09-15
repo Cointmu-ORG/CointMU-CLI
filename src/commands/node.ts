@@ -9,6 +9,48 @@ const ACCOUNT_COUNT = 10;
 const ACCOUNT_BALANCE = "100000000000000000000";
 const MAX_PORT = 65535;
 
+const LOOPBACK_HOSTS = ["localhost", "::1", "[::1]", "::ffff:127.0.0.1"];
+
+/**
+ * Reports whether a bind host keeps the DevNet reachable only from this machine.
+ * @param {string} host - The host the node will bind to.
+ * @returns {boolean} True for loopback addresses and localhost.
+ */
+export function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return (
+    LOOPBACK_HOSTS.includes(normalized) ||
+    /^127(\.\d{1,3}){3}$/.test(normalized)
+  );
+}
+
+/**
+ * Warns, before the node binds, that a non-loopback host exposes the dev RPC
+ * endpoint and the private keys this command is about to print. Not a gate:
+ * binding to the LAN is a legitimate way to test from another device.
+ * @param {string} host - The host the node will bind to.
+ * @returns {void}
+ */
+export function warnOnNonLoopbackHost(host: string): void {
+  if (isLoopbackHost(host)) return;
+
+  console.log(
+    `\n\x1b[33mwarning:\x1b[0m --host ${host} binds the DevNet to a non-loopback address`,
+  );
+  console.log(
+    "    The RPC endpoint becomes reachable from your network, and the private keys",
+  );
+  console.log(
+    `    of the ${ACCOUNT_COUNT} pre-funded accounts are printed below in plain text. Anyone who`,
+  );
+  console.log(
+    "    can reach this machine can then drive the node and spend those accounts.",
+  );
+  console.log(
+    `\x1b[2mhint:\x1b[0m omit --host to bind ${DEFAULT_HOST} unless another device really needs access.\n`,
+  );
+}
+
 /**
  * Pings the configured RPC endpoint to test connectivity.
  * @param {object} options - CLI options.
@@ -72,6 +114,8 @@ async function runNodeStart(options: {
           `\x1b[2mhint:\x1b[0m pass a port between 1 and ${MAX_PORT}, e.g. \`cmu node start -p 8585\`.`,
       );
     }
+
+    warnOnNonLoopbackHost(options.host);
 
     await killPort(port);
 
