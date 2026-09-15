@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 
 const EXIT_FAILURE = 1;
 const SESSION_FILE_NAME = ".cmu-session";
@@ -41,11 +42,7 @@ async function runWalletCreate(
     console.log("  cmu wallet login");
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m wallet create failed");
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
     process.exit(EXIT_FAILURE);
   }
 }
@@ -105,11 +102,7 @@ async function runWalletLogin(
     );
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m wallet login failed");
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
     process.exit(EXIT_FAILURE);
   }
 }
@@ -149,11 +142,7 @@ async function runWalletBalance(
     console.log("---------------------------");
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m wallet balance failed");
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
     process.exit(EXIT_FAILURE);
   }
 }
@@ -188,11 +177,7 @@ async function runWalletInfo(
     console.log("----------------------");
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m wallet info failed");
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
     process.exit(EXIT_FAILURE);
   }
 }

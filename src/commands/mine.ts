@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 
 const EXIT_FAILURE = 1;
 const MINER_THREAD_COUNT = 1;
@@ -50,11 +51,7 @@ async function runMineStart(
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m mine start failed");
 
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
 
     process.exit(EXIT_FAILURE);
   }
@@ -91,11 +88,7 @@ async function runMineStop(options: { verbose?: boolean } = {}): Promise<void> {
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m mine stop failed");
 
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
 
     process.exit(EXIT_FAILURE);
   }

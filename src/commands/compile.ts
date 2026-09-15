@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 
 const EXIT_FAILURE = 1;
@@ -158,11 +159,7 @@ export async function runCompile(
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m compile failed");
 
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
 
     process.exit(EXIT_FAILURE);
   }

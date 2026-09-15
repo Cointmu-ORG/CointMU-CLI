@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 
 const EXIT_FAILURE = 1;
 const TEST_PORT = 8555;
@@ -323,7 +324,7 @@ async function runTest(
             "\x1b[33mwarning:\x1b[0m could not produce the gas report; the tests themselves were unaffected.",
           );
           if (isVerbose) {
-            console.error(e);
+            printCliError(e, true);
           }
         }
       }
@@ -334,11 +335,7 @@ async function runTest(
     }
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m test failed");
-    if (isVerbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, isVerbose);
     process.exit(EXIT_FAILURE);
   }
 }

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 
 const EXIT_SUCCESS = 0;
 const EXIT_FAILURE = 1;
@@ -75,11 +76,7 @@ export const auditCommand = new Command("audit")
     } catch (error) {
       console.error("\n\x1b[31merror:\x1b[0m audit failed");
 
-      if (options.verbose) {
-        console.error(error);
-      } else {
-        console.error(error instanceof Error ? error.message : String(error));
-      }
+      printCliError(error, options.verbose);
 
       process.exit(EXIT_FAILURE);
     }

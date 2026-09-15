@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 
 const EXIT_FAILURE = 1;
 const DIM_COLOR = "\x1b[2m";
@@ -34,11 +35,7 @@ async function runAries(options: { verbose?: boolean } = {}): Promise<void> {
     console.log(`${GREEN_COLOR} > ${getRandomSadQuote()}${RESET_COLOR}`);
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m aries failed");
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
     process.exit(EXIT_FAILURE);
   }
 }
