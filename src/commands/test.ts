@@ -59,7 +59,12 @@ export function isRpcRequestAllowed(
  * @returns {Promise<void>} Resolves when tests complete.
  */
 async function runTest(
-  options: { gas?: boolean; verbose?: boolean; allowCors?: boolean } = {},
+  options: {
+    gas?: boolean;
+    verbose?: boolean;
+    allowCors?: boolean;
+    yes?: boolean;
+  } = {},
 ): Promise<void> {
   const isVerbose = options.verbose;
   const allowCors = Boolean(options.allowCors);
@@ -75,7 +80,7 @@ async function runTest(
 
     console.log("Triggering automated contract compilation...");
     const { runCompile } = await import("./compile");
-    await runCompile();
+    await runCompile({ yes: options.yes });
 
     const testDir = path.resolve(process.cwd(), TEST_DIR_NAME);
     if (!(await fs.pathExists(testDir))) {
@@ -340,5 +345,9 @@ export const testCommand = new Command("test")
   .option(
     "--allow-cors",
     "Allow browser (cross-origin) access to the local test RPC proxy; off by default to prevent DNS-rebinding attacks",
+  )
+  .option(
+    "-y, --yes",
+    "Skip the confirmation prompt before executing project code",
   )
   .action(runTest);

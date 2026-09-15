@@ -52,3 +52,62 @@ describe("findImports path containment", () => {
     });
   });
 });
+
+// The config file is require()d from the cwd, i.e. arbitrary code execution
+// from the project directory. It must not run before the user has confirmed.
+describe("runCompile trust gate", () => {
+  let cwd: string;
+  let marker: string;
+  const realIsTTY = process.stdin.isTTY;
+
+  beforeEach(() => {
+    cwd = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-trust-compile-"));
+    marker = path.join(cwd, "executed.txt");
+    fs.writeFileSync(
+      path.join(cwd, "cmu.config.js"),
+      `require("fs").writeFileSync(${JSON.stringify(marker)}, "x");\n` +
+        `module.exports = {};`,
+    );
+    vi.spyOn(process, "cwd").mockReturnValue(cwd);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    fs.rmSync(cwd, { recursive: true, force: true });
+    process.stdin.isTTY = realIsTTY;
+  });
+
+  it("blocks in a non-TTY session and never loads the config", async () => {
+    process.stdin.isTTY = false;
+    const { runCompile } = await import("../../src/commands/compile");
+
+    await expect(runCompile()).rejects.toThrow("exit:1");
+
+    expect(fs.existsSync(marker)).toBe(false);
+    const errors = (console.error as any).mock.calls.flat().join("\n");
+    expect(errors).toMatch(/non-interactive session/);
+    expect(errors).toMatch(/--yes/);
+  });
+
+  it("proceeds past the gate with --yes, without prompting", async () => {
+    process.stdin.isTTY = false;
+    const prompt = vi.fn();
+    vi.doMock("inquirer", () => ({ default: { prompt } }));
+    const { runCompile } = await import("../../src/commands/compile");
+
+    // No contracts/ dir, so this is the first failure *after* the gate.
+    await expect(runCompile({ yes: true })).rejects.toThrow("exit:1");
+
+    expect(prompt).not.toHaveBeenCalled();
+    expect(fs.existsSync(marker)).toBe(true);
+    expect((console.error as any).mock.calls.flat().join("\n")).toMatch(
+      /contracts directory not found/,
+    );
+  });
+});

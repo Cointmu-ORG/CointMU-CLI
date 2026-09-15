@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 
 const EXIT_SUCCESS = 0;
 const EXIT_FAILURE = 1;
@@ -12,6 +13,7 @@ interface DeployOptions {
   ping?: boolean;
   network?: string;
   verbose?: boolean;
+  yes?: boolean;
 }
 
 /**
@@ -88,10 +90,6 @@ async function runDeploy(options: DeployOptions): Promise<void> {
     const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     require("dotenv").config({ path: path.resolve(process.cwd(), ".env") });
 
-    console.log("Triggering automated contract compilation...");
-    const { runCompile } = await import("./compile");
-    await runCompile();
-
     const deployDir = path.resolve(process.cwd(), "deploy");
 
     if (!(await fs.pathExists(deployDir))) {
@@ -99,6 +97,27 @@ async function runDeploy(options: DeployOptions): Promise<void> {
         `'deploy' directory not found at ${deployDir}.\nPlease run this command from the root of your CointMU project.`,
       );
     }
+
+    const files: string[] = await fs.readdir(deployDir);
+    const scripts = files
+      .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
+      .sort((a, b) => a.localeCompare(b));
+
+    // --config / --ping exit before any deploy script runs; only the project
+    // config is loaded on those paths.
+    const dryRun = Boolean(options.config || options.ping);
+    const configPath = findProjectConfig();
+    await confirmProjectTrust(
+      [
+        ...(configPath ? [configPath] : []),
+        ...(dryRun ? [] : scripts.map((s) => path.join(deployDir, s))),
+      ],
+      { yes: options.yes },
+    );
+
+    console.log("Triggering automated contract compilation...");
+    const { runCompile } = await import("./compile");
+    await runCompile({ yes: options.yes });
 
     const { getDeployNetwork } = await import("../utils/network");
     const network = await getDeployNetwork(options.network, {
@@ -143,11 +162,6 @@ async function runDeploy(options: DeployOptions): Promise<void> {
     if (options.config) {
       process.exit(EXIT_SUCCESS);
     }
-
-    const files: string[] = await fs.readdir(deployDir);
-    const scripts = files
-      .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
-      .sort((a, b) => a.localeCompare(b));
 
     if (scripts.length === 0) {
       console.log("No deployment scripts found in deploy/ directory.");
@@ -196,4 +210,14 @@ export const deployCommand = new Command("deploy")
   )
   .option("-n, --network <name>", "Specify the network to deploy to")
   .option("-v, --verbose", "Enable verbose logging for debugging")
+  .option(
+    "-y, --yes",
+    "Skip the confirmation prompt before executing project code",
+  )
+  .addHelpText(
+    "after",
+    "\nWarning: every script in deploy/ is executed as code and receives your\n" +
+      "decrypted PRIVATE_KEY via the environment. Only deploy projects you trust.\n" +
+      "See the README 'Trust Model' section.",
+  )
   .action(runDeploy);
