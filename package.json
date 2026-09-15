@@ -1,7 +1,7 @@
 {
   "name": "cointmu-cli",
-  "version": "1.3.4",
-  "codename": "Griffin",
+  "version": "1.3.5",
+  "codename": "Cerberus",
   "description": "Primary development toolkit for the CointMU blockchain",
   "keywords": [
     "cointmu",
