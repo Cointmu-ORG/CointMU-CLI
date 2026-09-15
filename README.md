@@ -144,6 +144,43 @@ Commands:
   help [command]              display help for command
 ```
 
+## 🔐 Trust Model
+
+`cmu deploy` and `cmu compile` **execute arbitrary code from the project directory**:
+
+- every `.ts`/`.js` file in `deploy/` is run as a program, and receives your decrypted `PRIVATE_KEY` through the environment so it can sign transactions;
+- `cmu.config.ts` / `cmu.config.js` is `require()`d from the current working directory, by `cmu compile`, `cmu test` and `cmu deploy` alike.
+
+This is by design and cannot be removed without breaking deployment itself — it is the same trust model as Hardhat, Foundry and Truffle. A deploy script that wants to exfiltrate your key only has to read `process.env.PRIVATE_KEY`, and encrypting `.cmu-session` at rest does not help once the script is running.
+
+**Never run `cmu deploy`, `cmu compile` or `cmu test` in a project you did not write or do not trust.** Read `deploy/` and `cmu.config.ts` before the first run, the same way you would read any script before executing it.
+
+To make the boundary explicit, the CLI lists every file it is about to execute and asks for confirmation first:
+
+```text
+[!] The following project files will be executed as code:
+      cmu.config.ts  ->  /home/you/my-dapp/cmu.config.ts
+      00_deploy.ts   ->  /home/you/my-dapp/deploy/00_deploy.ts
+
+    They run with your full environment - including PRIVATE_KEY, decrypted
+    from your session and injected for deploy scripts - and can do anything
+    your user account can. ...
+
+? Execute these files? (y/N)
+```
+
+Pass `-y` / `--yes` to skip the prompt in CI or other non-interactive use:
+
+```bash
+cmu deploy --yes
+cmu compile --yes
+cmu test --yes
+```
+
+When stdin is not a TTY and `--yes` was not given, the command **fails with an error instead of continuing**. The prompt is not silently skipped just because nobody is watching — an unattended run of an untrusted project is exactly the case this gate exists for.
+
+> Note: this confirmation reduces the chance of executing a hostile project by accident. It is not a sandbox — once you confirm, the scripts have full access to your environment. Sandboxed execution is tracked separately.
+
 ## ⚡ Quick Start
 
 Here is a standard, lightning-fast workflow to get a new CointMU project up and running:

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 
 const EXIT_FAILURE = 1;
 const JSON_SPACES = 2;
@@ -55,7 +56,7 @@ export function findImports(
  * @returns {Promise<void>} Resolves when compilation finishes successfully.
  */
 export async function runCompile(
-  options: { verbose?: boolean } = {},
+  options: { verbose?: boolean; yes?: boolean } = {},
 ): Promise<void> {
   try {
     const fs = require("fs-extra");
@@ -65,19 +66,14 @@ export async function runCompile(
     const cwd = process.cwd();
     const contractsDir = path.resolve(cwd, "contracts");
     const artifactsDir = path.resolve(cwd, "artifacts");
-    const configPathTs = path.resolve(cwd, "cmu.config.ts");
-    const configPathJs = path.resolve(cwd, "cmu.config.js");
 
     let compilerSettings: Record<string, unknown> = {};
-    let configPath: string | null = null;
-
-    if (await fs.pathExists(configPathTs)) {
-      configPath = configPathTs;
-    } else if (await fs.pathExists(configPathJs)) {
-      configPath = configPathJs;
-    }
+    const configPath = findProjectConfig(cwd);
 
     if (configPath) {
+      // require()ing the config runs project code, so gate it the same way
+      // `cmu deploy` gates the scripts in deploy/.
+      await confirmProjectTrust([configPath], { yes: options.yes });
       try {
         if (configPath.endsWith(".ts")) {
           require("ts-node/register/transpile-only");
@@ -173,6 +169,15 @@ export async function runCompile(
 export const compileCommand = new Command("compile")
   .description("Compiles smart contracts into ABI and bytecode artifacts")
   .option("-v, --verbose", "Enable verbose logging for debugging")
-  .action(async (options: { verbose?: boolean }) => {
+  .option(
+    "-y, --yes",
+    "Skip the confirmation prompt before executing project code",
+  )
+  .addHelpText(
+    "after",
+    "\nWarning: cmu.config.ts/js is executed as code from the project directory.\n" +
+      "Only compile projects you trust. See the README 'Trust Model' section.",
+  )
+  .action(async (options: { verbose?: boolean; yes?: boolean }) => {
     await runCompile(options);
   });

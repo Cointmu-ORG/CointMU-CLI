@@ -85,6 +85,11 @@ export async function getDynamicNetwork(
  * Resolves the static network configuration directly from the project's cmu.config.ts/js.
  * Used exclusively for deterministic smart contract deployments.
  *
+ * NOTE: require()ing cmu.config.ts runs project code. The confirmation gate for
+ * that lives in the callers (runDeploy, runCompile) via confirmProjectTrust(),
+ * which must run before this function and is memoised per process so the user
+ * is asked once. Any new caller of this function must gate it the same way.
+ *
  * @param {string} [targetNetwork] - The explicitly requested deployment network name.
  * @returns {Promise<NetworkConfig>} The static deployment network configuration.
  */
