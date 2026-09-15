@@ -32,6 +32,10 @@ cmu update --to 1.3.1
 
 `cmu update` installs from the npm registry, so it always matches what a fresh `npm install -g cointmu-cli` would give you.
 
+> **Stuck on 1.3.2 or older?** Those builds updated from git, which npm 12+ blocks
+> (`npm error code EALLOWGIT`). Escape once with `npm install -g cointmu-cli@latest`
+> — from 1.3.3 onward `cmu update` goes through the registry and works normally.
+
 ### 💻 Local Development Setup (NPM)
 
 If you are developing or contributing to the CLI itself, you can easily set it up locally:

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildInstallCommand, resolveTargetVersion } from "../../src/commands/update";
+import {
+  buildInstallCommand,
+  explainInstallFailure,
+  resolveTargetVersion,
+} from "../../src/commands/update";
 
 describe("buildInstallCommand", () => {
   it("targets the pinned version on the npm registry, not git", () => {
@@ -70,5 +74,25 @@ describe("resolveTargetVersion", () => {
     }
 
     expect(execFileSync).not.toHaveBeenCalled();
+  });
+});
+
+describe("explainInstallFailure", () => {
+  it("points an EALLOWGIT failure at the registry install, not at allow-git config", () => {
+    const stderr = [
+      "npm error code EALLOWGIT",
+      'npm error Fetching packages of type "git" have been disabled',
+      'npm error Refusing to fetch "git+https://github.com/kakonoomoidee/CointMU-CLI.git"',
+    ].join("\n");
+
+    const message = explainInstallFailure(stderr);
+    expect(message).toContain("EALLOWGIT");
+    expect(message).toContain("npm install -g cointmu-cli@latest");
+    expect(message).not.toContain("npm config set");
+  });
+
+  it("falls back to a generic message for unrelated npm failures", () => {
+    const message = explainInstallFailure("npm error code EACCES");
+    expect(message).toBe("npm install failed (see the npm output above).");
   });
 });
