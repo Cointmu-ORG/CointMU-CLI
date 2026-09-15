@@ -139,6 +139,19 @@ function runCommand(command) {
 }
 
 /**
+ * Checks whether a git tag already exists locally.
+ * @param {string} tag - The tag name to look for.
+ * @returns {boolean} True if the tag exists.
+ */
+function tagExists(tag) {
+  const out = execSync(`git tag --list ${tag}`, {
+    encoding: ENCODING_UTF8,
+    cwd: path.resolve(__dirname, ".."),
+  });
+  return out.trim() !== "";
+}
+
+/**
  * Main execution flow for the bump version script.
  * @returns {void}
  */
@@ -155,14 +168,6 @@ function main() {
     process.exit(EXIT_CODE_ERROR);
   }
 
-  try {
-    console.log("Running build process to verify before version bump...");
-    execSync("npm run build", { stdio: "inherit" });
-  } catch {
-    console.error("Version update aborted: Build process failed with errors.");
-    process.exit(EXIT_CODE_ERROR);
-  }
-
   const pkg = readPackageJson();
   const previousVersion = pkg.version;
   const previousCodename = pkg.codename;
@@ -172,6 +177,22 @@ function main() {
     bumpType,
     prereleaseTag,
   );
+
+  if (tagExists(`v${newVersion}`)) {
+    console.error(
+      `Version update aborted: tag v${newVersion} already exists.\n` +
+        `Delete it (git tag -d v${newVersion}) or pick a different bump type.`,
+    );
+    process.exit(EXIT_CODE_ERROR);
+  }
+
+  try {
+    console.log("Running build process to verify before version bump...");
+    execSync("npm run build", { stdio: "inherit" });
+  } catch {
+    console.error("Version update aborted: Build process failed with errors.");
+    process.exit(EXIT_CODE_ERROR);
+  }
 
   console.log(
     `Bumping version from ${previousVersion} to ${newVersion} with codename ${newCodename}`,
