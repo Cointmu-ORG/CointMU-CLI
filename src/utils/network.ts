@@ -13,7 +13,7 @@ const FS_EXTRA_PKG = "fs-extra";
 const PATH_PKG = "path";
 const ETHERS_PKG = "ethers";
 const TS_NODE_PKG = "ts-node";
-const TS_COMPILER = "typescript@5";
+const TS_COMPILER = "typescript";
 
 export interface NetworkConfig {
   name: string;
