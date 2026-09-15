@@ -1,11 +1,13 @@
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
+import {
+  bootHardhat,
+  DEFAULT_CHAIN_ID,
+  silenceHardhatNoise,
+} from "../utils/hardhat";
 
 const EXIT_FAILURE = 1;
 const TEST_PORT = 8555;
-const DEFAULT_CHAIN_ID = 1912;
-const ACCOUNT_COUNT = 10;
-const ACCOUNT_BALANCE = "100000000000000000000";
 const TEST_DIR_NAME = "test";
 
 const RPC_ALLOWED_HOSTS = new Set([
@@ -91,62 +93,13 @@ async function runTest(
       );
     }
 
-    const suppressWarning = (args: any[]) => {
-      if (isVerbose) return false;
-      const msg = args.join(" ");
-      return (
-        msg.includes("uws_win32") ||
-        msg.includes("Falling back to a NodeJS implementation") ||
-        msg.includes("This version of \u00B5WS") ||
-        msg.includes("This version of") ||
-        msg.includes("uws-js-unofficial") ||
-        msg.includes("Require stack:") ||
-        msg.includes("Cannot find module")
-      );
-    };
-
-    const originalConsoleError = console.error;
-    console.error = (...args: any[]) => {
-      if (suppressWarning(args)) return;
-      originalConsoleError(...args);
-    };
-
-    const originalConsoleWarn = console.warn;
-    console.warn = (...args: any[]) => {
-      if (suppressWarning(args)) return;
-      originalConsoleWarn(...args);
-    };
-
-    const originalConsoleLog = console.log;
-    console.log = (...args: any[]) => {
-      if (suppressWarning(args)) return;
-      originalConsoleLog(...args);
-    };
+    silenceHardhatNoise({ verbose: isVerbose });
 
     console.log("Starting the CointMU DevNet...");
 
-    const importDynamic = new Function(
-      "modulePath",
-      "return import(modulePath)",
-    );
-    const hre =
-      (await importDynamic("hardhat")).default ||
-      (await importDynamic("hardhat"));
-    const { ethers } = require("ethers");
-    const resolvedMnemonic =
-      ethers.Wallet.createRandom().mnemonic?.phrase || "";
-
-    if (!hre.config.networks) hre.config.networks = {};
-    if (!hre.config.networks.hardhat)
-      hre.config.networks.hardhat = { type: "hardhat" } as any;
-
-    hre.config.networks.hardhat.chainId = DEFAULT_CHAIN_ID;
-    hre.config.networks.hardhat.accounts = {
-      mnemonic: resolvedMnemonic,
-      accountsBalance: ACCOUNT_BALANCE,
-      count: ACCOUNT_COUNT,
-    };
-    hre.config.networks.hardhat.loggingEnabled = false;
+    const { hre, mnemonic: resolvedMnemonic } = await bootHardhat({
+      loggingEnabled: false,
+    });
 
     const connection = await hre.network.getOrCreate();
     const provider = connection.provider;
@@ -226,6 +179,7 @@ async function runTest(
     });
 
     try {
+      const { ethers } = await import("ethers");
       if (!resolvedMnemonic) {
         throw new Error(
           "could not generate a mnemonic for the test accounts.\n" +

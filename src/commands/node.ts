@@ -1,13 +1,16 @@
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
+import {
+  ACCOUNT_COUNT,
+  bootHardhat,
+  DEFAULT_CHAIN_ID,
+  silenceHardhatNoise,
+} from "../utils/hardhat";
 
 const EXIT_SUCCESS = 0;
 const EXIT_FAILURE = 1;
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8585;
-const DEFAULT_CHAIN_ID = 1912;
-const ACCOUNT_COUNT = 10;
-const ACCOUNT_BALANCE = "100000000000000000000";
 const MAX_PORT = 65535;
 
 const LOOPBACK_HOSTS = ["localhost", "::1", "[::1]", "::ffff:127.0.0.1"];
@@ -116,103 +119,46 @@ async function runNodeStart(options: {
 
     await killPort(port);
 
-    const suppressWarning = (args: any[]) => {
-      if (isVerbose) return false;
-      const msg = args.join(" ");
-      return (
-        msg.includes("uws_win32") ||
-        msg.includes("Falling back to a NodeJS implementation") ||
-        msg.includes("This version of \u00B5WS") ||
-        msg.includes("This version of") ||
-        msg.includes("uws-js-unofficial") ||
-        msg.includes("Require stack:") ||
-        msg.includes("Cannot find module") ||
-        msg.includes("You are not inside a Hardhat project")
-      );
-    };
+    const console_ = silenceHardhatNoise({
+      verbose: isVerbose,
+      // Hardhat only complains about this when driven from outside a project,
+      // which is exactly how `cmu node start` drives it.
+      extraPatterns: ["You are not inside a Hardhat project"],
+      onLog: (msg, _args, originalLog) => {
+        // Reformat the provider's RPC chatter, or drop it when --log is off.
+        if (
+          msg.includes("eth_") ||
+          msg.includes("net_") ||
+          msg.includes("web3_")
+        ) {
+          if (options.log) {
+            const match = msg.match(/(eth_|net_|web3_)[a-zA-Z0-9_]+/);
+            originalLog(`\x1b[2mrpc:\x1b[0m ${match ? match[0] : msg.trim()}`);
+          }
+          return true;
+        }
 
-    const originalConsoleError = console.error;
-    console.error = (...args: any[]) => {
-      if (suppressWarning(args)) return;
-      originalConsoleError(...args);
-    };
+        // Suppress hardhat's own startup banner; we print our own below.
+        return (
+          msg.includes("Started HTTP and WebSocket JSON-RPC server at") ||
+          msg.includes("Account #") ||
+          msg.includes("Private Key:") ||
+          msg.includes("WARNING: These accounts, and their private keys") ||
+          msg.includes(
+            "Any funds sent to them on Mainnet or any other live network WILL BE LOST.",
+          ) ||
+          msg.includes("hardhat_")
+        );
+      },
+    });
+    const originalConsoleLog = console_.log;
 
-    const originalConsoleWarn = console.warn;
-    console.warn = (...args: any[]) => {
-      if (suppressWarning(args)) return;
-      originalConsoleWarn(...args);
-    };
-
-    const originalConsoleLog = console.log;
-
-    const { ethers } = await import("ethers");
-    const resolvedMnemonic =
-      options.mnemonic || ethers.Wallet.createRandom().mnemonic?.phrase;
+    const { hre, mnemonic: resolvedMnemonic } = await bootHardhat({
+      mnemonic: options.mnemonic,
+      loggingEnabled: !!options.log || !!isVerbose,
+    });
 
     const host = options.host;
-
-    console.log = (...args: any[]) => {
-      if (suppressWarning(args)) return;
-
-      const msg = args.join(" ");
-
-      // Intercept and format RPC logs if logging is enabled
-      if (
-        msg.includes("eth_") ||
-        msg.includes("net_") ||
-        msg.includes("web3_")
-      ) {
-        if (options.log) {
-          const match = msg.match(/(eth_|net_|web3_)[a-zA-Z0-9_]+/);
-          if (match) {
-            originalConsoleLog(`\x1b[2mrpc:\x1b[0m ${match[0]}`);
-          } else {
-            originalConsoleLog(`\x1b[2mrpc:\x1b[0m ${msg.trim()}`);
-          }
-        }
-        return;
-      }
-
-      // Suppress hardhat node default startup output to maintain our exact format
-      if (
-        msg.includes("Started HTTP and WebSocket JSON-RPC server at") ||
-        msg.includes("Account #") ||
-        msg.includes("Private Key:") ||
-        msg.includes("WARNING: These accounts, and their private keys") ||
-        msg.includes(
-          "Any funds sent to them on Mainnet or any other live network WILL BE LOST.",
-        ) ||
-        msg.includes("hardhat_")
-      ) {
-        return;
-      }
-
-      originalConsoleLog(...args);
-    };
-
-    // Initialize Hardhat programmatically
-    const importDynamic = new Function(
-      "modulePath",
-      "return import(modulePath)",
-    );
-    const hre =
-      (await importDynamic("hardhat")).default ||
-      (await importDynamic("hardhat"));
-
-    if (!hre.config.networks) hre.config.networks = {};
-    if (!hre.config.networks.hardhat)
-      hre.config.networks.hardhat = { type: "hardhat" } as any;
-
-    // Pass chainId, mnemonic, and pre-funded accounts natively to Hardhat provider configuration
-    hre.config.networks.hardhat.chainId = DEFAULT_CHAIN_ID;
-    hre.config.networks.hardhat.accounts = {
-      mnemonic: resolvedMnemonic,
-      accountsBalance: ACCOUNT_BALANCE,
-      count: ACCOUNT_COUNT,
-    };
-
-    // Enable internal hardhat logging so we can intercept it, unless we are totally quiet
-    hre.config.networks.hardhat.loggingEnabled = !!options.log || !!isVerbose;
 
     originalConsoleLog(`\nCointMU DevNet listening on http://${host}:${port}`);
     originalConsoleLog(`Chain ID: ${DEFAULT_CHAIN_ID}\n`);
@@ -222,8 +168,9 @@ async function runNodeStart(options: {
     );
     originalConsoleLog("\nPre-funded developer accounts (100 ETH each):");
 
+    const { ethers } = await import("ethers");
     let index = 0;
-    const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic!);
+    const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic);
     for (let i = 0; i < ACCOUNT_COUNT; i++) {
       const wallet = ethers.HDNodeWallet.fromMnemonic(
         mnemonicObj,
