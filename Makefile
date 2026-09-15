@@ -4,9 +4,9 @@
 
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 2
-CODENAME = Kitsune
-BUILD = 840cd072
+SUBLEVEL = 3
+CODENAME = Griffin
+BUILD = 8c85f516
 
 .PHONY: help dev build install-global clean
 

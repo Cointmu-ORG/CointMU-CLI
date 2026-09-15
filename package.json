@@ -1,7 +1,7 @@
 {
   "name": "cointmu-cli",
-  "version": "1.3.2",
-  "codename": "Kitsune",
+  "version": "1.3.3",
+  "codename": "Griffin",
   "description": "Primary development toolkit for the CointMU blockchain",
   "keywords": [
     "cointmu",
