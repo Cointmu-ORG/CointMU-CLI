@@ -11,7 +11,7 @@ declare const __CMU_BUILD_ID__: string | undefined;
  * Resolves the short Git commit hash of the current HEAD.
  * @returns {Promise<string>} The short commit hash, or "unknown".
  */
-export async function resolveGitCommit(): Promise<string> {
+async function resolveGitCommit(): Promise<string> {
   try {
     const { execSync } = await import("child_process");
     return execSync("git rev-parse --short HEAD", {
@@ -31,9 +31,7 @@ export async function resolveGitCommit(): Promise<string> {
  * @param {string} makefilePath - Absolute path to the Makefile.
  * @returns {Promise<string>} The build id, or "unknown".
  */
-export async function resolveMakefileBuild(
-  makefilePath: string,
-): Promise<string> {
+async function resolveMakefileBuild(makefilePath: string): Promise<string> {
   try {
     const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     const content: string = await fs.readFile(makefilePath, "utf-8");
