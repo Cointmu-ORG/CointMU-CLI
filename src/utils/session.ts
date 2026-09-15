@@ -1,4 +1,5 @@
 import * as crypto from "crypto";
+import * as path from "path";
 
 const ALGORITHM = "aes-256-gcm";
 const SESSION_FILE_NAME = ".cmu-session";
@@ -27,6 +28,18 @@ export const LEGACY_PBKDF2_ITERATIONS = 100000;
 
 /** Minimum length for a new session password. */
 export const MIN_PASSWORD_LENGTH = 12;
+
+/**
+ * Absolute path to the session file in the current project.
+ *
+ * Resolved on every call rather than memoised at import time: the CLI reads it
+ * relative to the working directory, and tests stub process.cwd().
+ *
+ * @returns {string} The absolute path to .cmu-session.
+ */
+export function getSessionFilePath(): string {
+  return path.resolve(process.cwd(), SESSION_FILE_NAME);
+}
 
 const COMMON_WEAK_PASSWORDS = new Set([
   "password",
@@ -213,8 +226,7 @@ export async function resolvePrivateKey(
   }
 
   const fs = (await import("fs-extra")).default || (await import("fs-extra"));
-  const path = await import("path");
-  const sessionFile = path.resolve(process.cwd(), SESSION_FILE_NAME);
+  const sessionFile = getSessionFilePath();
 
   if (!(await fs.pathExists(sessionFile))) {
     return undefined;

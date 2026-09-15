@@ -1,17 +1,8 @@
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
+import { getSessionFilePath } from "../utils/session";
 
 const EXIT_FAILURE = 1;
-const SESSION_FILE_NAME = ".cmu-session";
-
-/**
- * Retrieves the session file path lazily.
- * @returns {string} The absolute path to the session file.
- */
-function getSessionFilePath(): string {
-  const path = require("path");
-  return path.resolve(process.cwd(), SESSION_FILE_NAME);
-}
 
 /**
  * Prompts for a session password, encrypts the given private key with it and

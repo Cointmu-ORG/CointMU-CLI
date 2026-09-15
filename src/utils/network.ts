@@ -1,7 +1,6 @@
 import { loadNetworks } from "./networkStorage";
-import { resolvePrivateKey } from "./session";
+import { getSessionFilePath, resolvePrivateKey } from "./session";
 
-const SESSION_FILE_NAME = ".cmu-session";
 const DEFAULT_NETWORK = "local";
 const LOCAL_CHAIN_ID = 1912;
 const LOCAL_URL = "http://127.0.0.1:8585";
@@ -39,8 +38,7 @@ export async function getDynamicNetwork(
 ): Promise<NetworkConfig> {
   const fs =
     (await import(FS_EXTRA_PKG)).default || (await import(FS_EXTRA_PKG));
-  const path = await import(PATH_PKG);
-  const sessionFile = path.resolve(process.cwd(), SESSION_FILE_NAME);
+  const sessionFile = getSessionFilePath();
 
   let activeNetworkName = DEFAULT_NETWORK;
 
