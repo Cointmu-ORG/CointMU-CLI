@@ -85,122 +85,121 @@ export async function pingNetwork(rpcUrl: string): Promise<void> {
 
 /**
  * Executes the deployment process.
+ *
+ * Returns the exit code rather than calling process.exit() itself, so the
+ * --config and --ping paths can be exercised without stubbing process.exit.
+ * The single exit lives in the command handler below.
+ *
  * @param {DeployOptions} options - CLI deployment options.
- * @returns {Promise<void>} Resolves when all scripts are deployed.
+ * @returns {Promise<number>} The process exit code.
+ * @throws {Error} When the deployment cannot proceed.
  */
-async function runDeploy(options: DeployOptions): Promise<void> {
-  try {
-    const path = await import("path");
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
-    require("dotenv").config({ path: path.resolve(process.cwd(), ".env") });
+export async function runDeploy(options: DeployOptions): Promise<number> {
+  const path = await import("path");
+  const fs = (await import("fs-extra")).default || (await import("fs-extra"));
+  require("dotenv").config({ path: path.resolve(process.cwd(), ".env") });
 
-    const deployDir = path.resolve(process.cwd(), "deploy");
+  const deployDir = path.resolve(process.cwd(), "deploy");
 
-    if (!(await fs.pathExists(deployDir))) {
-      throw new Error(
-        `deploy/ directory not found at ${deployDir}.\n` +
-          "\x1b[2mhint:\x1b[0m run `cmu deploy` from the root of your CointMU project.",
-      );
-    }
-
-    const files: string[] = await fs.readdir(deployDir);
-    const scripts = files
-      .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
-      .sort((a, b) => a.localeCompare(b));
-
-    // --config / --ping exit before any deploy script runs; only the project
-    // config is loaded on those paths.
-    const dryRun = Boolean(options.config || options.ping);
-    const configPath = findProjectConfig();
-    await confirmProjectTrust(
-      [
-        ...(configPath ? [configPath] : []),
-        ...(dryRun ? [] : scripts.map((s) => path.join(deployDir, s))),
-      ],
-      { yes: options.yes },
+  if (!(await fs.pathExists(deployDir))) {
+    throw new Error(
+      `deploy/ directory not found at ${deployDir}.\n` +
+        "\x1b[2mhint:\x1b[0m run `cmu deploy` from the root of your CointMU project.",
     );
-
-    console.log("Compiling contracts...");
-    const { runCompile } = await import("./compile");
-    await runCompile({ yes: options.yes });
-
-    const { getDeployNetwork } = await import("../utils/network");
-    const network = await getDeployNetwork(options.network, {
-      noPrompt: options.config || options.ping,
-    });
-
-    if (options.ping) {
-      await pingNetwork(network.url);
-      process.exit(EXIT_SUCCESS);
-    }
-
-    const privateKey = network.privateKey;
-
-    if (process.env.PRIVATE_KEY) {
-      delete process.env.PRIVATE_KEY;
-    }
-
-    if (!privateKey) {
-      throw new Error(
-        "no private key available for signing.\n" +
-          "\x1b[2mhint:\x1b[0m run `cmu wallet login`, or set PRIVATE_KEY in .env or cmu.config.ts.",
-      );
-    }
-
-    const { ethers } = await import("ethers");
-    let wallet;
-    try {
-      wallet = new ethers.Wallet(privateKey);
-    } catch {
-      throw new Error(
-        "invalid private key.\n" +
-          "\x1b[2mhint:\x1b[0m expected a 32-byte hex key (0x-prefixed); run `cmu wallet login` to store one.",
-      );
-    }
-
-    console.log(`\n--- Deploy configuration ---`);
-    console.log(`Network      : ${network.name}`);
-    console.log(`RPC endpoint : ${network.url}`);
-    console.log(`Chain ID     : ${network.chainId}`);
-    console.log(`Deployer     : ${wallet.address}`);
-    if (options.config) {
-      console.log(`Private key  : ${maskPrivateKey(privateKey)}`);
-    }
-    console.log(`----------------------------\n`);
-
-    if (options.config) {
-      process.exit(EXIT_SUCCESS);
-    }
-
-    if (scripts.length === 0) {
-      console.log("No deploy scripts found in deploy/.");
-      return;
-    }
-
-    console.log(
-      `Found ${scripts.length} deploy script(s); running them in order...`,
-    );
-
-    const injectedEnv = {
-      ...process.env,
-      CMU_RPC_URL: network.url,
-      CMU_CHAIN_ID: String(network.chainId),
-      PRIVATE_KEY: privateKey,
-    };
-
-    for (const script of scripts) {
-      const fullPath = path.join(deployDir, script);
-      runDeployScript(fullPath, injectedEnv);
-    }
-
-    console.log("\nAll deploy scripts completed.");
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m deploy failed");
-
-    printCliError(error, options.verbose);
-
-    process.exit(EXIT_FAILURE);
   }
+
+  const files: string[] = await fs.readdir(deployDir);
+  const scripts = files
+    .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
+    .sort((a, b) => a.localeCompare(b));
+
+  // --config / --ping exit before any deploy script runs; only the project
+  // config is loaded on those paths.
+  const dryRun = Boolean(options.config || options.ping);
+  const configPath = findProjectConfig();
+  await confirmProjectTrust(
+    [
+      ...(configPath ? [configPath] : []),
+      ...(dryRun ? [] : scripts.map((s) => path.join(deployDir, s))),
+    ],
+    { yes: options.yes },
+  );
+
+  console.log("Compiling contracts...");
+  const { runCompile } = await import("./compile");
+  await runCompile({ yes: options.yes });
+
+  const { getDeployNetwork } = await import("../utils/network");
+  const network = await getDeployNetwork(options.network, {
+    noPrompt: options.config || options.ping,
+  });
+
+  if (options.ping) {
+    await pingNetwork(network.url);
+    return EXIT_SUCCESS;
+  }
+
+  const privateKey = network.privateKey;
+
+  if (process.env.PRIVATE_KEY) {
+    delete process.env.PRIVATE_KEY;
+  }
+
+  if (!privateKey) {
+    throw new Error(
+      "no private key available for signing.\n" +
+        "\x1b[2mhint:\x1b[0m run `cmu wallet login`, or set PRIVATE_KEY in .env or cmu.config.ts.",
+    );
+  }
+
+  const { ethers } = await import("ethers");
+  let wallet;
+  try {
+    wallet = new ethers.Wallet(privateKey);
+  } catch {
+    throw new Error(
+      "invalid private key.\n" +
+        "\x1b[2mhint:\x1b[0m expected a 32-byte hex key (0x-prefixed); run `cmu wallet login` to store one.",
+    );
+  }
+
+  console.log(`\n--- Deploy configuration ---`);
+  console.log(`Network      : ${network.name}`);
+  console.log(`RPC endpoint : ${network.url}`);
+  console.log(`Chain ID     : ${network.chainId}`);
+  console.log(`Deployer     : ${wallet.address}`);
+  if (options.config) {
+    console.log(`Private key  : ${maskPrivateKey(privateKey)}`);
+  }
+  console.log(`----------------------------\n`);
+
+  if (options.config) {
+    return EXIT_SUCCESS;
+  }
+
+  if (scripts.length === 0) {
+    console.log("No deploy scripts found in deploy/.");
+    return EXIT_SUCCESS;
+  }
+
+  console.log(
+    `Found ${scripts.length} deploy script(s); running them in order...`,
+  );
+
+  const injectedEnv = {
+    ...process.env,
+    CMU_RPC_URL: network.url,
+    CMU_CHAIN_ID: String(network.chainId),
+    PRIVATE_KEY: privateKey,
+  };
+
+  for (const script of scripts) {
+    const fullPath = path.join(deployDir, script);
+    runDeployScript(fullPath, injectedEnv);
+  }
+
+  console.log("\nAll deploy scripts completed.");
+  return EXIT_SUCCESS;
 }
 
 export const deployCommand = new Command("deploy")
@@ -219,4 +218,14 @@ export const deployCommand = new Command("deploy")
       "PRIVATE_KEY through the environment. Only deploy projects you trust; see the\n" +
       "'Trust Model' section of the README.",
   )
-  .action(runDeploy);
+  .action(async (options: DeployOptions) => {
+    try {
+      process.exit(await runDeploy(options));
+    } catch (error) {
+      console.error("\n\x1b[31merror:\x1b[0m deploy failed");
+
+      printCliError(error, options.verbose);
+
+      process.exit(EXIT_FAILURE);
+    }
+  });
