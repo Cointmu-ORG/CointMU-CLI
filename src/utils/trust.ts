@@ -26,11 +26,6 @@ export function findProjectConfig(cwd: string = process.cwd()): string | null {
  */
 let confirmed = false;
 
-/** Clears the per-process confirmation memo. Exposed for tests. */
-export function resetTrustConfirmation(): void {
-  confirmed = false;
-}
-
 /**
  * Shows every project file that is about to be executed as code and requires
  * explicit confirmation before it runs.
