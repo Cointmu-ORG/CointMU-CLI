@@ -158,28 +158,43 @@ function main() {
   }
 
   const pkg = readPackageJson();
-  const currentVersion = pkg.version;
+  const previousVersion = pkg.version;
+  const previousCodename = pkg.codename;
+  const previousMakefile = readMakefile();
   const newVersion = calculateNewVersion(
-    currentVersion,
+    previousVersion,
     bumpType,
     prereleaseTag,
   );
 
   console.log(
-    `Bumping version from ${currentVersion} to ${newVersion} with codename ${newCodename}`,
+    `Bumping version from ${previousVersion} to ${newVersion} with codename ${newCodename}`,
   );
 
   pkg.version = newVersion;
   pkg.codename = newCodename;
   writePackageJson(pkg);
 
-  const makefileContent = readMakefile();
   const updatedMakefile = updateMakefileVersion(
-    makefileContent,
+    previousMakefile,
     newVersion,
     newCodename,
   );
   writeMakefile(updatedMakefile);
+
+  try {
+    console.log("Rebuilding to embed the release build id...");
+    execSync("npm run build", { stdio: "inherit" });
+  } catch {
+    console.error(
+      "Version update aborted: post-bump build failed. Reverting package.json and Makefile.",
+    );
+    pkg.version = previousVersion;
+    pkg.codename = previousCodename;
+    writePackageJson(pkg);
+    writeMakefile(previousMakefile);
+    process.exit(EXIT_CODE_ERROR);
+  }
 
   runCommand("npm install");
   runCommand("git add .");

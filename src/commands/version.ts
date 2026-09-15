@@ -2,6 +2,10 @@ import { Command } from "commander";
 
 const EXIT_FAILURE = 1;
 
+// Inlined at bundle time by tsup (see tsup.config.ts `define`); undefined
+// when running unbundled (e.g. ts-node in dev).
+declare const __CMU_BUILD_ID__: string | undefined;
+
 /**
  * Resolves the short Git commit hash of the current HEAD.
  * @returns {Promise<string>} The short commit hash, or "unknown".
@@ -21,6 +25,25 @@ export async function resolveGitCommit(): Promise<string> {
 }
 
 /**
+ * Reads the BUILD id straight out of the Makefile, used as a fallback
+ * when build-info.json hasn't been generated yet (i.e. no build has run).
+ * @param {string} makefilePath - Absolute path to the Makefile.
+ * @returns {Promise<string>} The build id, or "unknown".
+ */
+export async function resolveMakefileBuild(
+  makefilePath: string,
+): Promise<string> {
+  try {
+    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
+    const content: string = await fs.readFile(makefilePath, "utf-8");
+    const match = content.match(/^BUILD\s*=\s*(\S+)/m);
+    return match ? match[1] : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
  * Prints detailed version information to the console.
  * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when the version info is printed.
@@ -34,6 +57,7 @@ export async function runVersion(
 
     const pkgPath = path.resolve(__dirname, "..", "package.json");
     const buildPath = path.resolve(__dirname, "..", "build-info.json");
+    const makefilePath = path.resolve(__dirname, "..", "Makefile");
 
     let pkg = { version: "unknown", codename: "unknown" };
     let buildInfo = { build: "unknown" };
@@ -42,8 +66,15 @@ export async function runVersion(
       pkg = await fs.readJson(pkgPath);
     }
 
-    if (await fs.pathExists(buildPath)) {
+    if (
+      typeof __CMU_BUILD_ID__ !== "undefined" &&
+      __CMU_BUILD_ID__ !== "unknown"
+    ) {
+      buildInfo.build = __CMU_BUILD_ID__;
+    } else if (await fs.pathExists(buildPath)) {
       buildInfo = await fs.readJson(buildPath);
+    } else {
+      buildInfo.build = await resolveMakefileBuild(makefilePath);
     }
 
     const solcRaw = await import("solc");
