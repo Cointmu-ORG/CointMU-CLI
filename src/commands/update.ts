@@ -83,10 +83,28 @@ export async function resolveTargetVersion(
 /**
  * Builds the human-readable global install command for a specific published version.
  * @param {string} version - The exact version to install.
- * @returns {string} The npm command string (for display only; execution uses execFileSync).
+ * @returns {string} The npm command string (for display only; execution is shell-free).
  */
 export function buildInstallCommand(version: string): string {
   return `npm install -g ${PACKAGE_NAME}@${version}`;
+}
+
+/**
+ * Turns a failed `npm install` stderr dump into an actionable message.
+ * @param {string} stderr - Raw stderr captured from the npm child process.
+ * @returns {string} A message explaining the failure and, where known, the fix.
+ */
+export function explainInstallFailure(stderr: string): string {
+  if (stderr.includes("EALLOWGIT")) {
+    return [
+      "npm refused to install from a git source (EALLOWGIT).",
+      "npm 12+ blocks git sources by default. This CLI installs from the npm",
+      "registry, so an older CointMU build is most likely still running.",
+      "Escape it once with:",
+      `  npm install -g ${PACKAGE_NAME}@latest`,
+    ].join("\n");
+  }
+  return "npm install failed (see the npm output above).";
 }
 
 /**
@@ -96,7 +114,7 @@ export function buildInstallCommand(version: string): string {
  */
 async function runUpdate(options: UpdateOptions = {}): Promise<void> {
   try {
-    const { execFileSync } = await import("child_process");
+    const { spawnSync } = await import("child_process");
 
     const current = await resolveCurrentVersion();
     console.log("Checking the npm registry for the target version...");
@@ -111,13 +129,28 @@ async function runUpdate(options: UpdateOptions = {}): Promise<void> {
     }
 
     console.log(`\nExecuting: ${buildInstallCommand(target)}`);
-    // ponytail: execFileSync (no shell) blocks command injection; win32 needs
-    // "npm.cmd". If Node ever refuses .cmd via execFile, switch to a resolved
+    // ponytail: spawnSync (no shell) blocks command injection; win32 needs
+    // "npm.cmd". If Node ever refuses .cmd via spawn, switch to a resolved
     // npm-cli.js path invoked through process.execPath.
     const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-    execFileSync(npm, ["install", "-g", `${PACKAGE_NAME}@${target}`], {
-      stdio: "inherit",
-    });
+    const install = spawnSync(
+      npm,
+      ["install", "-g", `${PACKAGE_NAME}@${target}`],
+      // stderr is piped (not inherited) so EALLOWGIT can be recognised; it is
+      // written straight back out below so npm's own output is never swallowed.
+      { stdio: ["inherit", "inherit", "pipe"] },
+    );
+
+    const stderr = install.stderr?.toString() ?? "";
+    if (stderr) {
+      process.stderr.write(stderr);
+    }
+    if (install.error) {
+      throw install.error;
+    }
+    if (install.status !== 0) {
+      throw new Error(explainInstallFailure(stderr));
+    }
 
     console.log("\nUpdate completed successfully!");
   } catch (error) {
