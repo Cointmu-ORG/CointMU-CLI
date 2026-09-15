@@ -4,9 +4,9 @@
 
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 5
-CODENAME = Cerberus
-BUILD = 91b6de0c
+SUBLEVEL = 6
+CODENAME = Hydra
+BUILD = 9741dc07
 
 .PHONY: help dev build install-global clean
 
