@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 
 const EXIT_FAILURE = 1;
 const SESSION_FILE_NAME = ".cmu-session";
@@ -13,16 +14,80 @@ function getSessionFilePath(): string {
 }
 
 /**
+ * Prompts for a session password, encrypts the given private key with it and
+ * writes the result to .cmu-session.
+ *
+ * Shared by `wallet login` and `wallet create --login` so both go through one
+ * implementation of the encrypt-and-store path. The key is never printed.
+ *
+ * @param {string} privateKey - The private key to encrypt.
+ * @returns {Promise<string>} The address the session belongs to.
+ */
+async function createEncryptedSession(privateKey: string): Promise<string> {
+  const inquirer = (await import("inquirer")).default;
+  const { ethers } = await import("ethers");
+  const { encryptSessionKey, validatePasswordStrength, writeSessionFile } =
+    await import("../utils/session");
+
+  const { password } = await inquirer.prompt([
+    {
+      type: "password",
+      name: "password",
+      message: "New session password:",
+      mask: "*",
+      validate: validatePasswordStrength,
+    },
+  ]);
+
+  const wallet = new ethers.Wallet(privateKey);
+
+  await writeSessionFile(getSessionFilePath(), {
+    address: wallet.address,
+    activeNetwork: "local",
+    ...encryptSessionKey(password, privateKey),
+  });
+
+  return wallet.address;
+}
+
+/**
  * Generates a new, secure EVM-compatible wallet.
  * @param {object} options - CLI options.
  * @returns {Promise<void>}
  */
-async function runWalletCreate(
-  options: { verbose?: boolean } = {},
+export async function runWalletCreate(
+  options: { verbose?: boolean; login?: boolean } = {},
 ): Promise<void> {
   try {
     const { ethers } = await import("ethers");
     const wallet = ethers.Wallet.createRandom();
+
+    if (options.login) {
+      // The generated key goes straight into the encrypted session. Neither it
+      // nor the mnemonic is passed to console.log anywhere on this path, so
+      // nothing recoverable reaches scrollback or a CI log.
+      const address = await createEncryptedSession(wallet.privateKey);
+      console.log("New CointMU wallet");
+      console.log("===========================");
+      console.log(`Address : ${address}`);
+      console.log("===========================");
+      console.log("Session encrypted and saved.");
+      console.log(
+        "\n\x1b[33mwarning:\x1b[0m the private key and mnemonic were not printed - this wallet",
+      );
+      console.log(
+        "exists only inside .cmu-session. Lose that file or its password and the funds",
+      );
+      console.log("in it cannot be recovered.");
+      console.log(
+        "\x1b[2mhint:\x1b[0m run `cmu wallet create` without --login for a printed backup.\n",
+      );
+      console.log(
+        "`cmu deploy` will use this key automatically when PRIVATE_KEY is not set.",
+      );
+      return;
+    }
+
     console.log("New CointMU wallet");
     console.log("===========================");
     console.log(`Address     : ${wallet.address}`);
@@ -37,15 +102,22 @@ async function runWalletCreate(
     console.log(
       "Store them offline. Without them the funds in this wallet cannot be recovered.\n",
     );
+    console.log(
+      "\x1b[33mwarning:\x1b[0m the values above are sensitive and stay behind in terminal",
+    );
+    console.log(
+      "scrollback, tmux or screen logs and CI output. Clear them if this ran anywhere",
+    );
+    console.log("shared.");
+    console.log(
+      "\x1b[2mhint:\x1b[0m `cmu wallet create --login` encrypts the key into a session",
+    );
+    console.log("instead of printing it.\n");
     console.log("To start an encrypted local session with this wallet, run:");
     console.log("  cmu wallet login");
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m wallet create failed");
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
     process.exit(EXIT_FAILURE);
   }
 }
@@ -61,10 +133,8 @@ async function runWalletLogin(
   try {
     const inquirer = (await import("inquirer")).default;
     const { ethers } = await import("ethers");
-    const { encryptSessionKey, validatePasswordStrength, writeSessionFile } =
-      await import("../utils/session");
 
-    const answers = await inquirer.prompt([
+    const { privateKey } = await inquirer.prompt([
       {
         type: "password",
         name: "privateKey",
@@ -79,37 +149,17 @@ async function runWalletLogin(
           }
         },
       },
-      {
-        type: "password",
-        name: "password",
-        message: "New session password:",
-        mask: "*",
-        validate: validatePasswordStrength,
-      },
     ]);
 
-    const wallet = new ethers.Wallet(answers.privateKey);
-
-    const sessionData = {
-      address: wallet.address,
-      activeNetwork: "local",
-      ...encryptSessionKey(answers.password, answers.privateKey),
-    };
-
-    const sessionFile = getSessionFilePath();
-    await writeSessionFile(sessionFile, sessionData);
+    const address = await createEncryptedSession(privateKey);
     console.log("Session encrypted and saved.");
-    console.log(`Logged in as ${wallet.address}`);
+    console.log(`Logged in as ${address}`);
     console.log(
       "`cmu deploy` will use this key automatically when PRIVATE_KEY is not set.",
     );
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m wallet login failed");
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
     process.exit(EXIT_FAILURE);
   }
 }
@@ -149,11 +199,7 @@ async function runWalletBalance(
     console.log("---------------------------");
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m wallet balance failed");
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
     process.exit(EXIT_FAILURE);
   }
 }
@@ -188,11 +234,7 @@ async function runWalletInfo(
     console.log("----------------------");
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m wallet info failed");
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
     process.exit(EXIT_FAILURE);
   }
 }
@@ -204,6 +246,10 @@ export const walletCommand = new Command("wallet").description(
 walletCommand
   .command("create")
   .description("Generate a new EVM-compatible wallet")
+  .option(
+    "--login",
+    "Encrypt the new key straight into a session instead of printing it",
+  )
   .option("-v, --verbose", "Print full stack traces on failure")
   .action(runWalletCreate);
 

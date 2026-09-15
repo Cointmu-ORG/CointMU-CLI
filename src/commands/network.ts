@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 
 const EXIT_FAILURE = 1;
 const SESSION_FILE_NAME = ".cmu-session";
@@ -75,11 +76,7 @@ async function runNetworkInfo(
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m network info failed");
 
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
 
     process.exit(EXIT_FAILURE);
   }
@@ -162,11 +159,7 @@ async function runNetworkPing(
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m network ping failed");
 
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
 
     process.exit(EXIT_FAILURE);
   }
@@ -303,11 +296,7 @@ async function runNetworkManage(options: {
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m network failed");
 
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
 
     process.exit(EXIT_FAILURE);
   }

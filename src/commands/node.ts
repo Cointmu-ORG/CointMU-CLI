@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 
 const EXIT_SUCCESS = 0;
 const EXIT_FAILURE = 1;
@@ -77,11 +78,7 @@ async function runNodeConnect(options: { network?: string }): Promise<void> {
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m node connect failed");
 
-    if (isVerbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, isVerbose);
 
     console.error(
       "\x1b[2mhint:\x1b[0m start a local node with `cmu node start`, or check the endpoint with `cmu network info`.",
@@ -253,11 +250,7 @@ async function runNodeStart(options: {
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m node start failed");
 
-    if (isVerbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, isVerbose);
 
     process.exit(EXIT_FAILURE);
   }

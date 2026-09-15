@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 
 const EXIT_SUCCESS = 0;
@@ -196,11 +197,7 @@ async function runDeploy(options: DeployOptions): Promise<void> {
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m deploy failed");
 
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
 
     process.exit(EXIT_FAILURE);
   }

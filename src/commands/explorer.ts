@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 
 const EXIT_FAILURE = 1;
 
@@ -62,17 +63,13 @@ async function runExplorerOpen(
         "\x1b[33mwarning:\x1b[0m could not open a browser; open the URL above manually.",
       );
       if (options.verbose) {
-        console.error(error);
+        printCliError(error, true);
       }
     });
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m explorer open failed");
 
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
 
     process.exit(EXIT_FAILURE);
   }

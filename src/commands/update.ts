@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { printCliError } from "../utils/errors";
 
 const EXIT_FAILURE = 1;
 const PACKAGE_NAME = "cointmu-cli";
@@ -158,11 +159,7 @@ async function runUpdate(options: UpdateOptions = {}): Promise<void> {
     console.log(`\nUpdated ${PACKAGE_NAME} to ${target}.`);
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m update failed");
-    if (options.verbose) {
-      console.error(error);
-    } else {
-      console.error(error instanceof Error ? error.message : String(error));
-    }
+    printCliError(error, options.verbose);
     process.exit(EXIT_FAILURE);
   }
 }
