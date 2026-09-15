@@ -9,6 +9,7 @@ import { encryptSessionKey } from "../../src/utils/session";
 // priority (config.wallet.privateKey > PRIVATE_KEY env > .cmu-session) and the
 // noPrompt option.
 
+// well-known Ganache test key — never fund this
 const PRIVATE_KEY =
   "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 const SESSION_PASSWORD = "correct horse";

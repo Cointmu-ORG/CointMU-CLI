@@ -19,7 +19,7 @@ interface UpdateOptions {
  * Reads the version of the currently installed CLI from its package.json.
  * @returns {Promise<string>} The installed version, or "unknown".
  */
-export async function resolveCurrentVersion(): Promise<string> {
+async function resolveCurrentVersion(): Promise<string> {
   try {
     const fs = await import("fs");
     const path = await import("path");

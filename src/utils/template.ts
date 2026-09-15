@@ -1,4 +1,5 @@
 import { generateConfigFiles } from "./configGenerator";
+import { aliases, templates } from "../templates";
 
 const TYPESCRIPT_LANG = "typescript";
 const ENCODING = "utf8";
@@ -6,22 +7,13 @@ const FS_EXTRA_PKG = "fs-extra";
 const PATH_PKG = "path";
 const CHILD_PROCESS_PKG = "child_process";
 
-export const templateChoices = [
-  { name: "Blank (empty project with basic structure)", value: "blank" },
-  { name: "ERC20 (standard fungible token)", value: "erc20" },
-  { name: "ERC721 (standard NFT collection)", value: "erc721" },
-  { name: "ERC1155 (multi-token standard)", value: "erc1155" },
-  { name: "DAO (basic decentralized autonomous organization)", value: "dao" },
-  { name: "Marketplace (NFT marketplace)", value: "marketplace" },
-  { name: "Staking (ERC20 staking and yield farming)", value: "staking" },
-  { name: "Airdrop (Merkle tree token airdrop)", value: "airdrop" },
-  { name: "Vault (multisig timelock treasury)", value: "vault" },
-  { name: "Kyberion (PQC research prototype)", value: "kyberion" },
-] as const;
+export const templateChoices = Object.entries(templates).map(
+  ([value, spec]) => ({ name: spec.label, value }),
+);
 
 export const validTemplates = [
-  ...templateChoices.map((choice) => choice.value),
-  "nft",
+  ...Object.keys(templates),
+  ...Object.keys(aliases),
 ];
 
 function getDeployScript(

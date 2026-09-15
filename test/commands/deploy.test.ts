@@ -3,6 +3,7 @@ import { maskPrivateKey, pingNetwork } from "../../src/commands/deploy";
 
 describe("maskPrivateKey", () => {
   it("shows the first 5 and last 4 chars of a normal-length key", () => {
+    // well-known Ganache test key — never fund this
     const pk =
       "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
     expect(maskPrivateKey(pk)).toBe("0x59c...690d");
