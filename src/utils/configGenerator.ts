@@ -14,8 +14,11 @@ const cmuConfigJs = `module.exports = {
       url: "http://127.0.0.1:8585",
       chainId: 1912,
     },
+    // Set this to your own CointMU mainnet RPC endpoint before deploying.
+    // Keep it on https://: a plaintext http:// endpoint can be intercepted and
+    // made to return spoofed chain state (balances, nonces, gas, receipts).
     mainnet: {
-      url: "http://10.64.24.248:8585",
+      url: "",
       chainId: 1912,
     },
   },
@@ -35,8 +38,11 @@ const cmuConfigTs = `export default {
       url: "http://127.0.0.1:8585",
       chainId: 1912,
     },
+    // Set this to your own CointMU mainnet RPC endpoint before deploying.
+    // Keep it on https://: a plaintext http:// endpoint can be intercepted and
+    // made to return spoofed chain state (balances, nonces, gas, receipts).
     mainnet: {
-      url: "http://10.64.24.248:8585",
+      url: "",
       chainId: 1912,
     },
   },

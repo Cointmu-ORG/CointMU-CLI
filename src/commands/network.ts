@@ -4,6 +4,22 @@ const EXIT_FAILURE = 1;
 const SESSION_FILE_NAME = ".cmu-session";
 
 /**
+ * Validates that a value is a well-formed RPC endpoint.
+ * Only http/https are accepted: every provider in this CLI is an
+ * ethers JsonRpcProvider, which cannot speak any other scheme.
+ * @param {string} value - The candidate RPC endpoint.
+ * @returns {boolean} True if the value is a valid http or https URL.
+ */
+export function isValidRpcUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Retrieves the session file path lazily.
  * @returns {string} The absolute path to the session file.
  */
@@ -183,6 +199,13 @@ async function runNetworkManage(options: {
             "\x1b[2mhint:\x1b[0m e.g. `cmu network --save http://127.0.0.1:8585 --name local`.",
         );
       }
+      if (!isValidRpcUrl(options.save)) {
+        throw new Error(
+          `invalid RPC endpoint '${options.save}'.\n` +
+            "\x1b[2mhint:\x1b[0m pass a full http:// or https:// URL, e.g. `cmu network --save http://127.0.0.1:8585 --name local`.",
+        );
+      }
+
       await saveNetwork(options.name, options.save);
       console.log(`Saved network '${options.name}' (${options.save})`);
       return;
