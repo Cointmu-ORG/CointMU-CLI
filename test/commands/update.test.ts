@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildInstallCommand, resolveTargetVersion } from "./update";
+import { buildInstallCommand, resolveTargetVersion } from "../../src/commands/update";
 
 describe("buildInstallCommand", () => {
   it("targets the pinned version on the npm registry, not git", () => {

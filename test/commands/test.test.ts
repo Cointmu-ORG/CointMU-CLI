@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRpcRequestAllowed } from "./test";
+import { isRpcRequestAllowed } from "../../src/commands/test";
 
 describe("isRpcRequestAllowed", () => {
   it("allows a bare loopback request with no Origin (ethers JsonRpcProvider)", () => {

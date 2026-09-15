@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
-import { findImports } from "./compile";
+import { findImports } from "../../src/commands/compile";
 
 describe("findImports path containment", () => {
   let cwd: string;

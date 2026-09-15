@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
-import { encryptSessionKey } from "./session";
+import { encryptSessionKey } from "../../src/utils/session";
 
 // getDynamicNetwork's "never resolve/prompt a private key" regression is
 // covered in session.test.ts. This file covers getDeployNetwork's resolution
@@ -55,7 +55,7 @@ describe("getDeployNetwork private key resolution", () => {
     writeJsConfig(`wallet: { privateKey: "0xconfig" }`);
     process.env.PRIVATE_KEY = "0xenv";
 
-    const { getDeployNetwork } = await import("./network");
+    const { getDeployNetwork } = await import("../../src/utils/network");
     const network = await getDeployNetwork("local", { noPrompt: true });
 
     expect(network.privateKey).toBe("0xconfig");
@@ -66,7 +66,7 @@ describe("getDeployNetwork private key resolution", () => {
     writeSessionFile(); // present, but env must win over it
     process.env.PRIVATE_KEY = "0xenv";
 
-    const { getDeployNetwork } = await import("./network");
+    const { getDeployNetwork } = await import("../../src/utils/network");
     const network = await getDeployNetwork("local", { noPrompt: true });
 
     expect(network.privateKey).toBe("0xenv");
@@ -79,7 +79,7 @@ describe("getDeployNetwork private key resolution", () => {
       default: { prompt: async () => ({ password: SESSION_PASSWORD }) },
     }));
 
-    const { getDeployNetwork } = await import("./network");
+    const { getDeployNetwork } = await import("../../src/utils/network");
     const network = await getDeployNetwork("local");
 
     expect(network.privateKey).toBe(PRIVATE_KEY);
@@ -96,7 +96,7 @@ describe("getDeployNetwork private key resolution", () => {
       },
     }));
 
-    const { getDeployNetwork } = await import("./network");
+    const { getDeployNetwork } = await import("../../src/utils/network");
     // Resolving (instead of throwing from the mocked prompt) proves no prompt.
     const network = await getDeployNetwork("local", { noPrompt: true });
 
