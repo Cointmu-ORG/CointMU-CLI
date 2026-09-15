@@ -11,7 +11,7 @@ import {
   validatePasswordStrength,
   writeSessionFile,
   type SessionData,
-} from "./session";
+} from "../../src/utils/session";
 
 const PASSWORD = "correct horse";
 const PRIVATE_KEY =
@@ -113,7 +113,7 @@ describe("getDynamicNetwork", () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-session-"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
-    vi.doMock("./networkStorage", () => ({
+    vi.doMock("../../src/utils/networkStorage", () => ({
       loadNetworks: async () => [
         { name: "local", rpcUrl: "http://127.0.0.1:1" },
       ],
@@ -144,7 +144,7 @@ describe("getDynamicNetwork", () => {
     );
     process.env.PRIVATE_KEY = "0xenv";
 
-    const { getDynamicNetwork } = await import("./network");
+    const { getDynamicNetwork } = await import("../../src/utils/network");
     const network = await getDynamicNetwork("local");
 
     expect(network.privateKey).toBe("0xenv");
@@ -157,7 +157,7 @@ describe("getDynamicNetwork", () => {
     );
     delete process.env.PRIVATE_KEY;
 
-    const { getDynamicNetwork } = await import("./network");
+    const { getDynamicNetwork } = await import("../../src/utils/network");
     // inquirer.prompt is mocked to throw; this resolving proves no prompt fired.
     const network = await getDynamicNetwork("local");
 

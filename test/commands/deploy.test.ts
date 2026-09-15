@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { maskPrivateKey, pingNetwork } from "./deploy";
+import { maskPrivateKey, pingNetwork } from "../../src/commands/deploy";
 
 describe("maskPrivateKey", () => {
   it("shows the first 5 and last 4 chars of a normal-length key", () => {
