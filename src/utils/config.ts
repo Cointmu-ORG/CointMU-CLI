@@ -1,6 +1,6 @@
 const CONFIG_FILE_NAME = "cmu.config.ts";
 const MODULE_FORMAT = "CommonJS";
-const TS_COMPILER = "typescript@5";
+const TS_COMPILER = "typescript";
 const FS_EXTRA_PKG = "fs-extra";
 const PATH_PKG = "path";
 const TS_NODE_PKG = "ts-node";

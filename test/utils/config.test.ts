@@ -22,4 +22,21 @@ describe("loadConfig", () => {
       /cmu\.config\.ts not found\. Are you in a CointMU project\?/,
     );
   });
+
+  it("loads a real cmu.config.ts without the invalid 'typescript@5' module error", async () => {
+    fs.mkdirSync(path.join(tmpDir, "node_modules"));
+    fs.symlinkSync(
+      path.resolve(__dirname, "../../node_modules/typescript"),
+      path.join(tmpDir, "node_modules", "typescript"),
+      "dir",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "cmu.config.ts"),
+      `export default { network: { explorerUrl: "http://localhost:3000" } };`,
+    );
+
+    const config = await loadConfig();
+
+    expect(config.network?.explorerUrl).toBe("http://localhost:3000");
+  });
 });

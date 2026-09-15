@@ -40,6 +40,21 @@ describe("getDeployNetwork private key resolution", () => {
     );
   }
 
+  function writeTsConfig(extra: string): void {
+    fs.mkdirSync(path.join(tmpDir, "node_modules"));
+    fs.symlinkSync(
+      path.resolve(__dirname, "../../node_modules/typescript"),
+      path.join(tmpDir, "node_modules", "typescript"),
+      "dir",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "cmu.config.ts"),
+      `export default { defaultNetwork: "local", ` +
+        `networks: { local: { url: "http://127.0.0.1:8585", chainId: 1912 } }, ` +
+        `${extra} };`,
+    );
+  }
+
   function writeSessionFile(): void {
     fs.writeFileSync(
       path.join(tmpDir, ".cmu-session"),
@@ -101,5 +116,15 @@ describe("getDeployNetwork private key resolution", () => {
     const network = await getDeployNetwork("local", { noPrompt: true });
 
     expect(network.privateKey).toBeUndefined();
+  });
+
+  it("loads a real cmu.config.ts without the invalid 'typescript@5' module error", async () => {
+    writeTsConfig(`wallet: { privateKey: "0xconfig" }`);
+
+    const { getDeployNetwork } = await import("../../src/utils/network");
+    const network = await getDeployNetwork("local", { noPrompt: true });
+
+    expect(network.privateKey).toBe("0xconfig");
+    expect(network.url).toBe("http://127.0.0.1:8585");
   });
 });
