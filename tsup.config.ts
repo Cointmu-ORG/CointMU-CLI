@@ -12,7 +12,7 @@ export default defineConfig({
   entry: ["src/index.ts"],
   format: ["cjs"],
   outDir: "dist",
-  target: "node18",
+  target: "node20",
   minify: true,
   splitting: false,
   sourcemap: false,

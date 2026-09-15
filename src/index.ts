@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+// Must stay the first import: imports are hoisted, so anything below this line
+// (commander included) loads before a version check placed further down runs.
+import "./preflight";
+
 import * as fs from "fs";
 import * as path from "path";
 import { Command } from "commander";
