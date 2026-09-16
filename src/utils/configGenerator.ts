@@ -5,8 +5,6 @@ const TS_CONFIG_FILE = "cmu.config.ts";
 const JS_CONFIG_FILE = "cmu.config.js";
 const ENV_EXAMPLE_FILE = ".env.example";
 const GITIGNORE_FILE = ".gitignore";
-const ENCODING = "utf8";
-const PATH_PKG = "path";
 
 const cmuConfigJs = `module.exports = {
   defaultNetwork: "local",
@@ -100,7 +98,7 @@ export async function generateConfigFiles(
   language: string,
 ): Promise<void> {
   try {
-    const path = await import(PATH_PKG);
+    const path = await import("path");
 
     const isTypeScript = language === TYPESCRIPT_LANG;
     const configFileName = isTypeScript ? TS_CONFIG_FILE : JS_CONFIG_FILE;
@@ -109,19 +107,19 @@ export async function generateConfigFiles(
     await writeFile(
       path.join(projectPath, configFileName),
       configContent,
-      ENCODING,
+      "utf8",
     );
 
     await writeFile(
       path.join(projectPath, ENV_EXAMPLE_FILE),
       envExampleTemplate,
-      ENCODING,
+      "utf8",
     );
 
     await writeFile(
       path.join(projectPath, GITIGNORE_FILE),
       gitignoreTemplate,
-      ENCODING,
+      "utf8",
     );
   } catch (error) {
     throw new Error(

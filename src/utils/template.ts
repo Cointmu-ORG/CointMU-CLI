@@ -3,9 +3,6 @@ import { generateConfigFiles } from "./configGenerator";
 import { templates } from "../templates";
 
 const TYPESCRIPT_LANG = "typescript";
-const ENCODING = "utf8";
-const PATH_PKG = "path";
-const CHILD_PROCESS_PKG = "child_process";
 
 export const templateChoices = Object.entries(templates).map(
   ([value, spec]) => ({ name: spec.label, value }),
@@ -95,8 +92,8 @@ export async function generateProject(
   template: string,
   language: string,
 ): Promise<void> {
-  const path = await import(PATH_PKG);
-  const { execSync } = await import(CHILD_PROCESS_PKG);
+  const path = await import("path");
+  const { execSync } = await import("child_process");
 
   const dirs = [
     "contracts",
@@ -128,22 +125,18 @@ describe("Deployment Template Test", function () {
   await writeFile(
     path.join(projectPath, "test", `Template.test.${ext}`),
     templateTestContent,
-    ENCODING,
+    "utf8",
   );
 
   await generateConfigFiles(projectPath, language);
 
-  await writeFile(
-    path.join(projectPath, "artifacts", ".gitkeep"),
-    "",
-    ENCODING,
-  );
+  await writeFile(path.join(projectPath, "artifacts", ".gitkeep"), "", "utf8");
   await writeFile(
     path.join(projectPath, "deployments", ".gitkeep"),
     "",
-    ENCODING,
+    "utf8",
   );
-  await writeFile(path.join(projectPath, "scripts", ".gitkeep"), "", ENCODING);
+  await writeFile(path.join(projectPath, "scripts", ".gitkeep"), "", "utf8");
 
   if (language === TYPESCRIPT_LANG) {
     const tsconfig = {
@@ -170,19 +163,19 @@ describe("Deployment Template Test", function () {
     await writeFile(
       path.join(projectPath, "contracts", ".gitkeep"),
       "",
-      ENCODING,
+      "utf8",
     );
     await writeFile(
       path.join(projectPath, "deploy", `01_deploy.${ext}`),
       blankDeployTemplate(language),
-      ENCODING,
+      "utf8",
     );
   } else {
     const contractName = spec.contract!;
     await writeFile(
       path.join(projectPath, "contracts", `${contractName}.sol`),
       await spec.load(),
-      ENCODING,
+      "utf8",
     );
     await writeFile(
       path.join(
@@ -191,7 +184,7 @@ describe("Deployment Template Test", function () {
         `01_${contractName.toLowerCase()}.${ext}`,
       ),
       getDeployScript(contractName, spec.deployArgs ?? "", language),
-      ENCODING,
+      "utf8",
     );
   }
 

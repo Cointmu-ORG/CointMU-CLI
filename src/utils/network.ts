@@ -8,12 +8,6 @@ const LOCAL_CHAIN_ID = 1912;
 const LOCAL_URL = "http://127.0.0.1:8585";
 const TS_CONFIG_FILE = "cmu.config.ts";
 const JS_CONFIG_FILE = "cmu.config.js";
-const MODULE_FORMAT = "CommonJS";
-
-const PATH_PKG = "path";
-const ETHERS_PKG = "ethers";
-const TS_NODE_PKG = "ts-node";
-const TS_COMPILER = "typescript";
 
 export interface NetworkConfig {
   name: string;
@@ -60,7 +54,7 @@ export async function getDynamicNetwork(
     );
   }
 
-  const { ethers } = await import(ETHERS_PKG);
+  const { ethers } = await import("ethers");
   let chainId = 0;
 
   try {
@@ -95,18 +89,18 @@ export async function getDeployNetwork(
   targetNetwork?: string,
   options: { noPrompt?: boolean } = {},
 ): Promise<NetworkConfig> {
-  const path = await import(PATH_PKG);
+  const path = await import("path");
 
   let config: any = null;
   const tsConfigPath = path.resolve(process.cwd(), TS_CONFIG_FILE);
   const jsConfigPath = path.resolve(process.cwd(), JS_CONFIG_FILE);
 
   if (existsSync(tsConfigPath)) {
-    const tsNode = await import(TS_NODE_PKG);
+    const tsNode = await import("ts-node");
     tsNode.register({
       transpileOnly: true,
-      compiler: TS_COMPILER,
-      compilerOptions: { module: MODULE_FORMAT },
+      compiler: "typescript",
+      compilerOptions: { module: "CommonJS" },
     });
     const mod = require(tsConfigPath);
     config = mod.default || mod;

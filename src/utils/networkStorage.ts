@@ -6,9 +6,6 @@ const DEFAULT_NETWORK_NAME = "local";
 const DEFAULT_RPC_URL = "http://127.0.0.1:8585";
 const JSON_SPACES = 2;
 
-const PATH_PKG = "path";
-const OS_PKG = "os";
-
 export interface NetworkEntry {
   name: string;
   rpcUrl: string;
@@ -19,8 +16,8 @@ export interface NetworkEntry {
  * @returns {Promise<string>} The file path.
  */
 async function getNetworksFilePath(): Promise<string> {
-  const os = await import(OS_PKG);
-  const path = await import(PATH_PKG);
+  const os = await import("os");
+  const path = await import("path");
   return path.join(os.homedir(), NETWORKS_FILE_NAME);
 }
 
