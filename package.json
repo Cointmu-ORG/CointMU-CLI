@@ -32,7 +32,6 @@
     "dist"
   ],
   "scripts": {
-    "prebuild": "ts-node update-build.ts",
     "build": "tsup",
     "test": "vitest run",
     "prepublishOnly": "npm run build",

@@ -65,28 +65,6 @@ npm run build
 npm install -g .
 ```
 
-### 🛠️ Local Development Setup (Make)
-
-If you prefer using `make` to streamline your local development workflow, we've got you covered!
-
-- Build the project:
-
-```bash
-make build
-```
-
-- Start development mode:
-
-```bash
-make dev
-```
-
-- Install the CLI globally from source:
-
-```bash
-make install-global
-```
-
 ## 📁 Template Structure Explanation
 
 When you scaffold a new project using `cmu create`, the following pristine directory structure is generated to separate concerns and organize your workflow:

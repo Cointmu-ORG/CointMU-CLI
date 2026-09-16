@@ -1,5 +1,5 @@
 /**
- * Bumps package.json version + Makefile version, rebuilds, commits, tags, and pushes.
+ * Bumps the package.json version, rebuilds, commits, tags, and pushes.
  * @example
  * node scripts/bump-version.js patch my-codename
  * node scripts/bump-version.js minor my-codename beta.1
@@ -9,7 +9,6 @@ const path = require("path");
 const { execSync } = require("child_process");
 
 const PACKAGE_JSON_PATH = path.resolve(__dirname, "../package.json");
-const MAKEFILE_PATH = path.resolve(__dirname, "../Makefile");
 const ENCODING_UTF8 = "utf8";
 
 const ARG_POSITION_BUMP_TYPE = 2;
@@ -40,23 +39,6 @@ function readPackageJson() {
 function writePackageJson(pkg) {
   const content = JSON.stringify(pkg, null, INDENT_SPACES) + "\n";
   fs.writeFileSync(PACKAGE_JSON_PATH, content, ENCODING_UTF8);
-}
-
-/**
- * Reads the content of the Makefile.
- * @returns {string} The content of the Makefile.
- */
-function readMakefile() {
-  return fs.readFileSync(MAKEFILE_PATH, ENCODING_UTF8);
-}
-
-/**
- * Writes the updated content back to the Makefile.
- * @param {string} content - The string content to write.
- * @returns {void}
- */
-function writeMakefile(content) {
-  fs.writeFileSync(MAKEFILE_PATH, content, ENCODING_UTF8);
 }
 
 /**
@@ -98,34 +80,6 @@ function calculateNewVersion(currentVersion, bumpType, prereleaseTag) {
   }
 
   return newVersion;
-}
-
-/**
- * Updates the Linux kernel style version variables in the Makefile content.
- * @param {string} makefileContent - The original Makefile content.
- * @param {string} newVersion - The new version string to set.
- * @param {string} codename - The codename string.
- * @returns {string} The updated Makefile content.
- */
-function updateMakefileVersion(makefileContent, newVersion, codename) {
-  const versionCore = newVersion.split("-")[0];
-  const parts = versionCore.split(".").map(Number);
-
-  let updated = makefileContent.replace(
-    /^VERSION\s*=\s*.*$/m,
-    `VERSION = ${parts[PART_MAJOR_INDEX]}`,
-  );
-  updated = updated.replace(
-    /^PATCHLEVEL\s*=\s*.*$/m,
-    `PATCHLEVEL = ${parts[PART_MINOR_INDEX]}`,
-  );
-  updated = updated.replace(
-    /^SUBLEVEL\s*=\s*.*$/m,
-    `SUBLEVEL = ${parts[PART_PATCH_INDEX]}`,
-  );
-  updated = updated.replace(/^CODENAME\s*=\s*.*$/m, `CODENAME = ${codename}`);
-
-  return updated;
 }
 
 /**
@@ -171,7 +125,6 @@ function main() {
   const pkg = readPackageJson();
   const previousVersion = pkg.version;
   const previousCodename = pkg.codename;
-  const previousMakefile = readMakefile();
   const newVersion = calculateNewVersion(
     previousVersion,
     bumpType,
@@ -202,24 +155,16 @@ function main() {
   pkg.codename = newCodename;
   writePackageJson(pkg);
 
-  const updatedMakefile = updateMakefileVersion(
-    previousMakefile,
-    newVersion,
-    newCodename,
-  );
-  writeMakefile(updatedMakefile);
-
   try {
-    console.log("Rebuilding to embed the release build id...");
+    console.log("Rebuilding to verify the bumped package.json...");
     execSync("npm run build", { stdio: "inherit" });
   } catch {
     console.error(
-      "Version update aborted: post-bump build failed. Reverting package.json and Makefile.",
+      "Version update aborted: post-bump build failed. Reverting package.json.",
     );
     pkg.version = previousVersion;
     pkg.codename = previousCodename;
     writePackageJson(pkg);
-    writeMakefile(previousMakefile);
     process.exit(EXIT_CODE_ERROR);
   }
 
