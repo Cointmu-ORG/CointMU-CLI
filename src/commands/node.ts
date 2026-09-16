@@ -3,14 +3,13 @@ import { printCliError } from "../utils/errors";
 import {
   ACCOUNT_COUNT,
   bootHardhat,
-  DEFAULT_CHAIN_ID,
   silenceHardhatNoise,
 } from "../utils/hardhat";
+import { LOCAL_CHAIN_ID, LOCAL_PORT } from "../utils/defaults";
 
 const EXIT_SUCCESS = 0;
 const EXIT_FAILURE = 1;
 const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_PORT = 8585;
 const MAX_PORT = 65535;
 
 const LOOPBACK_HOSTS = ["localhost", "::1", "[::1]", "::ffff:127.0.0.1"];
@@ -106,12 +105,12 @@ async function runNodeStart(options: {
   try {
     const { killPort } = await import("../utils/process");
     const parsedPort = parseInt(options.port, 10);
-    const port = !isNaN(parsedPort) ? parsedPort : DEFAULT_PORT;
+    const port = !isNaN(parsedPort) ? parsedPort : LOCAL_PORT;
 
     if (isNaN(port) || port <= 0 || port > MAX_PORT) {
       throw new Error(
         `invalid port '${options.port}'.\n` +
-          `\x1b[2mhint:\x1b[0m pass a port between 1 and ${MAX_PORT}, e.g. \`cmu node start -p 8585\`.`,
+          `\x1b[2mhint:\x1b[0m pass a port between 1 and ${MAX_PORT}, e.g. \`cmu node start -p ${LOCAL_PORT}\`.`,
       );
     }
 
@@ -161,7 +160,7 @@ async function runNodeStart(options: {
     const host = options.host;
 
     originalConsoleLog(`\nCointMU DevNet listening on http://${host}:${port}`);
-    originalConsoleLog(`Chain ID: ${DEFAULT_CHAIN_ID}\n`);
+    originalConsoleLog(`Chain ID: ${LOCAL_CHAIN_ID}\n`);
     originalConsoleLog(`Mnemonic: ${resolvedMnemonic}`);
     originalConsoleLog(
       `\x1b[33mwarning:\x1b[0m development mnemonic - never use it on a live network.\n`,
@@ -220,7 +219,7 @@ nodeCommand
   .option(
     "-p, --port <number>",
     "Port to bind the local EVM node to",
-    String(DEFAULT_PORT),
+    String(LOCAL_PORT),
   )
   .option(
     "-m, --mnemonic <phrase>",

@@ -1,11 +1,8 @@
 import { existsSync, readdirSync } from "fs";
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
-import {
-  bootHardhat,
-  DEFAULT_CHAIN_ID,
-  silenceHardhatNoise,
-} from "../utils/hardhat";
+import { bootHardhat, silenceHardhatNoise } from "../utils/hardhat";
+import { LOCAL_CHAIN_ID } from "../utils/defaults";
 
 const EXIT_FAILURE = 1;
 const TEST_PORT = 8555;
@@ -331,7 +328,7 @@ async function runTest(
       const injectedEnv = {
         ...process.env,
         CMU_RPC_URL: `http://127.0.0.1:${TEST_PORT}`,
-        CMU_CHAIN_ID: String(DEFAULT_CHAIN_ID),
+        CMU_CHAIN_ID: String(LOCAL_CHAIN_ID),
         PRIVATE_KEY: privateKey,
       };
 

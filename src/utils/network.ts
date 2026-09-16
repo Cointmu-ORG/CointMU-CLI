@@ -2,11 +2,9 @@ import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { loadNetworks } from "./networkStorage";
 import { registerTsNode } from "./tsNode";
+import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
 import { getSessionFilePath, resolvePrivateKey } from "./session";
 
-const DEFAULT_NETWORK = "local";
-const LOCAL_CHAIN_ID = 1912;
-const LOCAL_URL = "http://127.0.0.1:8585";
 const TS_CONFIG_FILE = "cmu.config.ts";
 const JS_CONFIG_FILE = "cmu.config.js";
 
@@ -34,7 +32,7 @@ export async function getDynamicNetwork(
 ): Promise<NetworkConfig> {
   const sessionFile = getSessionFilePath();
 
-  let activeNetworkName = DEFAULT_NETWORK;
+  let activeNetworkName = LOCAL_NETWORK_NAME;
 
   if (existsSync(sessionFile)) {
     const session = JSON.parse(await readFile(sessionFile, "utf8"));
@@ -63,7 +61,7 @@ export async function getDynamicNetwork(
     const net = await provider.getNetwork();
     chainId = Number(net.chainId);
   } catch {
-    chainId = networkName === DEFAULT_NETWORK ? LOCAL_CHAIN_ID : 0;
+    chainId = networkName === LOCAL_NETWORK_NAME ? LOCAL_CHAIN_ID : 0;
   }
 
   return {
@@ -105,21 +103,22 @@ export async function getDeployNetwork(
   }
 
   if (!config) {
-    if (targetNetwork && targetNetwork !== DEFAULT_NETWORK) {
+    if (targetNetwork && targetNetwork !== LOCAL_NETWORK_NAME) {
       throw new Error(
         `network '${targetNetwork}' was requested, but no cmu.config.ts was found.\n` +
           "\x1b[2mhint:\x1b[0m run this from a CointMU project, or drop -n to deploy to the local network.",
       );
     }
     return {
-      name: DEFAULT_NETWORK,
-      url: LOCAL_URL,
+      name: LOCAL_NETWORK_NAME,
+      url: LOCAL_RPC_URL,
       chainId: LOCAL_CHAIN_ID,
       privateKey: await resolvePrivateKey({ prompt: !options.noPrompt }),
     };
   }
 
-  const networkName = targetNetwork || config.defaultNetwork || DEFAULT_NETWORK;
+  const networkName =
+    targetNetwork || config.defaultNetwork || LOCAL_NETWORK_NAME;
   const network = config.networks?.[networkName];
 
   if (!network) {

@@ -1,4 +1,5 @@
 import { writeFile } from "fs/promises";
+import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
 
 const TYPESCRIPT_LANG = "typescript";
 const TS_CONFIG_FILE = "cmu.config.ts";
@@ -7,18 +8,18 @@ const ENV_EXAMPLE_FILE = ".env.example";
 const GITIGNORE_FILE = ".gitignore";
 
 const cmuConfigJs = `module.exports = {
-  defaultNetwork: "local",
+  defaultNetwork: "${LOCAL_NETWORK_NAME}",
   networks: {
-    local: {
-      url: "http://127.0.0.1:8585",
-      chainId: 1912,
+    ${LOCAL_NETWORK_NAME}: {
+      url: "${LOCAL_RPC_URL}",
+      chainId: ${LOCAL_CHAIN_ID},
     },
     // Set this to your own CointMU mainnet RPC endpoint before deploying.
     // Keep it on https://: a plaintext http:// endpoint can be intercepted and
     // made to return spoofed chain state (balances, nonces, gas, receipts).
     mainnet: {
       url: "",
-      chainId: 1912,
+      chainId: ${LOCAL_CHAIN_ID},
     },
   },
   wallet: {
@@ -31,18 +32,18 @@ const cmuConfigJs = `module.exports = {
 `;
 
 const cmuConfigTs = `export default {
-  defaultNetwork: "local",
+  defaultNetwork: "${LOCAL_NETWORK_NAME}",
   networks: {
-    local: {
-      url: "http://127.0.0.1:8585",
-      chainId: 1912,
+    ${LOCAL_NETWORK_NAME}: {
+      url: "${LOCAL_RPC_URL}",
+      chainId: ${LOCAL_CHAIN_ID},
     },
     // Set this to your own CointMU mainnet RPC endpoint before deploying.
     // Keep it on https://: a plaintext http:// endpoint can be intercepted and
     // made to return spoofed chain state (balances, nonces, gas, receipts).
     mainnet: {
       url: "",
-      chainId: 1912,
+      chainId: ${LOCAL_CHAIN_ID},
     },
   },
   wallet: {

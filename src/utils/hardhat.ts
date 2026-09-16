@@ -4,8 +4,7 @@
  * configure the same devnet accounts; the differences are parameterised here.
  */
 
-/** Chain ID of the CointMU devnet. */
-export const DEFAULT_CHAIN_ID = 1912;
+import { LOCAL_CHAIN_ID } from "./defaults";
 /** Number of pre-funded accounts the devnet derives from its mnemonic. */
 export const ACCOUNT_COUNT = 10;
 /** Starting balance of each pre-funded account, in wei (100 ETH). */
@@ -150,7 +149,7 @@ export async function bootHardhat(options: {
   if (!hre.config.networks.hardhat)
     hre.config.networks.hardhat = { type: "hardhat" } as any;
 
-  hre.config.networks.hardhat.chainId = DEFAULT_CHAIN_ID;
+  hre.config.networks.hardhat.chainId = LOCAL_CHAIN_ID;
   hre.config.networks.hardhat.accounts = {
     mnemonic,
     accountsBalance: ACCOUNT_BALANCE,

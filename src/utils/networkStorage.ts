@@ -1,9 +1,8 @@
 import { existsSync } from "fs";
 import { readFile, writeFile } from "fs/promises";
+import { LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
 
 const NETWORKS_FILE_NAME = ".cmu-networks.json";
-const DEFAULT_NETWORK_NAME = "local";
-const DEFAULT_RPC_URL = "http://127.0.0.1:8585";
 const JSON_SPACES = 2;
 
 export interface NetworkEntry {
@@ -44,7 +43,7 @@ export async function loadNetworks(): Promise<NetworkEntry[]> {
 
   if (!existsSync(filePath)) {
     const defaultNetworks: NetworkEntry[] = [
-      { name: DEFAULT_NETWORK_NAME, rpcUrl: DEFAULT_RPC_URL },
+      { name: LOCAL_NETWORK_NAME, rpcUrl: LOCAL_RPC_URL },
     ];
     await writeNetworks(filePath, defaultNetworks);
     return defaultNetworks;
