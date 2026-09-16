@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
-import { loadNetworks } from "./networkStorage";
+import { loadNetworks, type NetworkEntry } from "./networkStorage";
 import { registerTsNode } from "./tsNode";
 import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
 import { getSessionFilePath, resolvePrivateKey } from "./session";
@@ -13,6 +13,65 @@ export interface NetworkConfig {
   url: string;
   chainId: number;
   privateKey: string | undefined;
+}
+
+/**
+ * Name of the network the session has selected, falling back to the local
+ * devnet. Never throws: callers that only need something to point at (and to
+ * mark in a listing) treat "no session yet" as "local".
+ *
+ * @returns {Promise<string>} The active network name.
+ */
+export async function activeNetworkName(): Promise<string> {
+  const sessionFile = getSessionFilePath();
+  if (!existsSync(sessionFile)) return LOCAL_NETWORK_NAME;
+
+  const session = JSON.parse(await readFile(sessionFile, "utf8"));
+  return session.activeNetwork || LOCAL_NETWORK_NAME;
+}
+
+/**
+ * The saved network entry the session has selected.
+ *
+ * The counterpart to activeNetworkName() for callers that cannot do anything
+ * useful without a real network, so each way of not having one - no session, a
+ * session that never picked a network, a pick that has since been deleted - is
+ * a distinct error with its own hint.
+ *
+ * @param {string} [noSessionHint] - Hint for the "no session" case, which is
+ *   the one where the advice depends on the command.
+ * @returns {Promise<NetworkEntry>} The active network.
+ * @throws {Error} When there is no usable active network.
+ */
+export async function activeNetwork(
+  noSessionHint = "run `cmu wallet login`, then `cmu network use <name>`.",
+): Promise<NetworkEntry> {
+  const sessionFile = getSessionFilePath();
+  if (!existsSync(sessionFile)) {
+    throw new Error(
+      "no active session.\n" + `\x1b[2mhint:\x1b[0m ${noSessionHint}`,
+    );
+  }
+
+  const session = JSON.parse(await readFile(sessionFile, "utf8"));
+  if (!session.activeNetwork) {
+    throw new Error(
+      "no active network in the session.\n" +
+        "\x1b[2mhint:\x1b[0m select one with `cmu network use <name>`.",
+    );
+  }
+
+  const entry = (await loadNetworks()).find(
+    (n) => n.name === session.activeNetwork,
+  );
+  if (!entry) {
+    throw new Error(
+      `active network '${session.activeNetwork}' is no longer saved.\n` +
+        "\x1b[2mhint:\x1b[0m pick an existing one with `cmu network use <name>`, or re-add it with `cmu network save <url> --name <name>`.",
+    );
+  }
+
+  return entry;
 }
 
 /**
@@ -30,18 +89,7 @@ export interface NetworkConfig {
 export async function getDynamicNetwork(
   targetNetwork?: string,
 ): Promise<NetworkConfig> {
-  const sessionFile = getSessionFilePath();
-
-  let activeNetworkName = LOCAL_NETWORK_NAME;
-
-  if (existsSync(sessionFile)) {
-    const session = JSON.parse(await readFile(sessionFile, "utf8"));
-    if (session.activeNetwork) {
-      activeNetworkName = session.activeNetwork;
-    }
-  }
-
-  const networkName = targetNetwork || activeNetworkName;
+  const networkName = targetNetwork || (await activeNetworkName());
   const networks = await loadNetworks();
 
   const network = networks.find((n) => n.name === networkName);

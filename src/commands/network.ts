@@ -31,39 +31,12 @@ async function runNetworkInfo(
   options: { verbose?: boolean } = {},
 ): Promise<void> {
   try {
-    const sessionFile = getSessionFilePath();
-
-    if (!existsSync(sessionFile)) {
-      throw new Error(
-        "no active session.\n" +
-          "\x1b[2mhint:\x1b[0m run `cmu wallet login`, then `cmu network use <name>`.",
-      );
-    }
-
-    const session = JSON.parse(await readFile(sessionFile, "utf8"));
-    if (!session.activeNetwork) {
-      throw new Error(
-        "no active network in the session.\n" +
-          "\x1b[2mhint:\x1b[0m select one with `cmu network use <name>`.",
-      );
-    }
-
-    const { loadNetworks } = await import("../utils/networkStorage");
-    const networks = await loadNetworks();
-    const activeNetwork = networks.find(
-      (n: any) => n.name === session.activeNetwork,
-    );
-
-    if (!activeNetwork) {
-      throw new Error(
-        `active network '${session.activeNetwork}' is no longer saved.\n` +
-          "\x1b[2mhint:\x1b[0m pick an existing one with `cmu network use <name>`, or re-add it with `cmu network save <url> --name <name>`.",
-      );
-    }
+    const { activeNetwork } = await import("../utils/network");
+    const network = await activeNetwork();
 
     console.log("--- Active network ---");
-    console.log(`Network      : ${activeNetwork.name}`);
-    console.log(`RPC endpoint : ${activeNetwork.rpcUrl}`);
+    console.log(`Network      : ${network.name}`);
+    console.log(`RPC endpoint : ${network.rpcUrl}`);
     console.log("----------------------");
   } catch (error) {
     console.error("\n\x1b[31merror:\x1b[0m network info failed");
@@ -102,36 +75,12 @@ async function runNetworkPing(
       rpcUrl = network.rpcUrl;
       networkName = network.name;
     } else {
-      const sessionFile = getSessionFilePath();
-      if (!existsSync(sessionFile)) {
-        throw new Error(
-          "no active session.\n" +
-            "\x1b[2mhint:\x1b[0m pass a network name, or run `cmu wallet login` first.",
-        );
-      }
-
-      const session = JSON.parse(await readFile(sessionFile, "utf8"));
-      if (!session.activeNetwork) {
-        throw new Error(
-          "no active network in the session.\n" +
-            "\x1b[2mhint:\x1b[0m select one with `cmu network use <name>`.",
-        );
-      }
-
-      const networks = await loadNetworks();
-      const activeNetwork = networks.find(
-        (n: any) => n.name === session.activeNetwork,
+      const { activeNetwork } = await import("../utils/network");
+      const network = await activeNetwork(
+        "pass a network name, or run `cmu wallet login` first.",
       );
-
-      if (!activeNetwork) {
-        throw new Error(
-          `active network '${session.activeNetwork}' is no longer saved.\n` +
-            "\x1b[2mhint:\x1b[0m pick an existing one with `cmu network use <name>`.",
-        );
-      }
-
-      rpcUrl = activeNetwork.rpcUrl;
-      networkName = activeNetwork.name;
+      rpcUrl = network.rpcUrl;
+      networkName = network.name;
     }
 
     console.log(`Pinging ${networkName} (${rpcUrl})...`);
@@ -294,15 +243,8 @@ async function runNetworkList(
     const { loadNetworks } = await import("../utils/networkStorage");
 
     const networks = await loadNetworks();
-    let activeNetworkName = "local";
-
-    const sessionFile = getSessionFilePath();
-    if (existsSync(sessionFile)) {
-      const session = JSON.parse(await readFile(sessionFile, "utf8"));
-      if (session.activeNetwork) {
-        activeNetworkName = session.activeNetwork;
-      }
-    }
+    const { activeNetworkName } = await import("../utils/network");
+    const activeName = await activeNetworkName();
 
     console.log("\nSaved networks");
     console.log(
@@ -313,7 +255,7 @@ async function runNetworkList(
       "--------------------------------------------------------------------------",
     );
     for (const net of networks) {
-      const isActive = net.name === activeNetworkName ? "[*]   " : "      ";
+      const isActive = net.name === activeName ? "[*]   " : "      ";
       console.log(`| ${isActive} | ${net.name.padEnd(20)} | ${net.rpcUrl}`);
     }
     console.log(
