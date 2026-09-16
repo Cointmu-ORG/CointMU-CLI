@@ -9,10 +9,9 @@ const RESET_COLOR = "\x1b[0m";
 
 /**
  * Executes the hidden easter egg sequence.
- * @param {object} options - CLI options.
  * @returns {Promise<void>}
  */
-async function runAries(options: { verbose?: boolean } = {}): Promise<void> {
+async function runAries(): Promise<void> {
   const { getRandomSadQuote } = await import("../utils/quotes");
 
   console.log(
@@ -36,5 +35,6 @@ async function runAries(options: { verbose?: boolean } = {}): Promise<void> {
 
 export const ariesCommand = new Command("aries")
   .description("Hidden easter egg command")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) => runAries(options).catch(fail("aries", options)));
+  .action((options, command) =>
+    runAries().catch(fail("aries", command.optsWithGlobals())),
+  );

@@ -24,12 +24,9 @@ export function isValidRpcUrl(value: string): boolean {
 
 /**
  * Displays the active network configuration.
- * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when the info is displayed.
  */
-async function runNetworkInfo(
-  options: { verbose?: boolean } = {},
-): Promise<void> {
+async function runNetworkInfo(): Promise<void> {
   const { activeNetwork } = await import("../utils/network");
   const network = await activeNetwork();
 
@@ -42,13 +39,9 @@ async function runNetworkInfo(
 /**
  * Pings a network to check connectivity and latency.
  * @param {string} [name] - The name of the network to ping.
- * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when the ping is completed.
  */
-async function runNetworkPing(
-  name?: string,
-  options: { verbose?: boolean } = {},
-): Promise<void> {
+async function runNetworkPing(name?: string): Promise<void> {
   const { loadNetworks } = await import("../utils/networkStorage");
 
   let rpcUrl = "";
@@ -120,13 +113,9 @@ async function runNetworkSave(
 /**
  * Deletes a saved network, refusing to remove the one currently in use.
  * @param {string} name - The network to delete.
- * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when the network is deleted.
  */
-async function runNetworkDelete(
-  name: string,
-  options: { verbose?: boolean } = {},
-): Promise<void> {
+async function runNetworkDelete(name: string): Promise<void> {
   const { loadNetworks, deleteNetwork } =
     await import("../utils/networkStorage");
 
@@ -158,13 +147,9 @@ async function runNetworkDelete(
 /**
  * Switches the active network recorded in the session.
  * @param {string} name - The network to activate.
- * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when the active network is switched.
  */
-async function runNetworkUse(
-  name: string,
-  options: { verbose?: boolean } = {},
-): Promise<void> {
+async function runNetworkUse(name: string): Promise<void> {
   const { loadNetworks } = await import("../utils/networkStorage");
   const { writeSessionFile } = await import("../utils/session");
 
@@ -193,12 +178,9 @@ async function runNetworkUse(
 
 /**
  * Lists every saved network, marking the active one.
- * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when the table is printed.
  */
-async function runNetworkList(
-  options: { verbose?: boolean } = {},
-): Promise<void> {
+async function runNetworkList(): Promise<void> {
   const { loadNetworks } = await import("../utils/networkStorage");
 
   const networks = await loadNetworks();
@@ -255,16 +237,16 @@ async function runNetworkLegacy(options: {
   }
   if (options.delete !== undefined) {
     deprecated("--delete", "delete <name>");
-    return runNetworkDelete(options.delete, options);
+    return runNetworkDelete(options.delete);
   }
   if (options.use !== undefined) {
     deprecated("--use", "use <name>");
-    return runNetworkUse(options.use, options);
+    return runNetworkUse(options.use);
   }
   if (options.list) {
     deprecated("--list", "list");
   }
-  return runNetworkList(options);
+  return runNetworkList();
 }
 
 export const networkCommand = new Command("network")
@@ -275,16 +257,14 @@ export const networkCommand = new Command("network")
   .option("-u, --use <name>", "Deprecated: use `cmu network use`")
   .option("-l, --list", "Deprecated: use `cmu network list`")
   .option("-D, --delete <name>", "Deprecated: use `cmu network delete`")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) =>
-    runNetworkLegacy(options).catch(fail("network", options)),
+  .action((options, command) =>
+    runNetworkLegacy(options).catch(fail("network", command.optsWithGlobals())),
   );
 
 networkCommand
   .command("save <url>")
   .description("Save a new network or update an existing one")
   .option("-n, --name <name>", "Name to save the network under")
-  .option("-v, --verbose", "Print full stack traces on failure")
   // The deprecated root flags still declare -n/--name, and commander binds a
   // flag to the command that declares it even when it appears after a
   // subcommand name. Merge the root's options so `network save <url> --name x`
@@ -292,45 +272,44 @@ networkCommand
   // missing name itself, with a hint the built-in required check cannot give.
   .action((url, options, command) => {
     const merged = { ...command.parent.opts(), ...options };
-    return runNetworkSave(url, merged).catch(fail("network save", merged));
+    return runNetworkSave(url, merged).catch(
+      fail("network save", command.optsWithGlobals()),
+    );
   });
 
 networkCommand
   .command("list")
   .description("List all saved networks")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) =>
-    runNetworkList(options).catch(fail("network list", options)),
+  .action((options, command) =>
+    runNetworkList().catch(fail("network list", command.optsWithGlobals())),
   );
 
 networkCommand
   .command("use <name>")
   .description("Switch the active network")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((name, options) =>
-    runNetworkUse(name, options).catch(fail("network use", options)),
+  .action((name, options, command) =>
+    runNetworkUse(name).catch(fail("network use", command.optsWithGlobals())),
   );
 
 networkCommand
   .command("delete <name>")
   .description("Delete a saved network")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((name, options) =>
-    runNetworkDelete(name, options).catch(fail("network delete", options)),
+  .action((name, options, command) =>
+    runNetworkDelete(name).catch(
+      fail("network delete", command.optsWithGlobals()),
+    ),
   );
 
 networkCommand
   .command("info")
   .description("Show the active network")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) =>
-    runNetworkInfo(options).catch(fail("network info", options)),
+  .action((options, command) =>
+    runNetworkInfo().catch(fail("network info", command.optsWithGlobals())),
   );
 
 networkCommand
   .command("ping [name]")
   .description("Ping a network to check connectivity and latency")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((name, options) =>
-    runNetworkPing(name, options).catch(fail("network ping", options)),
+  .action((name, options, command) =>
+    runNetworkPing(name).catch(fail("network ping", command.optsWithGlobals())),
   );

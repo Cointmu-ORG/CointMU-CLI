@@ -29,12 +29,9 @@ async function resolveGitCommit(): Promise<string> {
 
 /**
  * Prints detailed version information to the console.
- * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when the version info is printed.
  */
-export async function runVersion(
-  options: { verbose?: boolean } = {},
-): Promise<void> {
+export async function runVersion(): Promise<void> {
   const path = await import("path");
 
   const pkgPath = path.resolve(__dirname, "..", "package.json");
@@ -69,5 +66,6 @@ export async function runVersion(
 
 export const versionCommand = new Command("version")
   .description("Show CLI, runtime and dependency versions")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) => runVersion(options).catch(fail("version", options)));
+  .action((options, command) =>
+    runVersion().catch(fail("version", command.optsWithGlobals())),
+  );

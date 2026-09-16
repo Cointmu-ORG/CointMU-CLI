@@ -27,6 +27,7 @@ const program = new Command();
 
 program
   .name("cmu")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .description(
     `${pkg.description}\nTip: Run cmu <command> -h to see detailed options for a specific command.`,
   );

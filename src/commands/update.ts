@@ -164,5 +164,6 @@ export const updateCommand = new Command("update")
     "--to <version>",
     "Install a specific published version instead of the latest",
   )
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) => runUpdate(options).catch(fail("update", options)));
+  .action((options, command) =>
+    runUpdate(options).catch(fail("update", command.optsWithGlobals())),
+  );

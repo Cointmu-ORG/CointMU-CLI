@@ -80,7 +80,6 @@ async function runAudit(options: { fix?: boolean }): Promise<void> {
 export const auditCommand = new Command("audit")
   .description("Run static security analysis on contracts and dependencies")
   .option("--fix", "Apply safe fixes automatically")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options: { fix?: boolean; verbose?: boolean }) =>
-    runAudit(options).catch(fail("audit", options)),
+  .action((options: { fix?: boolean }, command) =>
+    runAudit(options).catch(fail("audit", command.optsWithGlobals())),
   );

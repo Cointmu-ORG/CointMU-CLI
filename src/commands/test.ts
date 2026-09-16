@@ -350,7 +350,6 @@ async function runTest(
 export const testCommand = new Command("test")
   .description("Run the smart contract test suite")
   .option("--gas", "Report gas used by transactions during the run")
-  .option("-v, --verbose", "Print full stack traces on failure")
   .option(
     "--allow-cors",
     "Allow cross-origin browser access to the test RPC proxy; off by default to prevent DNS rebinding",
@@ -359,4 +358,8 @@ export const testCommand = new Command("test")
     "-y, --yes",
     "Skip the confirmation prompt before executing project code",
   )
-  .action((options) => runTest(options).catch(fail("test", options)));
+  .action((options, command) => {
+    // runTest reads verbose itself, to decide how much Hardhat noise to keep.
+    const opts = command.optsWithGlobals();
+    return runTest(opts).catch(fail("test", opts));
+  });

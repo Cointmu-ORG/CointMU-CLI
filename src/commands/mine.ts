@@ -9,12 +9,9 @@ const MINER_THREAD_COUNT = 1;
 
 /**
  * Starts the mining process on the active network.
- * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when mining is started successfully.
  */
-async function runMineStart(
-  options: { verbose?: boolean } = {},
-): Promise<void> {
+async function runMineStart(): Promise<void> {
   const sessionFile = getSessionFilePath();
 
   if (!existsSync(sessionFile)) {
@@ -43,10 +40,9 @@ async function runMineStart(
 
 /**
  * Stops the mining process on the active network.
- * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when mining is stopped successfully.
  */
-async function runMineStop(options: { verbose?: boolean } = {}): Promise<void> {
+async function runMineStop(): Promise<void> {
   const sessionFile = getSessionFilePath();
 
   if (!existsSync(sessionFile)) {
@@ -76,13 +72,13 @@ export const mineCommand = new Command("mine").description(
 mineCommand
   .command("start")
   .description("Start mining with the logged-in wallet")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) =>
-    runMineStart(options).catch(fail("mine start", options)),
+  .action((options, command) =>
+    runMineStart().catch(fail("mine start", command.optsWithGlobals())),
   );
 
 mineCommand
   .command("stop")
   .description("Stop mining")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) => runMineStop(options).catch(fail("mine stop", options)));
+  .action((options, command) =>
+    runMineStop().catch(fail("mine stop", command.optsWithGlobals())),
+  );

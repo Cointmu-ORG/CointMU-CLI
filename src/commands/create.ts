@@ -164,7 +164,8 @@ export const createCommand = new Command("create")
     "-l, --language <language>",
     "Language to use (typescript, javascript)",
   )
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((project, options) =>
-    runCreate(project, options).catch(fail("create", options)),
+  .action((project, options, command) =>
+    runCreate(project, options).catch(
+      fail("create", command.optsWithGlobals()),
+    ),
   );

@@ -45,7 +45,6 @@ async function createEncryptedSession(privateKey: string): Promise<string> {
 
 /**
  * Generates a new, secure EVM-compatible wallet.
- * @param {object} options - CLI options.
  * @returns {Promise<void>}
  */
 export async function runWalletCreate(
@@ -111,12 +110,9 @@ export async function runWalletCreate(
 
 /**
  * Securely log into a wallet and create an encrypted session.
- * @param {object} options - CLI options.
  * @returns {Promise<void>}
  */
-async function runWalletLogin(
-  options: { verbose?: boolean } = {},
-): Promise<void> {
+async function runWalletLogin(): Promise<void> {
   const inquirer = (await import("inquirer")).default;
   const { ethers } = await import("ethers");
 
@@ -147,12 +143,9 @@ async function runWalletLogin(
 
 /**
  * Fetch and display the native token balance of the logged-in wallet.
- * @param {object} options - CLI options.
  * @returns {Promise<void>}
  */
-async function runWalletBalance(
-  options: { verbose?: boolean } = {},
-): Promise<void> {
+async function runWalletBalance(): Promise<void> {
   const sessionFile = getSessionFilePath();
 
   if (!existsSync(sessionFile)) {
@@ -180,12 +173,9 @@ async function runWalletBalance(
 
 /**
  * Display the current active wallet session information.
- * @param {object} options - CLI options.
  * @returns {Promise<void>}
  */
-async function runWalletInfo(
-  options: { verbose?: boolean } = {},
-): Promise<void> {
+async function runWalletInfo(): Promise<void> {
   const sessionFile = getSessionFilePath();
 
   if (!existsSync(sessionFile)) {
@@ -217,31 +207,29 @@ walletCommand
     "--login",
     "Encrypt the new key straight into a session instead of printing it",
   )
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) =>
-    runWalletCreate(options).catch(fail("wallet create", options)),
+  .action((options, command) =>
+    runWalletCreate(options).catch(
+      fail("wallet create", command.optsWithGlobals()),
+    ),
   );
 
 walletCommand
   .command("login")
   .description("Log in and store the key in an encrypted session")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) =>
-    runWalletLogin(options).catch(fail("wallet login", options)),
+  .action((options, command) =>
+    runWalletLogin().catch(fail("wallet login", command.optsWithGlobals())),
   );
 
 walletCommand
   .command("balance")
   .description("Show the native token balance of the logged-in wallet")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) =>
-    runWalletBalance(options).catch(fail("wallet balance", options)),
+  .action((options, command) =>
+    runWalletBalance().catch(fail("wallet balance", command.optsWithGlobals())),
   );
 
 walletCommand
   .command("info")
   .description("Show the active wallet session")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action((options) =>
-    runWalletInfo(options).catch(fail("wallet info", options)),
+  .action((options, command) =>
+    runWalletInfo().catch(fail("wallet info", command.optsWithGlobals())),
   );

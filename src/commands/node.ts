@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { fail, printCliError } from "../utils/errors";
+import { fail } from "../utils/errors";
 import {
   ACCOUNT_COUNT,
   bootHardhat,
@@ -59,8 +59,10 @@ export function warnOnNonLoopbackHost(host: string): void {
  * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when connection succeeds.
  */
-async function runNodeConnect(options: { network?: string }): Promise<void> {
-  const isVerbose = nodeCommand.opts().verbose;
+async function runNodeConnect(options: {
+  network?: string;
+  verbose?: boolean;
+}): Promise<void> {
   const { getDynamicNetwork } = await import("../utils/network");
   const { ethers } = await import("ethers");
 
@@ -88,8 +90,9 @@ async function runNodeStart(options: {
   port: string;
   mnemonic?: string;
   log?: boolean;
+  verbose?: boolean;
 }): Promise<void> {
-  const isVerbose = nodeCommand.opts().verbose;
+  const isVerbose = options.verbose;
   const { killPort } = await import("../utils/process");
   const parsedPort = parseInt(options.port, 10);
   const port = !isNaN(parsedPort) ? parsedPort : LOCAL_PORT;
@@ -182,17 +185,24 @@ async function runNodeStart(options: {
   });
 }
 
-export const nodeCommand = new Command("node")
-  .description("Manage the local EVM node")
-  .option("-v, --verbose", "Enable verbose logging for all node commands");
+export const nodeCommand = new Command("node").description(
+  "Manage the local EVM node",
+);
 
 nodeCommand
   .command("connect")
   .description("Ping the configured RPC endpoint")
   .option("-n, --network <name>", "Network to connect to")
-  .action((options) =>
-    runNodeConnect(options).catch(fail("node connect", nodeCommand.opts())),
-  );
+  .action((options, command) => {
+    const opts = command.optsWithGlobals();
+    return runNodeConnect(opts).catch(
+      fail(
+        "node connect",
+        opts,
+        "start a local node with `cmu node start`, or check the endpoint with `cmu network info`.",
+      ),
+    );
+  });
 
 nodeCommand
   .command("start")
@@ -208,6 +218,8 @@ nodeCommand
     "12-word mnemonic for deterministic accounts",
   )
   .option("-l, --log", "Log RPC calls as they arrive")
-  .action((options) =>
-    runNodeStart(options).catch(fail("node start", nodeCommand.opts())),
-  );
+  .action((options, command) => {
+    // runNodeStart reads verbose itself, for the Hardhat log filter.
+    const opts = command.optsWithGlobals();
+    return runNodeStart(opts).catch(fail("node start", opts));
+  });

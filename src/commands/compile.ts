@@ -164,7 +164,6 @@ export async function runCompile(
 
 export const compileCommand = new Command("compile")
   .description("Compile smart contracts into ABI and bytecode artifacts")
-  .option("-v, --verbose", "Print full stack traces on failure")
   .option(
     "-y, --yes",
     "Skip the confirmation prompt before executing project code",
@@ -174,6 +173,6 @@ export const compileCommand = new Command("compile")
     "\ncmu.config.ts/js is executed as code from the project directory. Only\n" +
       "compile projects you trust; see the 'Trust Model' section of the README.",
   )
-  .action((options: { verbose?: boolean; yes?: boolean }) =>
-    runCompile(options).catch(fail("compile", options)),
+  .action((options: { yes?: boolean }, command) =>
+    runCompile(options).catch(fail("compile", command.optsWithGlobals())),
   );

@@ -55,15 +55,22 @@ export function printCliError(error: unknown, verbose?: boolean): void {
  *
  * @param {string} label - The command, as the user typed it ("network info").
  * @param {object} [options] - The command's options; only `verbose` is read.
+ * @param {string} [hint] - Printed after the error, for a command that can say
+ *   something useful about any way of failing (`node connect` can always
+ *   suggest starting a node).
  * @returns {(error: unknown) => never} A handler that never returns.
  */
 export function fail(
   label: string,
   options: { verbose?: boolean } = {},
+  hint?: string,
 ): (error: unknown) => never {
   return (error: unknown): never => {
     console.error(`\n\x1b[31merror:\x1b[0m ${label} failed`);
     printCliError(error, options.verbose);
+    if (hint) {
+      console.error(`\x1b[2mhint:\x1b[0m ${hint}`);
+    }
     process.exit(1);
   };
 }

@@ -215,7 +215,6 @@ export const deployCommand = new Command("deploy")
   .option("-c, --config", "Show the resolved deploy configuration and exit")
   .option("-p, --ping", "Ping the configured RPC endpoint and exit")
   .option("-n, --network <name>", "Network to deploy to")
-  .option("-v, --verbose", "Print full stack traces on failure")
   .option(
     "-y, --yes",
     "Skip the confirmation prompt before executing project code",
@@ -226,6 +225,9 @@ export const deployCommand = new Command("deploy")
       "PRIVATE_KEY through the environment. Only deploy projects you trust; see the\n" +
       "'Trust Model' section of the README.",
   )
-  .action((options: DeployOptions) =>
-    runDeploy(options).then(process.exit, fail("deploy", options)),
-  );
+  .action((options: DeployOptions, command) => {
+    // runDeploy reports its own compile step, so it needs the inherited
+    // --verbose too, not just the options declared on `deploy` itself.
+    const opts = command.optsWithGlobals() as DeployOptions;
+    return runDeploy(opts).then(process.exit, fail("deploy", opts));
+  });
