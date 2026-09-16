@@ -120,42 +120,81 @@ export function silenceHardhatNoise(
 }
 
 /**
- * Loads Hardhat and points its in-process network at the CointMU devnet.
+ * The CointMU devnet as a Hardhat network override, with the mnemonic its
+ * accounts are derived from. Callers apply it with
+ * `hre.network.create({ override })`.
  *
- * Hardhat 3 is ESM-only, so it is reached through a `new Function` indirection:
- * tsup emits CJS, where a literal `import()` would be downleveled to require().
+ * An override rather than a config edit, because `hre.config` is the *resolved*
+ * config: it is keyed by the networks Hardhat 3 actually ships (`default`,
+ * `node`, `localhost` - there is no `hardhat` network), and its accounts hold
+ * ConfigurationVariables rather than plain strings. Writing the devnet settings
+ * onto it therefore configured nothing, and the served chain kept Hardhat's
+ * stock chain ID and publicly known test accounts while the CLI printed keys
+ * derived from a mnemonic that funded nothing (issue #117).
+ * `hre.network.create()` merges an override back into the *user* config and
+ * re-resolves it, which is the supported way in.
  *
  * @param {object} options
  * @param {string} [options.mnemonic] - Mnemonic for the pre-funded accounts.
  *   A fresh random one is generated when omitted.
  * @param {boolean} options.loggingEnabled - Hardhat's own request logging.
- * @returns {Promise<{hre: any, mnemonic: string}>} The runtime and the mnemonic
- *   its accounts were derived from (empty string if none could be generated).
+ * @returns {Promise<{mnemonic: string, override: any}>} The mnemonic and the
+ *   network override to connect with.
+ * @throws {Error} When no mnemonic could be generated.
+ */
+export async function devnetOverride(options: {
+  mnemonic?: string;
+  loggingEnabled: boolean;
+}): Promise<{ mnemonic: string; override: any }> {
+  const { ethers } = await import("ethers");
+  const mnemonic =
+    options.mnemonic || ethers.Wallet.createRandom().mnemonic?.phrase || "";
+
+  // Checked here rather than in the callers: an empty mnemonic reaches Hardhat
+  // as a config validation error, which says nothing about what to do next.
+  if (!mnemonic) {
+    throw new Error(
+      "could not generate a mnemonic for the devnet accounts.\n" +
+        "\x1b[2mhint:\x1b[0m this usually means the crypto module is unavailable; check your Node.js install.",
+    );
+  }
+
+  return {
+    mnemonic,
+    override: {
+      chainId: LOCAL_CHAIN_ID,
+      loggingEnabled: options.loggingEnabled,
+      accounts: {
+        mnemonic,
+        accountsBalance: ACCOUNT_BALANCE,
+        count: ACCOUNT_COUNT,
+      },
+    },
+  };
+}
+
+/**
+ * Loads Hardhat and hands back the devnet override to connect it with.
+ *
+ * Hardhat 3 is ESM-only, so it is reached through a `new Function` indirection:
+ * tsup emits CJS, where a literal `import()` would be downleveled to require().
+ * That indirection is why devnetOverride() is separate - it is the half that
+ * can be exercised outside a real CLI run.
+ *
+ * @param {object} options - See devnetOverride().
+ * @returns {Promise<{hre: any, mnemonic: string, override: any}>} The runtime,
+ *   plus everything devnetOverride() returns.
  */
 export async function bootHardhat(options: {
   mnemonic?: string;
   loggingEnabled: boolean;
-}): Promise<{ hre: any; mnemonic: string }> {
-  const { ethers } = await import("ethers");
-  const mnemonic =
-    options.mnemonic || ethers.Wallet.createRandom().mnemonic?.phrase || "";
+}): Promise<{ hre: any; mnemonic: string; override: any }> {
+  const { mnemonic, override } = await devnetOverride(options);
 
   const importDynamic = new Function("modulePath", "return import(modulePath)");
   const hre =
     (await importDynamic("hardhat")).default ||
     (await importDynamic("hardhat"));
 
-  if (!hre.config.networks) hre.config.networks = {};
-  if (!hre.config.networks.hardhat)
-    hre.config.networks.hardhat = { type: "hardhat" } as any;
-
-  hre.config.networks.hardhat.chainId = LOCAL_CHAIN_ID;
-  hre.config.networks.hardhat.accounts = {
-    mnemonic,
-    accountsBalance: ACCOUNT_BALANCE,
-    count: ACCOUNT_COUNT,
-  };
-  hre.config.networks.hardhat.loggingEnabled = options.loggingEnabled;
-
-  return { hre, mnemonic };
+  return { hre, mnemonic, override };
 }

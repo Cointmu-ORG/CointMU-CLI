@@ -1,5 +1,12 @@
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { silenceHardhatNoise } from "../../src/utils/hardhat";
+import {
+  ACCOUNT_BALANCE,
+  ACCOUNT_COUNT,
+  devnetOverride,
+  silenceHardhatNoise,
+} from "../../src/utils/hardhat";
+import { LOCAL_CHAIN_ID } from "../../src/utils/defaults";
 
 // `cmu test` and `cmu node start` both drive Hardhat in-process and both used
 // to carry their own copy of this filter. These cover the shared one.
@@ -121,4 +128,89 @@ describe("silenceHardhatNoise", () => {
     handle.restore();
     expect(console.log).toBe(before);
   });
+});
+
+// Issue #117: the devnet settings used to be written onto
+// `hre.config.networks.hardhat`, a network Hardhat 3 does not have, on the
+// already-resolved config. Nothing read it, so every command ran against
+// Hardhat's stock chain ID and its publicly known test accounts while printing
+// - and handing out - keys derived from a mnemonic that funded nothing. This
+// boots the real runtime because that is the only place the gap was visible.
+//
+// It goes through devnetOverride() rather than bootHardhat(): the latter loads
+// Hardhat through a `new Function` indirection that vitest's module runner
+// cannot execute ("A dynamic import callback was not specified"). Every CLI run
+// exercises that half; this covers the half that decides what the chain serves.
+
+describe("devnetOverride", () => {
+  // A valid BIP-39 phrase that is deliberately NOT Hardhat's default: with the
+  // default one the assertions below would pass even if the override were
+  // dropped again.
+  const MNEMONIC =
+    "legal winner thank year wave sausage worth useful legal winner thank yellow";
+
+  // @nomicfoundation/edr@0.19.0 declares `engines: { node: ">= 22" }`, so on
+  // Node 20 npm skips its native binary and no EDR chain can start at all -
+  // which is equally why `cmu test` and `cmu node start` cannot work there,
+  // independently of this test. There is nothing to assert when the chain
+  // cannot boot, so this only runs where it can.
+  const canBootEdr = Number(process.versions.node.split(".")[0]) >= 22;
+
+  it.skipIf(!canBootEdr)(
+    "makes Hardhat serve the accounts derived from its mnemonic",
+    async () => {
+      // Mirrors src/index.ts, which is not on the path in a unit test.
+      process.env.HARDHAT_CONFIG = fileURLToPath(
+        new URL("../../hardhat.config.js", import.meta.url),
+      );
+
+      const { mnemonic, override } = await devnetOverride({
+        mnemonic: MNEMONIC,
+        loggingEnabled: false,
+      });
+      expect(mnemonic).toBe(MNEMONIC);
+
+      const hre: any = (await import("hardhat")).default;
+      const connection = await hre.network.create({ override });
+      try {
+        const { ethers } = await import("ethers");
+        const derived = (index: number) =>
+          ethers.HDNodeWallet.fromMnemonic(
+            ethers.Mnemonic.fromPhrase(mnemonic),
+            `m/44'/60'/0'/0/${index}`,
+          ).address.toLowerCase();
+
+        const accounts: string[] = await connection.provider.request({
+          method: "eth_accounts",
+          params: [],
+        });
+
+        // The whole point: what the CLI prints is what the chain serves.
+        expect(accounts).toHaveLength(ACCOUNT_COUNT);
+        expect(accounts[0].toLowerCase()).toBe(derived(0));
+        expect(accounts.at(-1)!.toLowerCase()).toBe(derived(ACCOUNT_COUNT - 1));
+
+        // ...and not Hardhat's stock account, which is what it served before.
+        expect(accounts[0].toLowerCase()).not.toBe(
+          "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+        );
+
+        const chainId: string = await connection.provider.request({
+          method: "eth_chainId",
+          params: [],
+        });
+        expect(Number(BigInt(chainId))).toBe(LOCAL_CHAIN_ID);
+
+        // Pre-funded means funded: the printed keys have to be able to pay gas.
+        const balance: string = await connection.provider.request({
+          method: "eth_getBalance",
+          params: [accounts[0], "latest"],
+        });
+        expect(BigInt(balance)).toBe(BigInt(ACCOUNT_BALANCE));
+      } finally {
+        await connection.close();
+      }
+    },
+    120_000,
+  );
 });
