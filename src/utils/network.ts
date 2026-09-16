@@ -1,6 +1,7 @@
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { loadNetworks } from "./networkStorage";
+import { registerTsNode } from "./tsNode";
 import { getSessionFilePath, resolvePrivateKey } from "./session";
 
 const DEFAULT_NETWORK = "local";
@@ -96,12 +97,7 @@ export async function getDeployNetwork(
   const jsConfigPath = path.resolve(process.cwd(), JS_CONFIG_FILE);
 
   if (existsSync(tsConfigPath)) {
-    const tsNode = await import("ts-node");
-    tsNode.register({
-      transpileOnly: true,
-      compiler: "typescript",
-      compilerOptions: { module: "CommonJS" },
-    });
+    await registerTsNode();
     const mod = require(tsConfigPath);
     config = mod.default || mod;
   } else if (existsSync(jsConfigPath)) {

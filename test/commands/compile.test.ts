@@ -111,3 +111,55 @@ describe("runCompile trust gate", () => {
     );
   });
 });
+
+// Both `cmu compile` and `cmu deploy` register ts-node to require() a
+// cmu.config.ts. They used to do it two different ways, and compile's swallowed
+// the failure behind a warning, so a broken registration silently downgraded to
+// default compiler settings instead of reporting anything. Both go through
+// registerTsNode() now; this pins compile's half.
+
+describe("runCompile config loading", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-compile-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, "contracts"));
+    fs.writeFileSync(
+      path.join(tmpDir, "contracts", "Tiny.sol"),
+      "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\ncontract Tiny {}\n",
+    );
+    // ts-node resolves "typescript" from the project being loaded, so the
+    // fixture needs a real one to resolve.
+    fs.mkdirSync(path.join(tmpDir, "node_modules"));
+    fs.symlinkSync(
+      path.resolve(__dirname, "../../node_modules/typescript"),
+      path.join(tmpDir, "node_modules", "typescript"),
+      "dir",
+    );
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loads a real cmu.config.ts instead of warning and falling back", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "cmu.config.ts"),
+      `export default { compiler: { settings: { optimizer: { enabled: true, runs: 999 } } } };`,
+    );
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { runCompile } = await import("../../src/commands/compile");
+    await runCompile({ yes: true });
+
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("could not load"),
+    );
+    expect(fs.existsSync(path.join(tmpDir, "artifacts", "Tiny.json"))).toBe(
+      true,
+    );
+  });
+});

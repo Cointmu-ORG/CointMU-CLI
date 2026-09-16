@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, writeFile } from "fs/promises";
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
+import { registerTsNode } from "../utils/tsNode";
 
 const EXIT_FAILURE = 1;
 const JSON_SPACES = 2;
@@ -78,7 +79,7 @@ export async function runCompile(
       await confirmProjectTrust([configPath], { yes: options.yes });
       try {
         if (configPath.endsWith(".ts")) {
-          require("ts-node/register/transpile-only");
+          await registerTsNode();
         }
         const loadedConfig = require(configPath);
         const cmuConfig = loadedConfig?.default ?? loadedConfig;
