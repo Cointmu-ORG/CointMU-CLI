@@ -1,3 +1,5 @@
+import { existsSync } from "fs";
+import { readdir } from "fs/promises";
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
@@ -96,7 +98,6 @@ export async function pingNetwork(rpcUrl: string): Promise<void> {
  */
 export async function runDeploy(options: DeployOptions): Promise<number> {
   const path = await import("path");
-  const fs = (await import("fs-extra")).default || (await import("fs-extra"));
   // See src/index.ts: a missing .env is not an error.
   try {
     process.loadEnvFile(path.resolve(process.cwd(), ".env"));
@@ -106,14 +107,14 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
 
   const deployDir = path.resolve(process.cwd(), "deploy");
 
-  if (!(await fs.pathExists(deployDir))) {
+  if (!existsSync(deployDir)) {
     throw new Error(
       `deploy/ directory not found at ${deployDir}.\n` +
         "\x1b[2mhint:\x1b[0m run `cmu deploy` from the root of your CointMU project.",
     );
   }
 
-  const files: string[] = await fs.readdir(deployDir);
+  const files = await readdir(deployDir);
   const scripts = files
     .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
     .sort((a, b) => a.localeCompare(b));

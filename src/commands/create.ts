@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
 
@@ -57,7 +58,6 @@ async function runCreate(
 ): Promise<void> {
   try {
     const path = await import("path");
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     const { default: inquirer } = await import("inquirer");
     const { templateChoices, validTemplates, generateProject } =
       await import("../utils/template");
@@ -88,7 +88,7 @@ async function runCreate(
 
     const projectPath = path.resolve(process.cwd(), projectName);
 
-    if (await fs.pathExists(projectPath)) {
+    if (existsSync(projectPath)) {
       throw new Error(
         `directory '${projectName}' already exists.\n` +
           "\x1b[2mhint:\x1b[0m choose another name, or remove the existing directory first.",

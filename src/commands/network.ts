@@ -1,3 +1,5 @@
+import { existsSync } from "fs";
+import { readFile } from "fs/promises";
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
 import { getSessionFilePath } from "../utils/session";
@@ -29,17 +31,16 @@ async function runNetworkInfo(
   options: { verbose?: boolean } = {},
 ): Promise<void> {
   try {
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     const sessionFile = getSessionFilePath();
 
-    if (!(await fs.pathExists(sessionFile))) {
+    if (!existsSync(sessionFile)) {
       throw new Error(
         "no active session.\n" +
           "\x1b[2mhint:\x1b[0m run `cmu wallet login`, then `cmu network use <name>`.",
       );
     }
 
-    const session = await fs.readJson(sessionFile);
+    const session = JSON.parse(await readFile(sessionFile, "utf8"));
     if (!session.activeNetwork) {
       throw new Error(
         "no active network in the session.\n" +
@@ -84,7 +85,6 @@ async function runNetworkPing(
   options: { verbose?: boolean } = {},
 ): Promise<void> {
   try {
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     const { loadNetworks } = await import("../utils/networkStorage");
 
     let rpcUrl = "";
@@ -103,14 +103,14 @@ async function runNetworkPing(
       networkName = network.name;
     } else {
       const sessionFile = getSessionFilePath();
-      if (!(await fs.pathExists(sessionFile))) {
+      if (!existsSync(sessionFile)) {
         throw new Error(
           "no active session.\n" +
             "\x1b[2mhint:\x1b[0m pass a network name, or run `cmu wallet login` first.",
         );
       }
 
-      const session = await fs.readJson(sessionFile);
+      const session = JSON.parse(await readFile(sessionFile, "utf8"));
       if (!session.activeNetwork) {
         throw new Error(
           "no active network in the session.\n" +
@@ -203,7 +203,6 @@ async function runNetworkDelete(
   options: { verbose?: boolean } = {},
 ): Promise<void> {
   try {
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     const { loadNetworks, deleteNetwork } =
       await import("../utils/networkStorage");
 
@@ -216,8 +215,8 @@ async function runNetworkDelete(
     }
 
     const sessionFile = getSessionFilePath();
-    if (await fs.pathExists(sessionFile)) {
-      const session = await fs.readJson(sessionFile);
+    if (existsSync(sessionFile)) {
+      const session = JSON.parse(await readFile(sessionFile, "utf8"));
       if (session.activeNetwork === name) {
         throw new Error(
           `network '${name}' is currently active and cannot be deleted.\n` +
@@ -250,7 +249,6 @@ async function runNetworkUse(
   options: { verbose?: boolean } = {},
 ): Promise<void> {
   try {
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     const { loadNetworks } = await import("../utils/networkStorage");
     const { writeSessionFile } = await import("../utils/session");
 
@@ -264,14 +262,14 @@ async function runNetworkUse(
     }
 
     const sessionFile = getSessionFilePath();
-    if (!(await fs.pathExists(sessionFile))) {
+    if (!existsSync(sessionFile)) {
       throw new Error(
         "no active session.\n" +
           "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
       );
     }
 
-    const session = await fs.readJson(sessionFile);
+    const session = JSON.parse(await readFile(sessionFile, "utf8"));
     session.activeNetwork = name;
     await writeSessionFile(sessionFile, session);
     console.log(`Active network is now ${network.name}`);
@@ -293,15 +291,14 @@ async function runNetworkList(
   options: { verbose?: boolean } = {},
 ): Promise<void> {
   try {
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     const { loadNetworks } = await import("../utils/networkStorage");
 
     const networks = await loadNetworks();
     let activeNetworkName = "local";
 
     const sessionFile = getSessionFilePath();
-    if (await fs.pathExists(sessionFile)) {
-      const session = await fs.readJson(sessionFile);
+    if (existsSync(sessionFile)) {
+      const session = JSON.parse(await readFile(sessionFile, "utf8"));
       if (session.activeNetwork) {
         activeNetworkName = session.activeNetwork;
       }

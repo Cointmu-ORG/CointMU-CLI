@@ -1,3 +1,5 @@
+import { existsSync } from "fs";
+import { readFile } from "fs/promises";
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
 
@@ -34,15 +36,14 @@ export async function runVersion(
   options: { verbose?: boolean } = {},
 ): Promise<void> {
   try {
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     const path = await import("path");
 
     const pkgPath = path.resolve(__dirname, "..", "package.json");
 
     let pkg = { version: "unknown", codename: "unknown" };
 
-    if (await fs.pathExists(pkgPath)) {
-      pkg = await fs.readJson(pkgPath);
+    if (existsSync(pkgPath)) {
+      pkg = JSON.parse(await readFile(pkgPath, "utf8"));
     }
 
     // Inlined by tsup at build time; undefined when running unbundled.

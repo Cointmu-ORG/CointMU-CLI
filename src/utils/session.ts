@@ -1,5 +1,7 @@
 import * as crypto from "crypto";
 import * as path from "path";
+import { existsSync } from "fs";
+import { chmod, readFile, writeFile } from "fs/promises";
 
 const ALGORITHM = "aes-256-gcm";
 const SESSION_FILE_NAME = ".cmu-session";
@@ -102,12 +104,12 @@ export async function writeSessionFile(
   filePath: string,
   data: SessionData,
 ): Promise<void> {
-  const fs = (await import("fs-extra")).default || (await import("fs-extra"));
-  await fs.writeJson(filePath, data, {
-    spaces: JSON_SPACES,
+  // Trailing newline: what fs-extra's writeJson wrote, and what every other
+  // tool expects of a text file.
+  await writeFile(filePath, `${JSON.stringify(data, null, JSON_SPACES)}\n`, {
     mode: SESSION_FILE_MODE,
   });
-  await fs.chmod(filePath, SESSION_FILE_MODE);
+  await chmod(filePath, SESSION_FILE_MODE);
 }
 
 /** In-memory cache of the decrypted key for the lifetime of one CLI process. */
@@ -225,14 +227,13 @@ export async function resolvePrivateKey(
     return cachedKey;
   }
 
-  const fs = (await import("fs-extra")).default || (await import("fs-extra"));
   const sessionFile = getSessionFilePath();
 
-  if (!(await fs.pathExists(sessionFile))) {
+  if (!existsSync(sessionFile)) {
     return undefined;
   }
 
-  const session: SessionData = await fs.readJson(sessionFile);
+  const session: SessionData = JSON.parse(await readFile(sessionFile, "utf8"));
   if (!session.encryptedKey) {
     return undefined;
   }

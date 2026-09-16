@@ -1,3 +1,4 @@
+import { existsSync, readdirSync } from "fs";
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
 import {
@@ -238,10 +239,7 @@ async function runMochaSuite(
   testDir: string,
   env: Record<string, string | undefined>,
 ): Promise<void> {
-  const fs = (await import("fs-extra")).default || (await import("fs-extra"));
-  const hasTsFiles = fs
-    .readdirSync(testDir)
-    .some((f: string) => f.endsWith(".ts"));
+  const hasTsFiles = readdirSync(testDir).some((f) => f.endsWith(".ts"));
   const runnerArgs = hasTsFiles
     ? ["mocha", "-r", "ts-node/register", "test/**/*.ts"]
     : ["mocha", "test/**/*.js"];
@@ -287,7 +285,6 @@ async function runTest(
     );
   }
   try {
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
     const path = await import("path");
 
     console.log("Compiling contracts...");
@@ -295,7 +292,7 @@ async function runTest(
     await runCompile({ yes: options.yes });
 
     const testDir = path.resolve(process.cwd(), TEST_DIR_NAME);
-    if (!(await fs.pathExists(testDir))) {
+    if (!existsSync(testDir)) {
       throw new Error(
         `test/ directory not found at ${testDir}.\n` +
           "\x1b[2mhint:\x1b[0m run `cmu test` from the root of your CointMU project.",

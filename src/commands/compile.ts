@@ -1,3 +1,5 @@
+import { existsSync } from "fs";
+import { mkdir, readdir, readFile, writeFile } from "fs/promises";
 import { Command } from "commander";
 import { printCliError } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
@@ -60,7 +62,6 @@ export async function runCompile(
   options: { verbose?: boolean; yes?: boolean } = {},
 ): Promise<void> {
   try {
-    const fs = require("fs-extra");
     const solc = require("solc");
     const path = require("path");
 
@@ -89,14 +90,14 @@ export async function runCompile(
       }
     }
 
-    if (!(await fs.pathExists(contractsDir))) {
+    if (!existsSync(contractsDir)) {
       throw new Error(
         "contracts/ directory not found.\n" +
           "\x1b[2mhint:\x1b[0m run `cmu compile` from the root of your CointMU project.",
       );
     }
 
-    const files: string[] = await fs.readdir(contractsDir);
+    const files = await readdir(contractsDir);
     const solFiles = files.filter((f: string) => f.endsWith(".sol"));
 
     if (solFiles.length === 0) {
@@ -107,7 +108,7 @@ export async function runCompile(
     const sources: Record<string, { content: string }> = {};
     for (const file of solFiles) {
       const filePath = path.join(contractsDir, file);
-      const content = await fs.readFile(filePath, "utf8");
+      const content = await readFile(filePath, "utf8");
       sources[file] = { content };
     }
 
@@ -146,13 +147,16 @@ export async function runCompile(
       }
     }
 
-    await fs.ensureDir(artifactsDir);
+    await mkdir(artifactsDir, { recursive: true });
 
     for (const file in output.contracts) {
       for (const contractName in output.contracts[file]) {
         const contract = output.contracts[file][contractName];
         const artifactPath = path.join(artifactsDir, `${contractName}.json`);
-        await fs.writeJson(artifactPath, contract, { spaces: JSON_SPACES });
+        await writeFile(
+          artifactPath,
+          `${JSON.stringify(contract, null, JSON_SPACES)}\n`,
+        );
         console.log(`Compiled ${contractName}`);
       }
     }

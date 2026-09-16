@@ -1,3 +1,5 @@
+import { existsSync } from "fs";
+import { readFile } from "fs/promises";
 import { loadNetworks } from "./networkStorage";
 import { getSessionFilePath, resolvePrivateKey } from "./session";
 
@@ -8,7 +10,6 @@ const TS_CONFIG_FILE = "cmu.config.ts";
 const JS_CONFIG_FILE = "cmu.config.js";
 const MODULE_FORMAT = "CommonJS";
 
-const FS_EXTRA_PKG = "fs-extra";
 const PATH_PKG = "path";
 const ETHERS_PKG = "ethers";
 const TS_NODE_PKG = "ts-node";
@@ -36,14 +37,12 @@ export interface NetworkConfig {
 export async function getDynamicNetwork(
   targetNetwork?: string,
 ): Promise<NetworkConfig> {
-  const fs =
-    (await import(FS_EXTRA_PKG)).default || (await import(FS_EXTRA_PKG));
   const sessionFile = getSessionFilePath();
 
   let activeNetworkName = DEFAULT_NETWORK;
 
-  if (await fs.pathExists(sessionFile)) {
-    const session = await fs.readJson(sessionFile);
+  if (existsSync(sessionFile)) {
+    const session = JSON.parse(await readFile(sessionFile, "utf8"));
     if (session.activeNetwork) {
       activeNetworkName = session.activeNetwork;
     }
@@ -96,15 +95,13 @@ export async function getDeployNetwork(
   targetNetwork?: string,
   options: { noPrompt?: boolean } = {},
 ): Promise<NetworkConfig> {
-  const fs =
-    (await import(FS_EXTRA_PKG)).default || (await import(FS_EXTRA_PKG));
   const path = await import(PATH_PKG);
 
   let config: any = null;
   const tsConfigPath = path.resolve(process.cwd(), TS_CONFIG_FILE);
   const jsConfigPath = path.resolve(process.cwd(), JS_CONFIG_FILE);
 
-  if (await fs.pathExists(tsConfigPath)) {
+  if (existsSync(tsConfigPath)) {
     const tsNode = await import(TS_NODE_PKG);
     tsNode.register({
       transpileOnly: true,
@@ -113,7 +110,7 @@ export async function getDeployNetwork(
     });
     const mod = require(tsConfigPath);
     config = mod.default || mod;
-  } else if (await fs.pathExists(jsConfigPath)) {
+  } else if (existsSync(jsConfigPath)) {
     config = require(jsConfigPath);
   }
 

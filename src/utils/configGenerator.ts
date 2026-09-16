@@ -1,10 +1,11 @@
+import { writeFile } from "fs/promises";
+
 const TYPESCRIPT_LANG = "typescript";
 const TS_CONFIG_FILE = "cmu.config.ts";
 const JS_CONFIG_FILE = "cmu.config.js";
 const ENV_EXAMPLE_FILE = ".env.example";
 const GITIGNORE_FILE = ".gitignore";
 const ENCODING = "utf8";
-const FS_EXTRA_PKG = "fs-extra";
 const PATH_PKG = "path";
 
 const cmuConfigJs = `module.exports = {
@@ -99,27 +100,25 @@ export async function generateConfigFiles(
   language: string,
 ): Promise<void> {
   try {
-    const fs =
-      (await import(FS_EXTRA_PKG)).default || (await import(FS_EXTRA_PKG));
     const path = await import(PATH_PKG);
 
     const isTypeScript = language === TYPESCRIPT_LANG;
     const configFileName = isTypeScript ? TS_CONFIG_FILE : JS_CONFIG_FILE;
     const configContent = isTypeScript ? cmuConfigTs : cmuConfigJs;
 
-    await fs.writeFile(
+    await writeFile(
       path.join(projectPath, configFileName),
       configContent,
       ENCODING,
     );
 
-    await fs.writeFile(
+    await writeFile(
       path.join(projectPath, ENV_EXAMPLE_FILE),
       envExampleTemplate,
       ENCODING,
     );
 
-    await fs.writeFile(
+    await writeFile(
       path.join(projectPath, GITIGNORE_FILE),
       gitignoreTemplate,
       ENCODING,
