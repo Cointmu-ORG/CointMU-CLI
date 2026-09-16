@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
+import { fail, printCliError } from "../utils/errors";
 import {
   ACCOUNT_COUNT,
   bootHardhat,
@@ -61,33 +61,21 @@ export function warnOnNonLoopbackHost(host: string): void {
  */
 async function runNodeConnect(options: { network?: string }): Promise<void> {
   const isVerbose = nodeCommand.opts().verbose;
-  try {
-    const { getDynamicNetwork } = await import("../utils/network");
-    const { ethers } = await import("ethers");
+  const { getDynamicNetwork } = await import("../utils/network");
+  const { ethers } = await import("ethers");
 
-    const networkConfig = await getDynamicNetwork(options.network);
-    const rpcUrl = networkConfig.url;
+  const networkConfig = await getDynamicNetwork(options.network);
+  const rpcUrl = networkConfig.url;
 
-    console.log(`Pinging ${rpcUrl}...`);
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
-    const network = await provider.getNetwork();
-    const blockNumber = await provider.getBlockNumber();
+  console.log(`Pinging ${rpcUrl}...`);
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const network = await provider.getNetwork();
+  const blockNumber = await provider.getBlockNumber();
 
-    console.log("Connected to the CointMU node.");
-    console.log(`Network      : ${network.name}`);
-    console.log(`Chain ID     : ${network.chainId}`);
-    console.log(`Block number : ${blockNumber}`);
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m node connect failed");
-
-    printCliError(error, isVerbose);
-
-    console.error(
-      "\x1b[2mhint:\x1b[0m start a local node with `cmu node start`, or check the endpoint with `cmu network info`.",
-    );
-
-    process.exit(EXIT_FAILURE);
-  }
+  console.log("Connected to the CointMU node.");
+  console.log(`Network      : ${network.name}`);
+  console.log(`Chain ID     : ${network.chainId}`);
+  console.log(`Block number : ${blockNumber}`);
 }
 
 /**
@@ -102,104 +90,96 @@ async function runNodeStart(options: {
   log?: boolean;
 }): Promise<void> {
   const isVerbose = nodeCommand.opts().verbose;
-  try {
-    const { killPort } = await import("../utils/process");
-    const parsedPort = parseInt(options.port, 10);
-    const port = !isNaN(parsedPort) ? parsedPort : LOCAL_PORT;
+  const { killPort } = await import("../utils/process");
+  const parsedPort = parseInt(options.port, 10);
+  const port = !isNaN(parsedPort) ? parsedPort : LOCAL_PORT;
 
-    if (isNaN(port) || port <= 0 || port > MAX_PORT) {
-      throw new Error(
-        `invalid port '${options.port}'.\n` +
-          `\x1b[2mhint:\x1b[0m pass a port between 1 and ${MAX_PORT}, e.g. \`cmu node start -p ${LOCAL_PORT}\`.`,
-      );
-    }
-
-    warnOnNonLoopbackHost(options.host);
-
-    await killPort(port);
-
-    const console_ = silenceHardhatNoise({
-      verbose: isVerbose,
-      // Hardhat only complains about this when driven from outside a project,
-      // which is exactly how `cmu node start` drives it.
-      extraPatterns: ["You are not inside a Hardhat project"],
-      onLog: (msg, _args, originalLog) => {
-        // Reformat the provider's RPC chatter, or drop it when --log is off.
-        if (
-          msg.includes("eth_") ||
-          msg.includes("net_") ||
-          msg.includes("web3_")
-        ) {
-          if (options.log) {
-            const match = msg.match(/(eth_|net_|web3_)[a-zA-Z0-9_]+/);
-            originalLog(`\x1b[2mrpc:\x1b[0m ${match ? match[0] : msg.trim()}`);
-          }
-          return true;
-        }
-
-        // Suppress hardhat's own startup banner; we print our own below.
-        return (
-          msg.includes("Started HTTP and WebSocket JSON-RPC server at") ||
-          msg.includes("Account #") ||
-          msg.includes("Private Key:") ||
-          msg.includes("WARNING: These accounts, and their private keys") ||
-          msg.includes(
-            "Any funds sent to them on Mainnet or any other live network WILL BE LOST.",
-          ) ||
-          msg.includes("hardhat_")
-        );
-      },
-    });
-    const originalConsoleLog = console_.log;
-
-    const { hre, mnemonic: resolvedMnemonic } = await bootHardhat({
-      mnemonic: options.mnemonic,
-      loggingEnabled: !!options.log || !!isVerbose,
-    });
-
-    const host = options.host;
-
-    originalConsoleLog(`\nCointMU DevNet listening on http://${host}:${port}`);
-    originalConsoleLog(`Chain ID: ${LOCAL_CHAIN_ID}\n`);
-    originalConsoleLog(`Mnemonic: ${resolvedMnemonic}`);
-    originalConsoleLog(
-      `\x1b[33mwarning:\x1b[0m development mnemonic - never use it on a live network.\n`,
+  if (isNaN(port) || port <= 0 || port > MAX_PORT) {
+    throw new Error(
+      `invalid port '${options.port}'.\n` +
+        `\x1b[2mhint:\x1b[0m pass a port between 1 and ${MAX_PORT}, e.g. \`cmu node start -p ${LOCAL_PORT}\`.`,
     );
-    originalConsoleLog("\nPre-funded developer accounts (100 ETH each):");
-
-    const { ethers } = await import("ethers");
-    let index = 0;
-    const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic);
-    for (let i = 0; i < ACCOUNT_COUNT; i++) {
-      const wallet = ethers.HDNodeWallet.fromMnemonic(
-        mnemonicObj,
-        `m/44'/60'/0'/0/${i}`,
-      );
-      originalConsoleLog(`\nAccount #${index}`);
-      originalConsoleLog(`Address     : ${wallet.address}`);
-      originalConsoleLog(`Private key : ${wallet.privateKey}`);
-      index++;
-    }
-    originalConsoleLog("\n");
-
-    process.on("SIGINT", () => {
-      originalConsoleLog("\nStopping the CointMU DevNet...");
-      originalConsoleLog("CointMU DevNet stopped.");
-      process.exit(EXIT_SUCCESS);
-    });
-
-    // Run the hardhat node natively
-    await hre.tasks.getTask("node").run({
-      hostname: host,
-      port: port,
-    });
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m node start failed");
-
-    printCliError(error, isVerbose);
-
-    process.exit(EXIT_FAILURE);
   }
+
+  warnOnNonLoopbackHost(options.host);
+
+  await killPort(port);
+
+  const console_ = silenceHardhatNoise({
+    verbose: isVerbose,
+    // Hardhat only complains about this when driven from outside a project,
+    // which is exactly how `cmu node start` drives it.
+    extraPatterns: ["You are not inside a Hardhat project"],
+    onLog: (msg, _args, originalLog) => {
+      // Reformat the provider's RPC chatter, or drop it when --log is off.
+      if (
+        msg.includes("eth_") ||
+        msg.includes("net_") ||
+        msg.includes("web3_")
+      ) {
+        if (options.log) {
+          const match = msg.match(/(eth_|net_|web3_)[a-zA-Z0-9_]+/);
+          originalLog(`\x1b[2mrpc:\x1b[0m ${match ? match[0] : msg.trim()}`);
+        }
+        return true;
+      }
+
+      // Suppress hardhat's own startup banner; we print our own below.
+      return (
+        msg.includes("Started HTTP and WebSocket JSON-RPC server at") ||
+        msg.includes("Account #") ||
+        msg.includes("Private Key:") ||
+        msg.includes("WARNING: These accounts, and their private keys") ||
+        msg.includes(
+          "Any funds sent to them on Mainnet or any other live network WILL BE LOST.",
+        ) ||
+        msg.includes("hardhat_")
+      );
+    },
+  });
+  const originalConsoleLog = console_.log;
+
+  const { hre, mnemonic: resolvedMnemonic } = await bootHardhat({
+    mnemonic: options.mnemonic,
+    loggingEnabled: !!options.log || !!isVerbose,
+  });
+
+  const host = options.host;
+
+  originalConsoleLog(`\nCointMU DevNet listening on http://${host}:${port}`);
+  originalConsoleLog(`Chain ID: ${LOCAL_CHAIN_ID}\n`);
+  originalConsoleLog(`Mnemonic: ${resolvedMnemonic}`);
+  originalConsoleLog(
+    `\x1b[33mwarning:\x1b[0m development mnemonic - never use it on a live network.\n`,
+  );
+  originalConsoleLog("\nPre-funded developer accounts (100 ETH each):");
+
+  const { ethers } = await import("ethers");
+  let index = 0;
+  const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic);
+  for (let i = 0; i < ACCOUNT_COUNT; i++) {
+    const wallet = ethers.HDNodeWallet.fromMnemonic(
+      mnemonicObj,
+      `m/44'/60'/0'/0/${i}`,
+    );
+    originalConsoleLog(`\nAccount #${index}`);
+    originalConsoleLog(`Address     : ${wallet.address}`);
+    originalConsoleLog(`Private key : ${wallet.privateKey}`);
+    index++;
+  }
+  originalConsoleLog("\n");
+
+  process.on("SIGINT", () => {
+    originalConsoleLog("\nStopping the CointMU DevNet...");
+    originalConsoleLog("CointMU DevNet stopped.");
+    process.exit(EXIT_SUCCESS);
+  });
+
+  // Run the hardhat node natively
+  await hre.tasks.getTask("node").run({
+    hostname: host,
+    port: port,
+  });
 }
 
 export const nodeCommand = new Command("node")
@@ -210,7 +190,9 @@ nodeCommand
   .command("connect")
   .description("Ping the configured RPC endpoint")
   .option("-n, --network <name>", "Network to connect to")
-  .action(runNodeConnect);
+  .action((options) =>
+    runNodeConnect(options).catch(fail("node connect", nodeCommand.opts())),
+  );
 
 nodeCommand
   .command("start")
@@ -226,4 +208,6 @@ nodeCommand
     "12-word mnemonic for deterministic accounts",
   )
   .option("-l, --log", "Log RPC calls as they arrive")
-  .action(runNodeStart);
+  .action((options) =>
+    runNodeStart(options).catch(fail("node start", nodeCommand.opts())),
+  );

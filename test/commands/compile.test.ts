@@ -87,12 +87,12 @@ describe("runCompile trust gate", () => {
     process.stdin.isTTY = false;
     const { runCompile } = await import("../../src/commands/compile");
 
-    await expect(runCompile()).rejects.toThrow("exit:1");
+    // runCompile reports by throwing; the command handler turns that into the
+    // "compile failed" banner and the exit code.
+    await expect(runCompile()).rejects.toThrow(/non-interactive session/);
+    await expect(runCompile()).rejects.toThrow(/--yes/);
 
     expect(fs.existsSync(marker)).toBe(false);
-    const errors = (console.error as any).mock.calls.flat().join("\n");
-    expect(errors).toMatch(/non-interactive session/);
-    expect(errors).toMatch(/--yes/);
   });
 
   it("proceeds past the gate with --yes, without prompting", async () => {
@@ -102,13 +102,12 @@ describe("runCompile trust gate", () => {
     const { runCompile } = await import("../../src/commands/compile");
 
     // No contracts/ dir, so this is the first failure *after* the gate.
-    await expect(runCompile({ yes: true })).rejects.toThrow("exit:1");
+    await expect(runCompile({ yes: true })).rejects.toThrow(
+      /contracts\/ directory not found/,
+    );
 
     expect(prompt).not.toHaveBeenCalled();
     expect(fs.existsSync(marker)).toBe(true);
-    expect((console.error as any).mock.calls.flat().join("\n")).toMatch(
-      /contracts\/ directory not found/,
-    );
   });
 });
 

@@ -44,3 +44,26 @@ export function printCliError(error: unknown, verbose?: boolean): void {
       : String(error);
   console.error(scrubHomeDir(text));
 }
+
+/**
+ * Builds the rejection handler every command ends with: name the command that
+ * failed, print the error the way --verbose asked for, exit non-zero.
+ *
+ * Returned rather than called so a command handler reads
+ * `run(options).catch(fail("network info", options))`, which keeps the
+ * reporting out of the command body and off every early return inside it.
+ *
+ * @param {string} label - The command, as the user typed it ("network info").
+ * @param {object} [options] - The command's options; only `verbose` is read.
+ * @returns {(error: unknown) => never} A handler that never returns.
+ */
+export function fail(
+  label: string,
+  options: { verbose?: boolean } = {},
+): (error: unknown) => never {
+  return (error: unknown): never => {
+    console.error(`\n\x1b[31merror:\x1b[0m ${label} failed`);
+    printCliError(error, options.verbose);
+    process.exit(1);
+  };
+}

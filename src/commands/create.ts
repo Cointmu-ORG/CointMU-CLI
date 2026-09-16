@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
+import { fail } from "../utils/errors";
 
 const EXIT_FAILURE = 1;
 
@@ -56,109 +56,101 @@ async function runCreate(
   project: string | undefined,
   options: CreateOptions,
 ): Promise<void> {
-  try {
-    const path = await import("path");
-    const { default: inquirer } = await import("inquirer");
-    const { templateChoices, validTemplates, generateProject } =
-      await import("../utils/template");
-    const { getRandomQuote } = await import("../utils/quotes");
+  const path = await import("path");
+  const { default: inquirer } = await import("inquirer");
+  const { templateChoices, validTemplates, generateProject } =
+    await import("../utils/template");
+  const { getRandomQuote } = await import("../utils/quotes");
 
-    let projectName = project?.trim() ?? "";
+  let projectName = project?.trim() ?? "";
 
-    if (!projectName) {
-      const projectAnswer = await inquirer.prompt([
-        {
-          type: "input",
-          name: "projectName",
-          message: "Project name:",
-          validate: (value: string) =>
-            /^[a-zA-Z0-9_-]+$/.test(value.trim()) ||
-            "project name may only contain letters, digits, hyphens and underscores.",
-        },
-      ]);
+  if (!projectName) {
+    const projectAnswer = await inquirer.prompt([
+      {
+        type: "input",
+        name: "projectName",
+        message: "Project name:",
+        validate: (value: string) =>
+          /^[a-zA-Z0-9_-]+$/.test(value.trim()) ||
+          "project name may only contain letters, digits, hyphens and underscores.",
+      },
+    ]);
 
-      projectName = projectAnswer.projectName.trim();
-    }
-
-    if (!/^[a-zA-Z0-9_-]+$/.test(projectName)) {
-      throw new Error(
-        "project name may only contain letters, digits, hyphens and underscores.",
-      );
-    }
-
-    const projectPath = path.resolve(process.cwd(), projectName);
-
-    if (existsSync(projectPath)) {
-      throw new Error(
-        `directory '${projectName}' already exists.\n` +
-          "\x1b[2mhint:\x1b[0m choose another name, or remove the existing directory first.",
-      );
-    }
-
-    let template: string = options.template ?? "";
-    let language: string = options.language ?? "";
-
-    const questions = [];
-
-    if (!language) {
-      questions.push({
-        type: "list",
-        name: "language",
-        message: "Language:",
-        choices: [
-          { name: "TypeScript", value: "typescript" },
-          { name: "JavaScript", value: "javascript" },
-        ],
-      });
-    }
-
-    if (!template) {
-      questions.push({
-        type: "list",
-        name: "template",
-        message: "Template:",
-        choices: templateChoices,
-      });
-    }
-
-    if (questions.length > 0) {
-      const answers = (await inquirer.prompt(questions)) as {
-        language?: string;
-        template?: string;
-      };
-
-      if (!language && answers.language) language = answers.language;
-      if (!template && answers.template) template = answers.template;
-    }
-
-    if (!validTemplates.includes(template)) {
-      throw new Error(
-        `unknown template '${template}'.\n` +
-          `\x1b[2mhint:\x1b[0m ` +
-          `choose one of: ${validTemplates.join(", ")}`,
-      );
-    }
-
-    const validLanguages = ["typescript", "javascript"];
-
-    if (!validLanguages.includes(language)) {
-      throw new Error(
-        `unknown language '${language}'.\n` +
-          `\x1b[2mhint:\x1b[0m ` +
-          `choose one of: ${validLanguages.join(", ")}`,
-      );
-    }
-
-    await generateProject(projectPath, template, language);
-
-    printWelcomeBanner(projectName, getRandomQuote());
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m create failed");
-
-    printCliError(error, options.verbose);
-
-    process.exit(EXIT_FAILURE);
+    projectName = projectAnswer.projectName.trim();
   }
+
+  if (!/^[a-zA-Z0-9_-]+$/.test(projectName)) {
+    throw new Error(
+      "project name may only contain letters, digits, hyphens and underscores.",
+    );
+  }
+
+  const projectPath = path.resolve(process.cwd(), projectName);
+
+  if (existsSync(projectPath)) {
+    throw new Error(
+      `directory '${projectName}' already exists.\n` +
+        "\x1b[2mhint:\x1b[0m choose another name, or remove the existing directory first.",
+    );
+  }
+
+  let template: string = options.template ?? "";
+  let language: string = options.language ?? "";
+
+  const questions = [];
+
+  if (!language) {
+    questions.push({
+      type: "list",
+      name: "language",
+      message: "Language:",
+      choices: [
+        { name: "TypeScript", value: "typescript" },
+        { name: "JavaScript", value: "javascript" },
+      ],
+    });
+  }
+
+  if (!template) {
+    questions.push({
+      type: "list",
+      name: "template",
+      message: "Template:",
+      choices: templateChoices,
+    });
+  }
+
+  if (questions.length > 0) {
+    const answers = (await inquirer.prompt(questions)) as {
+      language?: string;
+      template?: string;
+    };
+
+    if (!language && answers.language) language = answers.language;
+    if (!template && answers.template) template = answers.template;
+  }
+
+  if (!validTemplates.includes(template)) {
+    throw new Error(
+      `unknown template '${template}'.\n` +
+        `\x1b[2mhint:\x1b[0m ` +
+        `choose one of: ${validTemplates.join(", ")}`,
+    );
+  }
+
+  const validLanguages = ["typescript", "javascript"];
+
+  if (!validLanguages.includes(language)) {
+    throw new Error(
+      `unknown language '${language}'.\n` +
+        `\x1b[2mhint:\x1b[0m ` +
+        `choose one of: ${validLanguages.join(", ")}`,
+    );
+  }
+
+  await generateProject(projectPath, template, language);
+
+  printWelcomeBanner(projectName, getRandomQuote());
 }
 
 export const createCommand = new Command("create")
@@ -173,4 +165,6 @@ export const createCommand = new Command("create")
     "Language to use (typescript, javascript)",
   )
   .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runCreate);
+  .action((project, options) =>
+    runCreate(project, options).catch(fail("create", options)),
+  );

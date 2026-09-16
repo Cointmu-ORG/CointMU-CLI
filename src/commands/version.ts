@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
+import { fail } from "../utils/errors";
 
 const EXIT_FAILURE = 1;
 
@@ -35,45 +35,39 @@ async function resolveGitCommit(): Promise<string> {
 export async function runVersion(
   options: { verbose?: boolean } = {},
 ): Promise<void> {
-  try {
-    const path = await import("path");
+  const path = await import("path");
 
-    const pkgPath = path.resolve(__dirname, "..", "package.json");
+  const pkgPath = path.resolve(__dirname, "..", "package.json");
 
-    let pkg = { version: "unknown", codename: "unknown" };
+  let pkg = { version: "unknown", codename: "unknown" };
 
-    if (existsSync(pkgPath)) {
-      pkg = JSON.parse(await readFile(pkgPath, "utf8"));
-    }
-
-    // Inlined by tsup at build time; undefined when running unbundled.
-    const build =
-      typeof __CMU_BUILD_ID__ !== "undefined" ? __CMU_BUILD_ID__ : "unknown";
-
-    const solcRaw = await import("solc");
-    const solc = solcRaw.default || solcRaw;
-    const { ethers } = await import("ethers");
-    const gitCommit = await resolveGitCommit();
-
-    console.log("cmu");
-    console.log(`version      : ${pkg.version}`);
-    console.log(`codename     : ${pkg.codename}`);
-    console.log(`build        : ${build}`);
-    console.log(`architecture : ${process.arch}`);
-    console.log(`node         : ${process.version}`);
-    console.log(
-      `solidity     : ${typeof solc.version === "function" ? solc.version() : "unknown"}`,
-    );
-    console.log(`ethers       : ${ethers.version}`);
-    console.log(`git commit   : ${gitCommit}`);
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m version failed");
-    printCliError(error, options.verbose);
-    process.exit(EXIT_FAILURE);
+  if (existsSync(pkgPath)) {
+    pkg = JSON.parse(await readFile(pkgPath, "utf8"));
   }
+
+  // Inlined by tsup at build time; undefined when running unbundled.
+  const build =
+    typeof __CMU_BUILD_ID__ !== "undefined" ? __CMU_BUILD_ID__ : "unknown";
+
+  const solcRaw = await import("solc");
+  const solc = solcRaw.default || solcRaw;
+  const { ethers } = await import("ethers");
+  const gitCommit = await resolveGitCommit();
+
+  console.log("cmu");
+  console.log(`version      : ${pkg.version}`);
+  console.log(`codename     : ${pkg.codename}`);
+  console.log(`build        : ${build}`);
+  console.log(`architecture : ${process.arch}`);
+  console.log(`node         : ${process.version}`);
+  console.log(
+    `solidity     : ${typeof solc.version === "function" ? solc.version() : "unknown"}`,
+  );
+  console.log(`ethers       : ${ethers.version}`);
+  console.log(`git commit   : ${gitCommit}`);
 }
 
 export const versionCommand = new Command("version")
   .description("Show CLI, runtime and dependency versions")
   .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runVersion);
+  .action((options) => runVersion(options).catch(fail("version", options)));

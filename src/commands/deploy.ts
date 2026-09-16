@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { readdir } from "fs/promises";
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
+import { fail } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 
 const EXIT_SUCCESS = 0;
@@ -132,8 +132,10 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   );
 
   console.log("Compiling contracts...");
+  // Compile failures keep reporting themselves as "compile failed" rather than
+  // being relabelled by the command that triggered the compile.
   const { runCompile } = await import("./compile");
-  await runCompile({ yes: options.yes });
+  await runCompile({ yes: options.yes }).catch(fail("compile", options));
 
   const { getDeployNetwork } = await import("../utils/network");
   const network = await getDeployNetwork(options.network, {
@@ -224,14 +226,6 @@ export const deployCommand = new Command("deploy")
       "PRIVATE_KEY through the environment. Only deploy projects you trust; see the\n" +
       "'Trust Model' section of the README.",
   )
-  .action(async (options: DeployOptions) => {
-    try {
-      process.exit(await runDeploy(options));
-    } catch (error) {
-      console.error("\n\x1b[31merror:\x1b[0m deploy failed");
-
-      printCliError(error, options.verbose);
-
-      process.exit(EXIT_FAILURE);
-    }
-  });
+  .action((options: DeployOptions) =>
+    runDeploy(options).then(process.exit, fail("deploy", options)),
+  );

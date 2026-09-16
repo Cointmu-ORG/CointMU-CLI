@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
+import { fail } from "../utils/errors";
 import { getSessionFilePath } from "../utils/session";
 
 const EXIT_FAILURE = 1;
@@ -30,21 +30,13 @@ export function isValidRpcUrl(value: string): boolean {
 async function runNetworkInfo(
   options: { verbose?: boolean } = {},
 ): Promise<void> {
-  try {
-    const { activeNetwork } = await import("../utils/network");
-    const network = await activeNetwork();
+  const { activeNetwork } = await import("../utils/network");
+  const network = await activeNetwork();
 
-    console.log("--- Active network ---");
-    console.log(`Network      : ${network.name}`);
-    console.log(`RPC endpoint : ${network.rpcUrl}`);
-    console.log("----------------------");
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m network info failed");
-
-    printCliError(error, options.verbose);
-
-    process.exit(EXIT_FAILURE);
-  }
+  console.log("--- Active network ---");
+  console.log(`Network      : ${network.name}`);
+  console.log(`RPC endpoint : ${network.rpcUrl}`);
+  console.log("----------------------");
 }
 
 /**
@@ -57,52 +49,44 @@ async function runNetworkPing(
   name?: string,
   options: { verbose?: boolean } = {},
 ): Promise<void> {
-  try {
-    const { loadNetworks } = await import("../utils/networkStorage");
+  const { loadNetworks } = await import("../utils/networkStorage");
 
-    let rpcUrl = "";
-    let networkName = "";
+  let rpcUrl = "";
+  let networkName = "";
 
-    if (name) {
-      const networks = await loadNetworks();
-      const network = networks.find((n: any) => n.name === name);
-      if (!network) {
-        throw new Error(
-          `network '${name}' is not saved.\n` +
-            "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`.",
-        );
-      }
-      rpcUrl = network.rpcUrl;
-      networkName = network.name;
-    } else {
-      const { activeNetwork } = await import("../utils/network");
-      const network = await activeNetwork(
-        "pass a network name, or run `cmu wallet login` first.",
+  if (name) {
+    const networks = await loadNetworks();
+    const network = networks.find((n: any) => n.name === name);
+    if (!network) {
+      throw new Error(
+        `network '${name}' is not saved.\n` +
+          "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`.",
       );
-      rpcUrl = network.rpcUrl;
-      networkName = network.name;
     }
-
-    console.log(`Pinging ${networkName} (${rpcUrl})...`);
-    const { ethers } = await import("ethers");
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
-
-    const startTime = Date.now();
-    const blockNumber = await provider.getBlockNumber();
-    const latency = Date.now() - startTime;
-
-    console.log("--- Ping result ---");
-    console.log(`Network      : ${networkName}`);
-    console.log(`Block number : ${blockNumber}`);
-    console.log(`Latency      : ${latency}ms`);
-    console.log("-------------------");
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m network ping failed");
-
-    printCliError(error, options.verbose);
-
-    process.exit(EXIT_FAILURE);
+    rpcUrl = network.rpcUrl;
+    networkName = network.name;
+  } else {
+    const { activeNetwork } = await import("../utils/network");
+    const network = await activeNetwork(
+      "pass a network name, or run `cmu wallet login` first.",
+    );
+    rpcUrl = network.rpcUrl;
+    networkName = network.name;
   }
+
+  console.log(`Pinging ${networkName} (${rpcUrl})...`);
+  const { ethers } = await import("ethers");
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+  const startTime = Date.now();
+  const blockNumber = await provider.getBlockNumber();
+  const latency = Date.now() - startTime;
+
+  console.log("--- Ping result ---");
+  console.log(`Network      : ${networkName}`);
+  console.log(`Block number : ${blockNumber}`);
+  console.log(`Latency      : ${latency}ms`);
+  console.log("-------------------");
 }
 
 /**
@@ -115,30 +99,22 @@ async function runNetworkSave(
   url: string,
   options: { name?: string; verbose?: boolean } = {},
 ): Promise<void> {
-  try {
-    if (!options.name) {
-      throw new Error(
-        "--name is required.\n" +
-          "\x1b[2mhint:\x1b[0m e.g. `cmu network save http://127.0.0.1:8585 --name local`.",
-      );
-    }
-    if (!isValidRpcUrl(url)) {
-      throw new Error(
-        `invalid RPC endpoint '${url}'.\n` +
-          "\x1b[2mhint:\x1b[0m pass a full http:// or https:// URL, e.g. `cmu network save http://127.0.0.1:8585 --name local`.",
-      );
-    }
-
-    const { saveNetwork } = await import("../utils/networkStorage");
-    await saveNetwork(options.name, url);
-    console.log(`Saved network '${options.name}' (${url})`);
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m network save failed");
-
-    printCliError(error, options.verbose);
-
-    process.exit(EXIT_FAILURE);
+  if (!options.name) {
+    throw new Error(
+      "--name is required.\n" +
+        "\x1b[2mhint:\x1b[0m e.g. `cmu network save http://127.0.0.1:8585 --name local`.",
+    );
   }
+  if (!isValidRpcUrl(url)) {
+    throw new Error(
+      `invalid RPC endpoint '${url}'.\n` +
+        "\x1b[2mhint:\x1b[0m pass a full http:// or https:// URL, e.g. `cmu network save http://127.0.0.1:8585 --name local`.",
+    );
+  }
+
+  const { saveNetwork } = await import("../utils/networkStorage");
+  await saveNetwork(options.name, url);
+  console.log(`Saved network '${options.name}' (${url})`);
 }
 
 /**
@@ -151,40 +127,32 @@ async function runNetworkDelete(
   name: string,
   options: { verbose?: boolean } = {},
 ): Promise<void> {
-  try {
-    const { loadNetworks, deleteNetwork } =
-      await import("../utils/networkStorage");
+  const { loadNetworks, deleteNetwork } =
+    await import("../utils/networkStorage");
 
-    const networks = await loadNetworks();
-    if (!networks.some((n: any) => n.name === name)) {
+  const networks = await loadNetworks();
+  if (!networks.some((n: any) => n.name === name)) {
+    throw new Error(
+      `network '${name}' is not saved.\n` +
+        "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`.",
+    );
+  }
+
+  const sessionFile = getSessionFilePath();
+  if (existsSync(sessionFile)) {
+    const session = JSON.parse(await readFile(sessionFile, "utf8"));
+    if (session.activeNetwork === name) {
       throw new Error(
-        `network '${name}' is not saved.\n` +
-          "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`.",
+        `network '${name}' is currently active and cannot be deleted.\n` +
+          "\x1b[2mhint:\x1b[0m switch away first with `cmu network use <name>`.",
       );
     }
-
-    const sessionFile = getSessionFilePath();
-    if (existsSync(sessionFile)) {
-      const session = JSON.parse(await readFile(sessionFile, "utf8"));
-      if (session.activeNetwork === name) {
-        throw new Error(
-          `network '${name}' is currently active and cannot be deleted.\n` +
-            "\x1b[2mhint:\x1b[0m switch away first with `cmu network use <name>`.",
-        );
-      }
-    }
-
-    if (!(await deleteNetwork(name))) {
-      throw new Error(`could not delete network '${name}'.`);
-    }
-    console.log(`Deleted network '${name}'`);
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m network delete failed");
-
-    printCliError(error, options.verbose);
-
-    process.exit(EXIT_FAILURE);
   }
+
+  if (!(await deleteNetwork(name))) {
+    throw new Error(`could not delete network '${name}'.`);
+  }
+  console.log(`Deleted network '${name}'`);
 }
 
 /**
@@ -197,38 +165,30 @@ async function runNetworkUse(
   name: string,
   options: { verbose?: boolean } = {},
 ): Promise<void> {
-  try {
-    const { loadNetworks } = await import("../utils/networkStorage");
-    const { writeSessionFile } = await import("../utils/session");
+  const { loadNetworks } = await import("../utils/networkStorage");
+  const { writeSessionFile } = await import("../utils/session");
 
-    const networks = await loadNetworks();
-    const network = networks.find((n: any) => n.name === name);
-    if (!network) {
-      throw new Error(
-        `network '${name}' is not saved.\n` +
-          "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`.",
-      );
-    }
-
-    const sessionFile = getSessionFilePath();
-    if (!existsSync(sessionFile)) {
-      throw new Error(
-        "no active session.\n" +
-          "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
-      );
-    }
-
-    const session = JSON.parse(await readFile(sessionFile, "utf8"));
-    session.activeNetwork = name;
-    await writeSessionFile(sessionFile, session);
-    console.log(`Active network is now ${network.name}`);
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m network use failed");
-
-    printCliError(error, options.verbose);
-
-    process.exit(EXIT_FAILURE);
+  const networks = await loadNetworks();
+  const network = networks.find((n: any) => n.name === name);
+  if (!network) {
+    throw new Error(
+      `network '${name}' is not saved.\n` +
+        "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`.",
+    );
   }
+
+  const sessionFile = getSessionFilePath();
+  if (!existsSync(sessionFile)) {
+    throw new Error(
+      "no active session.\n" +
+        "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
+    );
+  }
+
+  const session = JSON.parse(await readFile(sessionFile, "utf8"));
+  session.activeNetwork = name;
+  await writeSessionFile(sessionFile, session);
+  console.log(`Active network is now ${network.name}`);
 }
 
 /**
@@ -239,35 +199,27 @@ async function runNetworkUse(
 async function runNetworkList(
   options: { verbose?: boolean } = {},
 ): Promise<void> {
-  try {
-    const { loadNetworks } = await import("../utils/networkStorage");
+  const { loadNetworks } = await import("../utils/networkStorage");
 
-    const networks = await loadNetworks();
-    const { activeNetworkName } = await import("../utils/network");
-    const activeName = await activeNetworkName();
+  const networks = await loadNetworks();
+  const { activeNetworkName } = await import("../utils/network");
+  const activeName = await activeNetworkName();
 
-    console.log("\nSaved networks");
-    console.log(
-      "==========================================================================",
-    );
-    console.log("| Active | Name                 | RPC endpoint");
-    console.log(
-      "--------------------------------------------------------------------------",
-    );
-    for (const net of networks) {
-      const isActive = net.name === activeName ? "[*]   " : "      ";
-      console.log(`| ${isActive} | ${net.name.padEnd(20)} | ${net.rpcUrl}`);
-    }
-    console.log(
-      "==========================================================================\n",
-    );
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m network list failed");
-
-    printCliError(error, options.verbose);
-
-    process.exit(EXIT_FAILURE);
+  console.log("\nSaved networks");
+  console.log(
+    "==========================================================================",
+  );
+  console.log("| Active | Name                 | RPC endpoint");
+  console.log(
+    "--------------------------------------------------------------------------",
+  );
+  for (const net of networks) {
+    const isActive = net.name === activeName ? "[*]   " : "      ";
+    console.log(`| ${isActive} | ${net.name.padEnd(20)} | ${net.rpcUrl}`);
   }
+  console.log(
+    "==========================================================================\n",
+  );
 }
 
 /**
@@ -324,7 +276,9 @@ export const networkCommand = new Command("network")
   .option("-l, --list", "Deprecated: use `cmu network list`")
   .option("-D, --delete <name>", "Deprecated: use `cmu network delete`")
   .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runNetworkLegacy);
+  .action((options) =>
+    runNetworkLegacy(options).catch(fail("network", options)),
+  );
 
 networkCommand
   .command("save <url>")
@@ -336,36 +290,47 @@ networkCommand
   // subcommand name. Merge the root's options so `network save <url> --name x`
   // sees the name wherever commander parked it; runNetworkSave() reports a
   // missing name itself, with a hint the built-in required check cannot give.
-  .action((url, options, command) =>
-    runNetworkSave(url, { ...command.parent.opts(), ...options }),
-  );
+  .action((url, options, command) => {
+    const merged = { ...command.parent.opts(), ...options };
+    return runNetworkSave(url, merged).catch(fail("network save", merged));
+  });
 
 networkCommand
   .command("list")
   .description("List all saved networks")
   .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runNetworkList);
+  .action((options) =>
+    runNetworkList(options).catch(fail("network list", options)),
+  );
 
 networkCommand
   .command("use <name>")
   .description("Switch the active network")
   .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runNetworkUse);
+  .action((name, options) =>
+    runNetworkUse(name, options).catch(fail("network use", options)),
+  );
 
 networkCommand
   .command("delete <name>")
   .description("Delete a saved network")
   .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runNetworkDelete);
+  .action((name, options) =>
+    runNetworkDelete(name, options).catch(fail("network delete", options)),
+  );
 
 networkCommand
   .command("info")
   .description("Show the active network")
   .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runNetworkInfo);
+  .action((options) =>
+    runNetworkInfo(options).catch(fail("network info", options)),
+  );
 
 networkCommand
   .command("ping [name]")
   .description("Ping a network to check connectivity and latency")
   .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runNetworkPing);
+  .action((name, options) =>
+    runNetworkPing(name, options).catch(fail("network ping", options)),
+  );

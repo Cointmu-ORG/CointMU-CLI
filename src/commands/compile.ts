@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { mkdir, readdir, readFile, writeFile } from "fs/promises";
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
+import { fail } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 import { registerTsNode } from "../utils/tsNode";
 
@@ -62,111 +62,103 @@ export function findImports(
 export async function runCompile(
   options: { verbose?: boolean; yes?: boolean } = {},
 ): Promise<void> {
-  try {
-    const solc = require("solc");
-    const path = require("path");
+  const solc = require("solc");
+  const path = require("path");
 
-    const cwd = process.cwd();
-    const contractsDir = path.resolve(cwd, "contracts");
-    const artifactsDir = path.resolve(cwd, "artifacts");
+  const cwd = process.cwd();
+  const contractsDir = path.resolve(cwd, "contracts");
+  const artifactsDir = path.resolve(cwd, "artifacts");
 
-    let compilerSettings: Record<string, unknown> = {};
-    const configPath = findProjectConfig(cwd);
+  let compilerSettings: Record<string, unknown> = {};
+  const configPath = findProjectConfig(cwd);
 
-    if (configPath) {
-      // require()ing the config runs project code, so gate it the same way
-      // `cmu deploy` gates the scripts in deploy/.
-      await confirmProjectTrust([configPath], { yes: options.yes });
-      try {
-        if (configPath.endsWith(".ts")) {
-          await registerTsNode();
-        }
-        const loadedConfig = require(configPath);
-        const cmuConfig = loadedConfig?.default ?? loadedConfig;
-        compilerSettings = cmuConfig?.compiler?.settings ?? {};
-      } catch {
-        console.warn(
-          `\x1b[33mwarning:\x1b[0m could not load ${path.basename(configPath)}; using default compiler settings.`,
-        );
+  if (configPath) {
+    // require()ing the config runs project code, so gate it the same way
+    // `cmu deploy` gates the scripts in deploy/.
+    await confirmProjectTrust([configPath], { yes: options.yes });
+    try {
+      if (configPath.endsWith(".ts")) {
+        await registerTsNode();
       }
-    }
-
-    if (!existsSync(contractsDir)) {
-      throw new Error(
-        "contracts/ directory not found.\n" +
-          "\x1b[2mhint:\x1b[0m run `cmu compile` from the root of your CointMU project.",
+      const loadedConfig = require(configPath);
+      const cmuConfig = loadedConfig?.default ?? loadedConfig;
+      compilerSettings = cmuConfig?.compiler?.settings ?? {};
+    } catch {
+      console.warn(
+        `\x1b[33mwarning:\x1b[0m could not load ${path.basename(configPath)}; using default compiler settings.`,
       );
     }
+  }
 
-    const files = await readdir(contractsDir);
-    const solFiles = files.filter((f: string) => f.endsWith(".sol"));
-
-    if (solFiles.length === 0) {
-      console.log("No Solidity files found in contracts/.");
-      return;
-    }
-
-    const sources: Record<string, { content: string }> = {};
-    for (const file of solFiles) {
-      const filePath = path.join(contractsDir, file);
-      const content = await readFile(filePath, "utf8");
-      sources[file] = { content };
-    }
-
-    const finalSettings: Record<string, unknown> = {
-      evmVersion: DEFAULT_EVM_VERSION,
-      ...compilerSettings,
-      outputSelection: {
-        "*": {
-          "*": ["abi", "evm.bytecode.object"],
-        },
-      },
-    };
-
-    const input = {
-      language: "Solidity",
-      sources,
-      settings: finalSettings,
-    };
-
-    console.log(`Compiling ${solFiles.length} Solidity file(s)...`);
-    const output = JSON.parse(
-      solc.compile(JSON.stringify(input), { import: findImports }),
+  if (!existsSync(contractsDir)) {
+    throw new Error(
+      "contracts/ directory not found.\n" +
+        "\x1b[2mhint:\x1b[0m run `cmu compile` from the root of your CointMU project.",
     );
+  }
 
-    if (output.errors) {
-      let hasError = false;
-      for (const err of output.errors) {
-        console.error(err.formattedMessage);
-        if (err.severity === "error") hasError = true;
-      }
-      if (hasError) {
-        throw new Error(
-          "compilation aborted on Solidity errors.\n" +
-            "\x1b[2mhint:\x1b[0m fix the errors reported above, then run `cmu compile` again.",
-        );
-      }
+  const files = await readdir(contractsDir);
+  const solFiles = files.filter((f: string) => f.endsWith(".sol"));
+
+  if (solFiles.length === 0) {
+    console.log("No Solidity files found in contracts/.");
+    return;
+  }
+
+  const sources: Record<string, { content: string }> = {};
+  for (const file of solFiles) {
+    const filePath = path.join(contractsDir, file);
+    const content = await readFile(filePath, "utf8");
+    sources[file] = { content };
+  }
+
+  const finalSettings: Record<string, unknown> = {
+    evmVersion: DEFAULT_EVM_VERSION,
+    ...compilerSettings,
+    outputSelection: {
+      "*": {
+        "*": ["abi", "evm.bytecode.object"],
+      },
+    },
+  };
+
+  const input = {
+    language: "Solidity",
+    sources,
+    settings: finalSettings,
+  };
+
+  console.log(`Compiling ${solFiles.length} Solidity file(s)...`);
+  const output = JSON.parse(
+    solc.compile(JSON.stringify(input), { import: findImports }),
+  );
+
+  if (output.errors) {
+    let hasError = false;
+    for (const err of output.errors) {
+      console.error(err.formattedMessage);
+      if (err.severity === "error") hasError = true;
     }
-
-    await mkdir(artifactsDir, { recursive: true });
-
-    for (const file in output.contracts) {
-      for (const contractName in output.contracts[file]) {
-        const contract = output.contracts[file][contractName];
-        const artifactPath = path.join(artifactsDir, `${contractName}.json`);
-        await writeFile(
-          artifactPath,
-          `${JSON.stringify(contract, null, JSON_SPACES)}\n`,
-        );
-        console.log(`Compiled ${contractName}`);
-      }
+    if (hasError) {
+      throw new Error(
+        "compilation aborted on Solidity errors.\n" +
+          "\x1b[2mhint:\x1b[0m fix the errors reported above, then run `cmu compile` again.",
+      );
     }
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m compile failed");
+  }
 
-    printCliError(error, options.verbose);
+  await mkdir(artifactsDir, { recursive: true });
 
-    process.exit(EXIT_FAILURE);
+  for (const file in output.contracts) {
+    for (const contractName in output.contracts[file]) {
+      const contract = output.contracts[file][contractName];
+      const artifactPath = path.join(artifactsDir, `${contractName}.json`);
+      await writeFile(
+        artifactPath,
+        `${JSON.stringify(contract, null, JSON_SPACES)}\n`,
+      );
+      console.log(`Compiled ${contractName}`);
+    }
   }
 }
 
@@ -182,6 +174,6 @@ export const compileCommand = new Command("compile")
     "\ncmu.config.ts/js is executed as code from the project directory. Only\n" +
       "compile projects you trust; see the 'Trust Model' section of the README.",
   )
-  .action(async (options: { verbose?: boolean; yes?: boolean }) => {
-    await runCompile(options);
-  });
+  .action((options: { verbose?: boolean; yes?: boolean }) =>
+    runCompile(options).catch(fail("compile", options)),
+  );
