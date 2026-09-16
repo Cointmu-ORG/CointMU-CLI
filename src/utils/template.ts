@@ -73,22 +73,23 @@ main().catch(console.error);
 `;
 }
 
-const blankDeployTemplate = (language: string): string =>
-  `import { ethers } from 'ethers';
+const blankDeployTemplate = (language: string): string => {
+  const ethersImport =
+    language === TYPESCRIPT_LANG
+      ? "import { ethers } from 'ethers';"
+      : "const { ethers } = require('ethers');";
+
+  return `${ethersImport}
 
 async function main() {
   console.log('Deploy script executed.');
-  const provider = new ethers.JsonRpcProvider(process.env.CMU_RPC_URL || 'http://localhost:8545');
-  // Add your deployment logic here
+  // Add your deployment logic here, e.g.
+  // const provider = new ethers.JsonRpcProvider(process.env.CMU_RPC_URL);
 }
 
 main().catch(console.error);
-`.replace(
-    "import { ethers } from 'ethers';",
-    language === TYPESCRIPT_LANG
-      ? "import { ethers } from 'ethers';"
-      : "const { ethers } = require('ethers');",
-  );
+`;
+};
 
 export async function generateProject(
   projectPath: string,
