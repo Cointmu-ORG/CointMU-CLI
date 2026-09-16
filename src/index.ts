@@ -10,7 +10,14 @@ import { Command } from "commander";
 
 const EXIT_FAILURE = 1;
 
-require("dotenv").config({ quiet: true });
+// A missing .env is normal - dotenv was silent about it too, and most
+// invocations are outside a project. Anything else (unreadable file, bad
+// permissions) is a real problem the user needs to see.
+try {
+  process.loadEnvFile(path.resolve(process.cwd(), ".env"));
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+}
 process.env.HARDHAT_CONFIG = path.resolve(__dirname, "../hardhat.config.js");
 
 const pkgPath = path.resolve(__dirname, "..", "package.json");

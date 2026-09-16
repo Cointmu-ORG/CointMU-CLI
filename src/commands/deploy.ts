@@ -97,7 +97,12 @@ export async function pingNetwork(rpcUrl: string): Promise<void> {
 export async function runDeploy(options: DeployOptions): Promise<number> {
   const path = await import("path");
   const fs = (await import("fs-extra")).default || (await import("fs-extra"));
-  require("dotenv").config({ path: path.resolve(process.cwd(), ".env") });
+  // See src/index.ts: a missing .env is not an error.
+  try {
+    process.loadEnvFile(path.resolve(process.cwd(), ".env"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
 
   const deployDir = path.resolve(process.cwd(), "deploy");
 
