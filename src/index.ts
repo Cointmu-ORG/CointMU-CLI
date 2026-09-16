@@ -43,7 +43,6 @@ const commandMap: Record<string, () => Promise<Record<string, any>>> = {
   deploy: () => import("./commands/deploy"),
   wallet: () => import("./commands/wallet"),
   create: () => import("./commands/create"),
-  explorer: () => import("./commands/explorer"),
   node: () => import("./commands/node"),
   audit: () => import("./commands/audit"),
   aries: () => import("./commands/aries"),
