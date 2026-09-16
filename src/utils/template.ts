@@ -1,5 +1,5 @@
 import { generateConfigFiles } from "./configGenerator";
-import { aliases, templates } from "../templates";
+import { templates } from "../templates";
 
 const TYPESCRIPT_LANG = "typescript";
 const ENCODING = "utf8";
@@ -11,10 +11,7 @@ export const templateChoices = Object.entries(templates).map(
   ([value, spec]) => ({ name: spec.label, value }),
 );
 
-export const validTemplates = [
-  ...Object.keys(templates),
-  ...Object.keys(aliases),
-];
+export const validTemplates = Object.keys(templates);
 
 function getDeployScript(
   contractName: string,
@@ -169,7 +166,7 @@ describe("Deployment Template Test", function () {
     });
   }
 
-  const spec = templates[aliases[template] ?? template];
+  const spec = templates[template];
 
   if (!spec?.load) {
     // "blank", and anything else with no contract behind it.

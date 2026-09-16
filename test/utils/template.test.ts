@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aliases, templates } from "../../src/templates";
+import { templates } from "../../src/templates";
 import { templateChoices, validTemplates } from "../../src/utils/template";
 
 // generateProject() picks the contract straight out of this registry now, so a
@@ -8,12 +8,10 @@ import { templateChoices, validTemplates } from "../../src/utils/template";
 
 describe("template registry", () => {
   it("accounts for every template the CLI accepts", () => {
-    expect([...validTemplates].sort()).toEqual(
-      [...Object.keys(templates), ...Object.keys(aliases)].sort(),
-    );
+    expect([...validTemplates].sort()).toEqual(Object.keys(templates).sort());
   });
 
-  it("offers every template except the aliases in the picker", () => {
+  it("offers every template in the picker", () => {
     expect(templateChoices.map((choice) => choice.value)).toEqual(
       Object.keys(templates),
     );
@@ -24,13 +22,6 @@ describe("template registry", () => {
 
   it("lists blank first, so the picker opens on the empty project", () => {
     expect(templateChoices[0].value).toBe("blank");
-  });
-
-  it("resolves every alias to a template that exists", () => {
-    for (const [alias, target] of Object.entries(aliases)) {
-      expect(templates[target], `${alias} -> ${target}`).toBeDefined();
-    }
-    expect(templates[aliases.nft].contract).toBe("StandardERC721");
   });
 
   it("gives blank no contract to write", () => {
