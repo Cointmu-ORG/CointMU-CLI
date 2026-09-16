@@ -2,8 +2,6 @@ import { existsSync } from "fs";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 
-const EXIT_FAILURE = 1;
-
 interface CreateOptions {
   template?: string;
   language?: string;

@@ -4,7 +4,6 @@ import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { getSessionFilePath } from "../utils/session";
 
-const EXIT_FAILURE = 1;
 const MINER_THREAD_COUNT = 1;
 
 /**

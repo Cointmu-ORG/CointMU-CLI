@@ -4,7 +4,6 @@ import { fail, printCliError } from "../utils/errors";
 import { bootHardhat, silenceHardhatNoise } from "../utils/hardhat";
 import { LOCAL_CHAIN_ID } from "../utils/defaults";
 
-const EXIT_FAILURE = 1;
 const TEST_PORT = 8555;
 const TEST_DIR_NAME = "test";
 

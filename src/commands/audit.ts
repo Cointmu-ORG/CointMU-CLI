@@ -1,8 +1,6 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 
-const EXIT_SUCCESS = 0;
-
 /**
  * Executes an external command in a child process.
  * @param {string} command - The command to execute (e.g. 'npm', 'npx').
@@ -28,7 +26,7 @@ async function runCommand(command: string, args: string[]): Promise<void> {
     });
 
     child.on("close", (code) => {
-      if (code !== EXIT_SUCCESS) {
+      if (code !== 0) {
         reject(new Error(`${command} exited with code ${code}`));
       } else {
         resolve();

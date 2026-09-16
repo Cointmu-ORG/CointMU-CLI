@@ -1,7 +1,6 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 
-const EXIT_FAILURE = 1;
 const PACKAGE_NAME = "cointmu-cli";
 
 // Accepts semver versions, semver ranges, and npm dist-tags (e.g. "latest").

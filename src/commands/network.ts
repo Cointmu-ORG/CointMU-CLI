@@ -4,8 +4,6 @@ import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { getSessionFilePath } from "../utils/session";
 
-const EXIT_FAILURE = 1;
-
 /**
  * Validates that a value is a well-formed RPC endpoint.
  * Only http/https are accepted: every provider in this CLI is an

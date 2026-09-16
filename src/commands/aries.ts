@@ -1,7 +1,6 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 
-const EXIT_FAILURE = 1;
 const DIM_COLOR = "\x1b[2m";
 const CYAN_COLOR = "\x1b[36m";
 const GREEN_COLOR = "\x1b[32m";

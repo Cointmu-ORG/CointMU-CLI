@@ -3,8 +3,6 @@ import { readFile } from "fs/promises";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 
-const EXIT_FAILURE = 1;
-
 // Inlined at bundle time by tsup (see tsup.config.ts `define`); undefined
 // when running unbundled (e.g. ts-node in dev).
 declare const __CMU_BUILD_ID__: string | undefined;

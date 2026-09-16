@@ -5,7 +5,6 @@ import { fail } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 import { registerTsNode } from "../utils/tsNode";
 
-const EXIT_FAILURE = 1;
 const JSON_SPACES = 2;
 const DEFAULT_EVM_VERSION = "paris";
 

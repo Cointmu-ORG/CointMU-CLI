@@ -8,8 +8,6 @@ import * as fs from "fs";
 import * as path from "path";
 import { Command } from "commander";
 
-const EXIT_FAILURE = 1;
-
 // A missing .env is normal - dotenv was silent about it too, and most
 // invocations are outside a project. Anything else (unreadable file, bad
 // permissions) is a real problem the user needs to see.
@@ -108,7 +106,7 @@ async function main(): Promise<void> {
       "\x1b[31merror:\x1b[0m command failed:",
       error instanceof Error ? error.message : String(error),
     );
-    process.exit(EXIT_FAILURE);
+    process.exit(1);
   }
 }
 
@@ -117,5 +115,5 @@ main().catch((error) => {
     "\x1b[31merror:\x1b[0m cmu failed to start:",
     error instanceof Error ? error.message : String(error),
   );
-  process.exit(EXIT_FAILURE);
+  process.exit(1);
 });

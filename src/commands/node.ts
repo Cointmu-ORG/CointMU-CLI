@@ -7,8 +7,6 @@ import {
 } from "../utils/hardhat";
 import { LOCAL_CHAIN_ID, LOCAL_PORT } from "../utils/defaults";
 
-const EXIT_SUCCESS = 0;
-const EXIT_FAILURE = 1;
 const DEFAULT_HOST = "127.0.0.1";
 const MAX_PORT = 65535;
 
@@ -175,7 +173,7 @@ async function runNodeStart(options: {
   process.on("SIGINT", () => {
     originalConsoleLog("\nStopping the CointMU DevNet...");
     originalConsoleLog("CointMU DevNet stopped.");
-    process.exit(EXIT_SUCCESS);
+    process.exit(0);
   });
 
   // Run the hardhat node natively

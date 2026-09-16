@@ -4,8 +4,6 @@ import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 
-const EXIT_SUCCESS = 0;
-const EXIT_FAILURE = 1;
 const MIN_KEY_LENGTH = 10;
 const MASK_START = 5;
 const MASK_END = 4;
@@ -144,7 +142,7 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
 
   if (options.ping) {
     await pingNetwork(network.url);
-    return EXIT_SUCCESS;
+    return 0;
   }
 
   const privateKey = network.privateKey;
@@ -182,12 +180,12 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   console.log(`----------------------------\n`);
 
   if (options.config) {
-    return EXIT_SUCCESS;
+    return 0;
   }
 
   if (scripts.length === 0) {
     console.log("No deploy scripts found in deploy/.");
-    return EXIT_SUCCESS;
+    return 0;
   }
 
   console.log(
@@ -207,7 +205,7 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   }
 
   console.log("\nAll deploy scripts completed.");
-  return EXIT_SUCCESS;
+  return 0;
 }
 
 export const deployCommand = new Command("deploy")
