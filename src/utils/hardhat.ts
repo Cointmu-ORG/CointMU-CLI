@@ -18,12 +18,30 @@ export const ACCOUNT_BALANCE = "100000000000000000000";
 const NOISE_PATTERNS = [
   "uws_win32",
   "Falling back to a NodeJS implementation",
-  "This version of µWS",
   "This version of",
   "uws-js-unofficial",
-  "Require stack:",
-  "Cannot find module",
 ];
+
+/**
+ * Substrings that appear in the µWS fallback chatter but also in every genuine
+ * module-resolution failure. Matching them outright hid real errors - a project
+ * missing `ethers` reported nothing at all - so they only count as noise when
+ * the same message is recognisably about µWS.
+ */
+const UWS_ONLY_PATTERNS = ["Require stack:", "Cannot find module"];
+
+/**
+ * Reports whether a message is about the µWS optional binary.
+ * Plain substring checks rather than a case-insensitive regex: the name is
+ * spelled with U+00B5 MICRO SIGN, which does not case-fold to "m" reliably.
+ *
+ * @param {string} message - The joined console arguments.
+ * @returns {boolean} True when the message mentions µWS.
+ */
+function mentionsUws(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes("uws") || lower.includes("µws");
+}
 
 /** The console functions as they were before silenceHardhatNoise() patched them. */
 export interface ConsoleHandle {
@@ -63,7 +81,11 @@ export function silenceHardhatNoise(
   const isNoise = (args: any[]) => {
     if (options.verbose) return false;
     const message = args.join(" ");
-    return patterns.some((pattern) => message.includes(pattern));
+    if (patterns.some((pattern) => message.includes(pattern))) return true;
+    return (
+      mentionsUws(message) &&
+      UWS_ONLY_PATTERNS.some((pattern) => message.includes(pattern))
+    );
   };
 
   const original = {
