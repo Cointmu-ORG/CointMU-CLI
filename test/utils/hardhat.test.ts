@@ -32,11 +32,23 @@ describe("silenceHardhatNoise", () => {
 
     console.error("Cannot find module 'uws_win32'");
     console.warn("Falling back to a NodeJS implementation");
-    console.log("Require stack:");
+    console.log("Require stack:\n- /app/node_modules/uws-js-unofficial/x.js");
 
     expect(spies.error).not.toHaveBeenCalled();
     expect(spies.warn).not.toHaveBeenCalled();
     expect(spies.log).not.toHaveBeenCalled();
+  });
+
+  it("prints a module-resolution failure that has nothing to do with uWS", () => {
+    // The filter used to match a bare "Cannot find module" / "Require stack:",
+    // so a project missing a real dependency reported nothing at all.
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    silence();
+
+    console.error("Error: Cannot find module 'ethers'");
+    console.error("Require stack:\n- /app/deploy/01_token.js");
+
+    expect(error).toHaveBeenCalledTimes(2);
   });
 
   it("lets anything that is not noise through untouched", () => {

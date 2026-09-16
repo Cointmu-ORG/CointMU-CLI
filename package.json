@@ -22,7 +22,7 @@
   "author": "tvrststtp",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.12.0"
   },
   "main": "dist/index.js",
   "bin": {
@@ -32,7 +32,6 @@
     "dist"
   ],
   "scripts": {
-    "prebuild": "ts-node update-build.ts",
     "build": "tsup",
     "test": "vitest run",
     "prepublishOnly": "npm run build",
@@ -40,9 +39,7 @@
   },
   "dependencies": {
     "commander": "^15.0.0",
-    "dotenv": "^17.4.2",
     "ethers": "6.17.0",
-    "fs-extra": "^11.1.1",
     "hardhat": "3.16.0",
     "inquirer": "^14.2.0",
     "solc": "0.8.37",
@@ -50,8 +47,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/fs-extra": "^11.0.1",
-    "@types/inquirer": "^8.2.4",
     "@types/node": "^26.4.1",
     "eslint": "^10.9.1",
     "husky": "^9.1.7",

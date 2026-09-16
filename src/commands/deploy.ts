@@ -1,9 +1,9 @@
+import { existsSync } from "fs";
+import { readdir } from "fs/promises";
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
+import { fail } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 
-const EXIT_SUCCESS = 0;
-const EXIT_FAILURE = 1;
 const MIN_KEY_LENGTH = 10;
 const MASK_START = 5;
 const MASK_END = 4;
@@ -96,19 +96,23 @@ export async function pingNetwork(rpcUrl: string): Promise<void> {
  */
 export async function runDeploy(options: DeployOptions): Promise<number> {
   const path = await import("path");
-  const fs = (await import("fs-extra")).default || (await import("fs-extra"));
-  require("dotenv").config({ path: path.resolve(process.cwd(), ".env") });
+  // See src/index.ts: a missing .env is not an error.
+  try {
+    process.loadEnvFile(path.resolve(process.cwd(), ".env"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
 
   const deployDir = path.resolve(process.cwd(), "deploy");
 
-  if (!(await fs.pathExists(deployDir))) {
+  if (!existsSync(deployDir)) {
     throw new Error(
       `deploy/ directory not found at ${deployDir}.\n` +
         "\x1b[2mhint:\x1b[0m run `cmu deploy` from the root of your CointMU project.",
     );
   }
 
-  const files: string[] = await fs.readdir(deployDir);
+  const files = await readdir(deployDir);
   const scripts = files
     .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
     .sort((a, b) => a.localeCompare(b));
@@ -126,8 +130,10 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   );
 
   console.log("Compiling contracts...");
+  // Compile failures keep reporting themselves as "compile failed" rather than
+  // being relabelled by the command that triggered the compile.
   const { runCompile } = await import("./compile");
-  await runCompile({ yes: options.yes });
+  await runCompile({ yes: options.yes }).catch(fail("compile", options));
 
   const { getDeployNetwork } = await import("../utils/network");
   const network = await getDeployNetwork(options.network, {
@@ -136,7 +142,7 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
 
   if (options.ping) {
     await pingNetwork(network.url);
-    return EXIT_SUCCESS;
+    return 0;
   }
 
   const privateKey = network.privateKey;
@@ -174,12 +180,12 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   console.log(`----------------------------\n`);
 
   if (options.config) {
-    return EXIT_SUCCESS;
+    return 0;
   }
 
   if (scripts.length === 0) {
     console.log("No deploy scripts found in deploy/.");
-    return EXIT_SUCCESS;
+    return 0;
   }
 
   console.log(
@@ -199,7 +205,7 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   }
 
   console.log("\nAll deploy scripts completed.");
-  return EXIT_SUCCESS;
+  return 0;
 }
 
 export const deployCommand = new Command("deploy")
@@ -207,7 +213,6 @@ export const deployCommand = new Command("deploy")
   .option("-c, --config", "Show the resolved deploy configuration and exit")
   .option("-p, --ping", "Ping the configured RPC endpoint and exit")
   .option("-n, --network <name>", "Network to deploy to")
-  .option("-v, --verbose", "Print full stack traces on failure")
   .option(
     "-y, --yes",
     "Skip the confirmation prompt before executing project code",
@@ -218,14 +223,9 @@ export const deployCommand = new Command("deploy")
       "PRIVATE_KEY through the environment. Only deploy projects you trust; see the\n" +
       "'Trust Model' section of the README.",
   )
-  .action(async (options: DeployOptions) => {
-    try {
-      process.exit(await runDeploy(options));
-    } catch (error) {
-      console.error("\n\x1b[31merror:\x1b[0m deploy failed");
-
-      printCliError(error, options.verbose);
-
-      process.exit(EXIT_FAILURE);
-    }
+  .action((options: DeployOptions, command) => {
+    // runDeploy reports its own compile step, so it needs the inherited
+    // --verbose too, not just the options declared on `deploy` itself.
+    const opts = command.optsWithGlobals() as DeployOptions;
+    return runDeploy(opts).then(process.exit, fail("deploy", opts));
   });

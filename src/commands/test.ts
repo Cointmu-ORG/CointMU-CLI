@@ -1,12 +1,9 @@
+import { existsSync, readdirSync } from "fs";
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
-import {
-  bootHardhat,
-  DEFAULT_CHAIN_ID,
-  silenceHardhatNoise,
-} from "../utils/hardhat";
+import { fail, printCliError } from "../utils/errors";
+import { bootHardhat, silenceHardhatNoise } from "../utils/hardhat";
+import { LOCAL_CHAIN_ID } from "../utils/defaults";
 
-const EXIT_FAILURE = 1;
 const TEST_PORT = 8555;
 const TEST_DIR_NAME = "test";
 
@@ -238,10 +235,7 @@ async function runMochaSuite(
   testDir: string,
   env: Record<string, string | undefined>,
 ): Promise<void> {
-  const fs = (await import("fs-extra")).default || (await import("fs-extra"));
-  const hasTsFiles = fs
-    .readdirSync(testDir)
-    .some((f: string) => f.endsWith(".ts"));
+  const hasTsFiles = readdirSync(testDir).some((f) => f.endsWith(".ts"));
   const runnerArgs = hasTsFiles
     ? ["mocha", "-r", "ts-node/register", "test/**/*.ts"]
     : ["mocha", "test/**/*.js"];
@@ -286,81 +280,75 @@ async function runTest(
         `${TEST_PORT} accepts requests from any browser origin`,
     );
   }
+  const path = await import("path");
+
+  console.log("Compiling contracts...");
+  // Compile failures keep reporting themselves as "compile failed" rather than
+  // being relabelled by the command that triggered the compile.
+  const { runCompile } = await import("./compile");
+  await runCompile({ yes: options.yes }).catch(fail("compile", options));
+
+  const testDir = path.resolve(process.cwd(), TEST_DIR_NAME);
+  if (!existsSync(testDir)) {
+    throw new Error(
+      `test/ directory not found at ${testDir}.\n` +
+        "\x1b[2mhint:\x1b[0m run `cmu test` from the root of your CointMU project.",
+    );
+  }
+
+  silenceHardhatNoise({ verbose: isVerbose });
+
+  console.log("Starting the CointMU DevNet...");
+
+  const { hre, mnemonic: resolvedMnemonic } = await bootHardhat({
+    loggingEnabled: false,
+  });
+
+  const connection = await hre.network.getOrCreate();
+  const provider = connection.provider;
+
+  const server = await startRpcProxy(provider, { allowCors });
+
   try {
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
-    const path = await import("path");
-
-    console.log("Compiling contracts...");
-    const { runCompile } = await import("./compile");
-    await runCompile({ yes: options.yes });
-
-    const testDir = path.resolve(process.cwd(), TEST_DIR_NAME);
-    if (!(await fs.pathExists(testDir))) {
+    const { ethers } = await import("ethers");
+    if (!resolvedMnemonic) {
       throw new Error(
-        `test/ directory not found at ${testDir}.\n` +
-          "\x1b[2mhint:\x1b[0m run `cmu test` from the root of your CointMU project.",
+        "could not generate a mnemonic for the test accounts.\n" +
+          "\x1b[2mhint:\x1b[0m this usually means the crypto module is unavailable; check your Node.js install.",
       );
     }
 
-    silenceHardhatNoise({ verbose: isVerbose });
+    const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic);
+    const wallet = ethers.HDNodeWallet.fromMnemonic(
+      mnemonicObj,
+      "m/44'/60'/0'/0/0",
+    );
+    const privateKey = wallet.privateKey;
 
-    console.log("Starting the CointMU DevNet...");
+    const injectedEnv = {
+      ...process.env,
+      CMU_RPC_URL: `http://127.0.0.1:${TEST_PORT}`,
+      CMU_CHAIN_ID: String(LOCAL_CHAIN_ID),
+      PRIVATE_KEY: privateKey,
+    };
 
-    const { hre, mnemonic: resolvedMnemonic } = await bootHardhat({
-      loggingEnabled: false,
+    await runMochaSuite(testDir, injectedEnv);
+
+    console.log("\nAll tests passed.");
+  } finally {
+    if (options.gas) {
+      await printGasReport(TEST_PORT, { verbose: isVerbose });
+    }
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
     });
-
-    const connection = await hre.network.getOrCreate();
-    const provider = connection.provider;
-
-    const server = await startRpcProxy(provider, { allowCors });
-
-    try {
-      const { ethers } = await import("ethers");
-      if (!resolvedMnemonic) {
-        throw new Error(
-          "could not generate a mnemonic for the test accounts.\n" +
-            "\x1b[2mhint:\x1b[0m this usually means the crypto module is unavailable; check your Node.js install.",
-        );
-      }
-
-      const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic);
-      const wallet = ethers.HDNodeWallet.fromMnemonic(
-        mnemonicObj,
-        "m/44'/60'/0'/0/0",
-      );
-      const privateKey = wallet.privateKey;
-
-      const injectedEnv = {
-        ...process.env,
-        CMU_RPC_URL: `http://127.0.0.1:${TEST_PORT}`,
-        CMU_CHAIN_ID: String(DEFAULT_CHAIN_ID),
-        PRIVATE_KEY: privateKey,
-      };
-
-      await runMochaSuite(testDir, injectedEnv);
-
-      console.log("\nAll tests passed.");
-    } finally {
-      if (options.gas) {
-        await printGasReport(TEST_PORT, { verbose: isVerbose });
-      }
-      await new Promise<void>((resolve) => {
-        server.close(() => resolve());
-      });
-      console.log("CointMU DevNet stopped.");
-    }
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m test failed");
-    printCliError(error, isVerbose);
-    process.exit(EXIT_FAILURE);
+    console.log("CointMU DevNet stopped.");
   }
 }
 
 export const testCommand = new Command("test")
   .description("Run the smart contract test suite")
   .option("--gas", "Report gas used by transactions during the run")
-  .option("-v, --verbose", "Print full stack traces on failure")
   .option(
     "--allow-cors",
     "Allow cross-origin browser access to the test RPC proxy; off by default to prevent DNS rebinding",
@@ -369,4 +357,8 @@ export const testCommand = new Command("test")
     "-y, --yes",
     "Skip the confirmation prompt before executing project code",
   )
-  .action(runTest);
+  .action((options, command) => {
+    // runTest reads verbose itself, to decide how much Hardhat noise to keep.
+    const opts = command.optsWithGlobals();
+    return runTest(opts).catch(fail("test", opts));
+  });

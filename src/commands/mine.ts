@@ -1,88 +1,67 @@
+import { existsSync } from "fs";
+import { readFile } from "fs/promises";
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
+import { fail } from "../utils/errors";
 import { getSessionFilePath } from "../utils/session";
 
-const EXIT_FAILURE = 1;
 const MINER_THREAD_COUNT = 1;
 
 /**
  * Starts the mining process on the active network.
- * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when mining is started successfully.
  */
-async function runMineStart(
-  options: { verbose?: boolean } = {},
-): Promise<void> {
-  try {
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
-    const sessionFile = getSessionFilePath();
+async function runMineStart(): Promise<void> {
+  const sessionFile = getSessionFilePath();
 
-    if (!(await fs.pathExists(sessionFile))) {
-      throw new Error(
-        "no active session.\n" +
-          "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
-      );
-    }
-
-    const session = await fs.readJson(sessionFile);
-    const { getDynamicNetwork } = await import("../utils/network");
-    const { ethers } = await import("ethers");
-
-    const network = await getDynamicNetwork(session.activeNetwork);
-    const provider = new ethers.JsonRpcProvider(network.url);
-
-    console.log(`Setting etherbase to ${session.address}...`);
-    await provider.send("miner_setEtherbase", [session.address]);
-
-    console.log(`Starting miner on ${network.name}...`);
-    await provider.send("miner_start", [MINER_THREAD_COUNT]);
-
-    console.log("Mining started.");
-    console.log(`Rewards are routed to ${session.address}`);
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m mine start failed");
-
-    printCliError(error, options.verbose);
-
-    process.exit(EXIT_FAILURE);
+  if (!existsSync(sessionFile)) {
+    throw new Error(
+      "no active session.\n" +
+        "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
+    );
   }
+
+  const session = JSON.parse(await readFile(sessionFile, "utf8"));
+  const { getDynamicNetwork } = await import("../utils/network");
+  const { ethers } = await import("ethers");
+
+  const network = await getDynamicNetwork(session.activeNetwork);
+  const provider = new ethers.JsonRpcProvider(network.url);
+
+  console.log(`Setting etherbase to ${session.address}...`);
+  await provider.send("miner_setEtherbase", [session.address]);
+
+  console.log(`Starting miner on ${network.name}...`);
+  await provider.send("miner_start", [MINER_THREAD_COUNT]);
+
+  console.log("Mining started.");
+  console.log(`Rewards are routed to ${session.address}`);
 }
 
 /**
  * Stops the mining process on the active network.
- * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when mining is stopped successfully.
  */
-async function runMineStop(options: { verbose?: boolean } = {}): Promise<void> {
-  try {
-    const fs = (await import("fs-extra")).default || (await import("fs-extra"));
-    const sessionFile = getSessionFilePath();
+async function runMineStop(): Promise<void> {
+  const sessionFile = getSessionFilePath();
 
-    if (!(await fs.pathExists(sessionFile))) {
-      throw new Error(
-        "no active session.\n" +
-          "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
-      );
-    }
-
-    const session = await fs.readJson(sessionFile);
-    const { getDynamicNetwork } = await import("../utils/network");
-    const { ethers } = await import("ethers");
-
-    const network = await getDynamicNetwork(session.activeNetwork);
-    const provider = new ethers.JsonRpcProvider(network.url);
-
-    console.log(`Stopping miner on ${network.name}...`);
-    await provider.send("miner_stop", []);
-
-    console.log("Mining stopped.");
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m mine stop failed");
-
-    printCliError(error, options.verbose);
-
-    process.exit(EXIT_FAILURE);
+  if (!existsSync(sessionFile)) {
+    throw new Error(
+      "no active session.\n" +
+        "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
+    );
   }
+
+  const session = JSON.parse(await readFile(sessionFile, "utf8"));
+  const { getDynamicNetwork } = await import("../utils/network");
+  const { ethers } = await import("ethers");
+
+  const network = await getDynamicNetwork(session.activeNetwork);
+  const provider = new ethers.JsonRpcProvider(network.url);
+
+  console.log(`Stopping miner on ${network.name}...`);
+  await provider.send("miner_stop", []);
+
+  console.log("Mining stopped.");
 }
 
 export const mineCommand = new Command("mine").description(
@@ -92,11 +71,13 @@ export const mineCommand = new Command("mine").description(
 mineCommand
   .command("start")
   .description("Start mining with the logged-in wallet")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runMineStart);
+  .action((options, command) =>
+    runMineStart().catch(fail("mine start", command.optsWithGlobals())),
+  );
 
 mineCommand
   .command("stop")
   .description("Stop mining")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runMineStop);
+  .action((options, command) =>
+    runMineStop().catch(fail("mine stop", command.optsWithGlobals())),
+  );

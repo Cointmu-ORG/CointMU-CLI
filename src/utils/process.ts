@@ -1,6 +1,4 @@
 const LISTENING_STATE = "LISTENING";
-const CHILD_PROCESS_PKG = "child_process";
-const UTIL_PKG = "util";
 const NETSTAT_CMD = "netstat";
 const NETSTAT_ARGS = ["-ano"];
 const TASKKILL_CMD = "taskkill";
@@ -20,8 +18,8 @@ const PID_PATTERN = /^\d+$/;
  * @throws {Error} If netstat reports a PID that is not purely numeric.
  */
 export async function killPort(port: number): Promise<void> {
-  const { execFile } = await import(CHILD_PROCESS_PKG);
-  const { promisify } = await import(UTIL_PKG);
+  const { execFile } = await import("child_process");
+  const { promisify } = await import("util");
   const execFileAsync = promisify(execFile);
 
   let stdout = "";

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as os from "os";
 
 // Issue #87 (b): `--verbose` printed raw error objects, so stack frames and
 // file-system messages leaked the absolute path of the user's home directory.
@@ -99,5 +100,79 @@ describe("printCliError", () => {
     printCliError(`failed in ${HOME}/dapp`, false);
 
     expect(spy.mock.calls.flat().join("\n")).toBe("failed in ~/dapp");
+  });
+});
+
+// Every command used to end with its own copy of "print a banner, print the
+// error, exit 1". fail() is that ending, once.
+
+describe("fail", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function capture() {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exit = vi.spyOn(process, "exit").mockImplementation(((
+      code?: number,
+    ) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+    return { error, exit };
+  }
+
+  it("names the command that failed, then prints the error", async () => {
+    const { fail } = await import("../../src/utils/errors");
+    const { error } = capture();
+
+    expect(() => fail("network info")(new Error("boom"))).toThrow("exit:1");
+
+    const printed = error.mock.calls.flat().join("\n");
+    expect(printed).toMatch(/error:.*network info failed/);
+    expect(printed).toMatch(/boom/);
+  });
+
+  it("exits non-zero", async () => {
+    const { fail } = await import("../../src/utils/errors");
+    const { exit } = capture();
+
+    expect(() => fail("deploy")(new Error("boom"))).toThrow();
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it("prints only the message unless verbose is set", async () => {
+    const { fail } = await import("../../src/utils/errors");
+    const { error } = capture();
+    const err = new Error("boom");
+    err.stack = "Error: boom\n    at somewhere (/tmp/x.ts:1:1)";
+
+    expect(() => fail("test", {})(err)).toThrow();
+
+    expect(error.mock.calls.flat().join("\n")).not.toMatch(/at somewhere/);
+  });
+
+  it("prints the inspected error when verbose is set", async () => {
+    const { fail } = await import("../../src/utils/errors");
+    const { error } = capture();
+    const err = new Error("boom");
+    err.stack = "Error: boom\n    at somewhere (/tmp/x.ts:1:1)";
+
+    expect(() => fail("test", { verbose: true })(err)).toThrow();
+
+    expect(error.mock.calls.flat().join("\n")).toMatch(/at somewhere/);
+  });
+
+  it("scrubs the home directory out of what it prints", async () => {
+    const { fail } = await import("../../src/utils/errors");
+    const { error } = capture();
+    const home = os.homedir();
+
+    expect(() =>
+      fail("compile")(new Error(`ENOENT ${home}/p/x.sol`)),
+    ).toThrow();
+
+    const printed = error.mock.calls.flat().join("\n");
+    expect(printed).toContain("~/p/x.sol");
+    expect(printed).not.toContain(home);
   });
 });

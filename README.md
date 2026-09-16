@@ -2,7 +2,7 @@
 
 ## 🌟 Project Overview
 
-The CointMU CLI (`cmu-cli`) is the ultimate, hyper-charged development toolkit for the **CointMU blockchain ecosystem**! ⚡ It provides developers with a blazing fast, modern command-line interface to interactively scaffold new projects, compile Solidity smart contracts, execute sequential deployment scripts, manage secure wallets, and seamlessly interact with the local CointMU node and block explorer.
+The CointMU CLI (`cmu-cli`) is the ultimate, hyper-charged development toolkit for the **CointMU blockchain ecosystem**! ⚡ It provides developers with a blazing fast, modern command-line interface to interactively scaffold new projects, compile Solidity smart contracts, execute sequential deployment scripts, manage secure wallets, and seamlessly interact with the local CointMU node.
 
 Built beautifully with **TypeScript** and packing **Vite-like** interactive prompts, it streamlines the entire Web3 development lifecycle for the CointMU network so you can focus on building the future! 🛠️💎
 
@@ -65,28 +65,6 @@ npm run build
 npm install -g .
 ```
 
-### 🛠️ Local Development Setup (Make)
-
-If you prefer using `make` to streamline your local development workflow, we've got you covered!
-
-- Build the project:
-
-```bash
-make build
-```
-
-- Start development mode:
-
-```bash
-make dev
-```
-
-- Install the CLI globally from source:
-
-```bash
-make install-global
-```
-
 ## 📁 Template Structure Explanation
 
 When you scaffold a new project using `cmu create`, the following pristine directory structure is generated to separate concerns and organize your workflow:
@@ -122,8 +100,6 @@ Commands:
     balance                   Fetch and display the native token balance of the logged-in wallet
     info                      Display the current active wallet session information
   create [options] [project]  Initializes a new CointMU workspace with pre-configured templates
-  explorer                    Interacts with the block explorer for on-chain data retrieval
-    open                      Opens the local CointMU block explorer UI
   node [options]              Manages the local EVM node for development and testing
     connect                   Pings the configured RPC endpoint to test connectivity
     start                     Starts a local development network with pre-funded accounts
@@ -246,12 +222,6 @@ _(This will automatically and sequentially execute the scripts in your `deploy/`
 
 ```bash
 cmu node connect
-```
-
-8. **View your transactions on the block explorer**: 🔍
-
-```bash
-cmu explorer open
 ```
 
 ---

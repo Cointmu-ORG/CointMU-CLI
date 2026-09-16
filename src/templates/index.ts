@@ -79,8 +79,3 @@ export const templates: Record<string, TemplateSpec> = {
     load: async () => (await import("./kyberion")).kyberionTemplate,
   },
 };
-
-/** Accepted on the command line but not offered in the picker. */
-export const aliases: Record<string, string> = {
-  nft: "erc721",
-};

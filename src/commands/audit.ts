@@ -1,8 +1,5 @@
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
-
-const EXIT_SUCCESS = 0;
-const EXIT_FAILURE = 1;
+import { fail } from "../utils/errors";
 
 /**
  * Executes an external command in a child process.
@@ -29,7 +26,7 @@ async function runCommand(command: string, args: string[]): Promise<void> {
     });
 
     child.on("close", (code) => {
-      if (code !== EXIT_SUCCESS) {
+      if (code !== 0) {
         reject(new Error(`${command} exited with code ${code}`));
       } else {
         resolve();
@@ -38,46 +35,49 @@ async function runCommand(command: string, args: string[]): Promise<void> {
   });
 }
 
+/**
+ * Runs the dependency and Solidity audits in turn.
+ *
+ * Neither tool reporting findings is a failure of the command: both are
+ * downgraded to a warning so a dirty dependency tree does not mask the
+ * Solidity pass that follows it.
+ *
+ * @param {object} options - CLI options.
+ * @returns {Promise<void>} Resolves when both passes have run.
+ */
+async function runAudit(options: { fix?: boolean }): Promise<void> {
+  console.log("\n\x1b[1m\x1b[34m[1/2] Auditing Node.js dependencies\x1b[0m");
+
+  const npmArgs = ["audit"];
+  if (options.fix) {
+    npmArgs.push("fix");
+  }
+
+  await runCommand("npm", npmArgs).catch(() => {
+    console.warn(
+      "\x1b[33mwarning:\x1b[0m npm audit reported issues in the dependency tree.",
+    );
+  });
+
+  console.log("\n\x1b[1m\x1b[34m[2/2] Analysing Solidity contracts\x1b[0m");
+
+  const solhintArgs = ["solhint", "contracts/**/*.sol"];
+  if (options.fix) {
+    solhintArgs.push("--fix");
+  }
+
+  await runCommand("npx", solhintArgs).catch(() => {
+    console.warn(
+      "\x1b[33mwarning:\x1b[0m solhint reported issues in the Solidity sources.",
+    );
+  });
+
+  console.log("\n\x1b[1m\x1b[32mAudit complete.\x1b[0m\n");
+}
+
 export const auditCommand = new Command("audit")
   .description("Run static security analysis on contracts and dependencies")
   .option("--fix", "Apply safe fixes automatically")
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action(async (options: { fix?: boolean; verbose?: boolean }) => {
-    try {
-      console.log(
-        "\n\x1b[1m\x1b[34m[1/2] Auditing Node.js dependencies\x1b[0m",
-      );
-
-      const npmArgs = ["audit"];
-      if (options.fix) {
-        npmArgs.push("fix");
-      }
-
-      await runCommand("npm", npmArgs).catch(() => {
-        console.warn(
-          "\x1b[33mwarning:\x1b[0m npm audit reported issues in the dependency tree.",
-        );
-      });
-
-      console.log("\n\x1b[1m\x1b[34m[2/2] Analysing Solidity contracts\x1b[0m");
-
-      const solhintArgs = ["solhint", "contracts/**/*.sol"];
-      if (options.fix) {
-        solhintArgs.push("--fix");
-      }
-
-      await runCommand("npx", solhintArgs).catch(() => {
-        console.warn(
-          "\x1b[33mwarning:\x1b[0m solhint reported issues in the Solidity sources.",
-        );
-      });
-
-      console.log("\n\x1b[1m\x1b[32mAudit complete.\x1b[0m\n");
-    } catch (error) {
-      console.error("\n\x1b[31merror:\x1b[0m audit failed");
-
-      printCliError(error, options.verbose);
-
-      process.exit(EXIT_FAILURE);
-    }
-  });
+  .action((options: { fix?: boolean }, command) =>
+    runAudit(options).catch(fail("audit", command.optsWithGlobals())),
+  );

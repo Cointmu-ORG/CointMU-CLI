@@ -1,20 +1,14 @@
+import { mkdir, writeFile } from "fs/promises";
 import { generateConfigFiles } from "./configGenerator";
-import { aliases, templates } from "../templates";
+import { templates } from "../templates";
 
 const TYPESCRIPT_LANG = "typescript";
-const ENCODING = "utf8";
-const FS_EXTRA_PKG = "fs-extra";
-const PATH_PKG = "path";
-const CHILD_PROCESS_PKG = "child_process";
 
 export const templateChoices = Object.entries(templates).map(
   ([value, spec]) => ({ name: spec.label, value }),
 );
 
-export const validTemplates = [
-  ...Object.keys(templates),
-  ...Object.keys(aliases),
-];
+export const validTemplates = Object.keys(templates);
 
 function getDeployScript(
   contractName: string,
@@ -22,11 +16,13 @@ function getDeployScript(
   language: string,
 ): string {
   const tsImports = `import { ethers } from 'ethers';
-import fs from 'fs-extra';
+import { existsSync } from 'fs';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';`;
 
   const jsImports = `const { ethers } = require('ethers');
-const fs = require('fs-extra');
+const { existsSync } = require('fs');
+const { mkdir, readFile, writeFile } = require('fs/promises');
 const path = require('path');`;
 
   return `${language === TYPESCRIPT_LANG ? tsImports : jsImports}
@@ -35,11 +31,11 @@ async function main() {
   console.log('Deploying ${contractName}...');
   
   const artifactPath = path.resolve(__dirname, '../artifacts/${contractName}.json');
-  if (!fs.existsSync(artifactPath)) {
+  if (!existsSync(artifactPath)) {
     throw new Error('Artifact not found. Run \`cmu compile\` first.');
   }
 
-  const artifact = await fs.readJson(artifactPath);
+  const artifact = JSON.parse(await readFile(artifactPath, 'utf8'));
   const abi = artifact.abi;
   const bytecode = artifact.evm?.bytecode?.object || artifact.bytecode;
 
@@ -58,14 +54,14 @@ async function main() {
 
   // Save artifact
   const deploymentDir = path.resolve(__dirname, '../deployments');
-  await fs.ensureDir(deploymentDir);
+  await mkdir(deploymentDir, { recursive: true });
   const deploymentPath = path.join(deploymentDir, '${contractName}.json');
   
-  await fs.writeJson(deploymentPath, {
+  await writeFile(deploymentPath, JSON.stringify({
     address,
     abi,
     network: await provider.getNetwork().then(n => ({ chainId: Number(n.chainId), name: n.name }))
-  }, { spaces: 2 });
+  }, null, 2) + '\\n');
   console.log(\`Deployment saved to \${deploymentPath}\`);
 }
 
@@ -73,32 +69,31 @@ main().catch(console.error);
 `;
 }
 
-const blankDeployTemplate = (language: string): string =>
-  `import { ethers } from 'ethers';
+const blankDeployTemplate = (language: string): string => {
+  const ethersImport =
+    language === TYPESCRIPT_LANG
+      ? "import { ethers } from 'ethers';"
+      : "const { ethers } = require('ethers');";
+
+  return `${ethersImport}
 
 async function main() {
   console.log('Deploy script executed.');
-  const provider = new ethers.JsonRpcProvider(process.env.CMU_RPC_URL || 'http://localhost:8545');
-  // Add your deployment logic here
+  // Add your deployment logic here, e.g.
+  // const provider = new ethers.JsonRpcProvider(process.env.CMU_RPC_URL);
 }
 
 main().catch(console.error);
-`.replace(
-    "import { ethers } from 'ethers';",
-    language === TYPESCRIPT_LANG
-      ? "import { ethers } from 'ethers';"
-      : "const { ethers } = require('ethers');",
-  );
+`;
+};
 
 export async function generateProject(
   projectPath: string,
   template: string,
   language: string,
 ): Promise<void> {
-  const fs =
-    (await import(FS_EXTRA_PKG)).default || (await import(FS_EXTRA_PKG));
-  const path = await import(PATH_PKG);
-  const { execSync } = await import(CHILD_PROCESS_PKG);
+  const path = await import("path");
+  const { execSync } = await import("child_process");
 
   const dirs = [
     "contracts",
@@ -109,7 +104,7 @@ export async function generateProject(
     "test",
   ];
   for (const dir of dirs) {
-    await fs.ensureDir(path.join(projectPath, dir));
+    await mkdir(path.join(projectPath, dir), { recursive: true });
   }
 
   const ext = language === TYPESCRIPT_LANG ? "ts" : "js";
@@ -127,29 +122,21 @@ describe("Deployment Template Test", function () {
 });
 `;
 
-  await fs.writeFile(
+  await writeFile(
     path.join(projectPath, "test", `Template.test.${ext}`),
     templateTestContent,
-    ENCODING,
+    "utf8",
   );
 
   await generateConfigFiles(projectPath, language);
 
-  await fs.writeFile(
-    path.join(projectPath, "artifacts", ".gitkeep"),
-    "",
-    ENCODING,
-  );
-  await fs.writeFile(
+  await writeFile(path.join(projectPath, "artifacts", ".gitkeep"), "", "utf8");
+  await writeFile(
     path.join(projectPath, "deployments", ".gitkeep"),
     "",
-    ENCODING,
+    "utf8",
   );
-  await fs.writeFile(
-    path.join(projectPath, "scripts", ".gitkeep"),
-    "",
-    ENCODING,
-  );
+  await writeFile(path.join(projectPath, "scripts", ".gitkeep"), "", "utf8");
 
   if (language === TYPESCRIPT_LANG) {
     const tsconfig = {
@@ -163,40 +150,41 @@ describe("Deployment Template Test", function () {
       },
       include: ["scripts/**/*", "deploy/**/*"],
     };
-    await fs.writeJson(path.join(projectPath, "tsconfig.json"), tsconfig, {
-      spaces: 2,
-    });
+    await writeFile(
+      path.join(projectPath, "tsconfig.json"),
+      `${JSON.stringify(tsconfig, null, 2)}\n`,
+    );
   }
 
-  const spec = templates[aliases[template] ?? template];
+  const spec = templates[template];
 
   if (!spec?.load) {
     // "blank", and anything else with no contract behind it.
-    await fs.writeFile(
+    await writeFile(
       path.join(projectPath, "contracts", ".gitkeep"),
       "",
-      ENCODING,
+      "utf8",
     );
-    await fs.writeFile(
+    await writeFile(
       path.join(projectPath, "deploy", `01_deploy.${ext}`),
       blankDeployTemplate(language),
-      ENCODING,
+      "utf8",
     );
   } else {
     const contractName = spec.contract!;
-    await fs.writeFile(
+    await writeFile(
       path.join(projectPath, "contracts", `${contractName}.sol`),
       await spec.load(),
-      ENCODING,
+      "utf8",
     );
-    await fs.writeFile(
+    await writeFile(
       path.join(
         projectPath,
         "deploy",
         `01_${contractName.toLowerCase()}.${ext}`,
       ),
       getDeployScript(contractName, spec.deployArgs ?? "", language),
-      ENCODING,
+      "utf8",
     );
   }
 
@@ -211,9 +199,10 @@ describe("Deployment Template Test", function () {
     dependencies: {},
   };
 
-  await fs.writeJson(path.join(projectPath, "package.json"), packageJson, {
-    spaces: 2,
-  });
+  await writeFile(
+    path.join(projectPath, "package.json"),
+    `${JSON.stringify(packageJson, null, 2)}\n`,
+  );
 
   console.log("Installing dependencies...");
   execSync("npm install ethers", {

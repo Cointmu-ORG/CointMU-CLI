@@ -1,7 +1,6 @@
 import { Command } from "commander";
-import { printCliError } from "../utils/errors";
+import { fail } from "../utils/errors";
 
-const EXIT_FAILURE = 1;
 const PACKAGE_NAME = "cointmu-cli";
 
 // Accepts semver versions, semver ranges, and npm dist-tags (e.g. "latest").
@@ -117,51 +116,45 @@ export function explainInstallFailure(stderr: string): string {
  * @returns {Promise<void>} Resolves when the update is complete.
  */
 async function runUpdate(options: UpdateOptions = {}): Promise<void> {
-  try {
-    const { spawnSync } = await import("child_process");
+  const { spawnSync } = await import("child_process");
 
-    const current = await resolveCurrentVersion();
-    console.log("Checking the npm registry...");
-    const target = await resolveTargetVersion(options.to);
+  const current = await resolveCurrentVersion();
+  console.log("Checking the npm registry...");
+  const target = await resolveTargetVersion(options.to);
 
-    console.log(`current version : ${current}`);
-    console.log(`target version  : ${target}`);
+  console.log(`current version : ${current}`);
+  console.log(`target version  : ${target}`);
 
-    if (current === target) {
-      console.log("\nAlready on the target version. Nothing to do.");
-      return;
-    }
-
-    console.log(`\nRunning: ${buildInstallCommand(target)}`);
-    // ponytail: spawnSync (no shell) blocks command injection; win32 needs
-    // "npm.cmd". If Node ever refuses .cmd via spawn, switch to a resolved
-    // npm-cli.js path invoked through process.execPath.
-    const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-    const install = spawnSync(
-      npm,
-      ["install", "-g", `${PACKAGE_NAME}@${target}`],
-      // stderr is piped (not inherited) so EALLOWGIT can be recognised; it is
-      // written straight back out below so npm's own output is never swallowed.
-      { stdio: ["inherit", "inherit", "pipe"] },
-    );
-
-    const stderr = install.stderr?.toString() ?? "";
-    if (stderr) {
-      process.stderr.write(stderr);
-    }
-    if (install.error) {
-      throw install.error;
-    }
-    if (install.status !== 0) {
-      throw new Error(explainInstallFailure(stderr));
-    }
-
-    console.log(`\nUpdated ${PACKAGE_NAME} to ${target}.`);
-  } catch (error) {
-    console.error("\n\x1b[31merror:\x1b[0m update failed");
-    printCliError(error, options.verbose);
-    process.exit(EXIT_FAILURE);
+  if (current === target) {
+    console.log("\nAlready on the target version. Nothing to do.");
+    return;
   }
+
+  console.log(`\nRunning: ${buildInstallCommand(target)}`);
+  // ponytail: spawnSync (no shell) blocks command injection; win32 needs
+  // "npm.cmd". If Node ever refuses .cmd via spawn, switch to a resolved
+  // npm-cli.js path invoked through process.execPath.
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  const install = spawnSync(
+    npm,
+    ["install", "-g", `${PACKAGE_NAME}@${target}`],
+    // stderr is piped (not inherited) so EALLOWGIT can be recognised; it is
+    // written straight back out below so npm's own output is never swallowed.
+    { stdio: ["inherit", "inherit", "pipe"] },
+  );
+
+  const stderr = install.stderr?.toString() ?? "";
+  if (stderr) {
+    process.stderr.write(stderr);
+  }
+  if (install.error) {
+    throw install.error;
+  }
+  if (install.status !== 0) {
+    throw new Error(explainInstallFailure(stderr));
+  }
+
+  console.log(`\nUpdated ${PACKAGE_NAME} to ${target}.`);
 }
 
 export const updateCommand = new Command("update")
@@ -170,5 +163,6 @@ export const updateCommand = new Command("update")
     "--to <version>",
     "Install a specific published version instead of the latest",
   )
-  .option("-v, --verbose", "Print full stack traces on failure")
-  .action(runUpdate);
+  .action((options, command) =>
+    runUpdate(options).catch(fail("update", command.optsWithGlobals())),
+  );

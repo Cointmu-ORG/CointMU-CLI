@@ -1,24 +1,77 @@
-import { loadNetworks } from "./networkStorage";
+import { existsSync } from "fs";
+import { readFile } from "fs/promises";
+import { loadNetworks, type NetworkEntry } from "./networkStorage";
+import { registerTsNode } from "./tsNode";
+import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
 import { getSessionFilePath, resolvePrivateKey } from "./session";
 
-const DEFAULT_NETWORK = "local";
-const LOCAL_CHAIN_ID = 1912;
-const LOCAL_URL = "http://127.0.0.1:8585";
 const TS_CONFIG_FILE = "cmu.config.ts";
 const JS_CONFIG_FILE = "cmu.config.js";
-const MODULE_FORMAT = "CommonJS";
-
-const FS_EXTRA_PKG = "fs-extra";
-const PATH_PKG = "path";
-const ETHERS_PKG = "ethers";
-const TS_NODE_PKG = "ts-node";
-const TS_COMPILER = "typescript";
 
 export interface NetworkConfig {
   name: string;
   url: string;
   chainId: number;
   privateKey: string | undefined;
+}
+
+/**
+ * Name of the network the session has selected, falling back to the local
+ * devnet. Never throws: callers that only need something to point at (and to
+ * mark in a listing) treat "no session yet" as "local".
+ *
+ * @returns {Promise<string>} The active network name.
+ */
+export async function activeNetworkName(): Promise<string> {
+  const sessionFile = getSessionFilePath();
+  if (!existsSync(sessionFile)) return LOCAL_NETWORK_NAME;
+
+  const session = JSON.parse(await readFile(sessionFile, "utf8"));
+  return session.activeNetwork || LOCAL_NETWORK_NAME;
+}
+
+/**
+ * The saved network entry the session has selected.
+ *
+ * The counterpart to activeNetworkName() for callers that cannot do anything
+ * useful without a real network, so each way of not having one - no session, a
+ * session that never picked a network, a pick that has since been deleted - is
+ * a distinct error with its own hint.
+ *
+ * @param {string} [noSessionHint] - Hint for the "no session" case, which is
+ *   the one where the advice depends on the command.
+ * @returns {Promise<NetworkEntry>} The active network.
+ * @throws {Error} When there is no usable active network.
+ */
+export async function activeNetwork(
+  noSessionHint = "run `cmu wallet login`, then `cmu network use <name>`.",
+): Promise<NetworkEntry> {
+  const sessionFile = getSessionFilePath();
+  if (!existsSync(sessionFile)) {
+    throw new Error(
+      "no active session.\n" + `\x1b[2mhint:\x1b[0m ${noSessionHint}`,
+    );
+  }
+
+  const session = JSON.parse(await readFile(sessionFile, "utf8"));
+  if (!session.activeNetwork) {
+    throw new Error(
+      "no active network in the session.\n" +
+        "\x1b[2mhint:\x1b[0m select one with `cmu network use <name>`.",
+    );
+  }
+
+  const entry = (await loadNetworks()).find(
+    (n) => n.name === session.activeNetwork,
+  );
+  if (!entry) {
+    throw new Error(
+      `active network '${session.activeNetwork}' is no longer saved.\n` +
+        "\x1b[2mhint:\x1b[0m pick an existing one with `cmu network use <name>`, or re-add it with `cmu network save <url> --name <name>`.",
+    );
+  }
+
+  return entry;
 }
 
 /**
@@ -36,20 +89,7 @@ export interface NetworkConfig {
 export async function getDynamicNetwork(
   targetNetwork?: string,
 ): Promise<NetworkConfig> {
-  const fs =
-    (await import(FS_EXTRA_PKG)).default || (await import(FS_EXTRA_PKG));
-  const sessionFile = getSessionFilePath();
-
-  let activeNetworkName = DEFAULT_NETWORK;
-
-  if (await fs.pathExists(sessionFile)) {
-    const session = await fs.readJson(sessionFile);
-    if (session.activeNetwork) {
-      activeNetworkName = session.activeNetwork;
-    }
-  }
-
-  const networkName = targetNetwork || activeNetworkName;
+  const networkName = targetNetwork || (await activeNetworkName());
   const networks = await loadNetworks();
 
   const network = networks.find((n) => n.name === networkName);
@@ -61,7 +101,7 @@ export async function getDynamicNetwork(
     );
   }
 
-  const { ethers } = await import(ETHERS_PKG);
+  const { ethers } = await import("ethers");
   let chainId = 0;
 
   try {
@@ -69,7 +109,7 @@ export async function getDynamicNetwork(
     const net = await provider.getNetwork();
     chainId = Number(net.chainId);
   } catch {
-    chainId = networkName === DEFAULT_NETWORK ? LOCAL_CHAIN_ID : 0;
+    chainId = networkName === LOCAL_NETWORK_NAME ? LOCAL_CHAIN_ID : 0;
   }
 
   return {
@@ -96,43 +136,37 @@ export async function getDeployNetwork(
   targetNetwork?: string,
   options: { noPrompt?: boolean } = {},
 ): Promise<NetworkConfig> {
-  const fs =
-    (await import(FS_EXTRA_PKG)).default || (await import(FS_EXTRA_PKG));
-  const path = await import(PATH_PKG);
+  const path = await import("path");
 
   let config: any = null;
   const tsConfigPath = path.resolve(process.cwd(), TS_CONFIG_FILE);
   const jsConfigPath = path.resolve(process.cwd(), JS_CONFIG_FILE);
 
-  if (await fs.pathExists(tsConfigPath)) {
-    const tsNode = await import(TS_NODE_PKG);
-    tsNode.register({
-      transpileOnly: true,
-      compiler: TS_COMPILER,
-      compilerOptions: { module: MODULE_FORMAT },
-    });
+  if (existsSync(tsConfigPath)) {
+    await registerTsNode();
     const mod = require(tsConfigPath);
     config = mod.default || mod;
-  } else if (await fs.pathExists(jsConfigPath)) {
+  } else if (existsSync(jsConfigPath)) {
     config = require(jsConfigPath);
   }
 
   if (!config) {
-    if (targetNetwork && targetNetwork !== DEFAULT_NETWORK) {
+    if (targetNetwork && targetNetwork !== LOCAL_NETWORK_NAME) {
       throw new Error(
         `network '${targetNetwork}' was requested, but no cmu.config.ts was found.\n` +
           "\x1b[2mhint:\x1b[0m run this from a CointMU project, or drop -n to deploy to the local network.",
       );
     }
     return {
-      name: DEFAULT_NETWORK,
-      url: LOCAL_URL,
+      name: LOCAL_NETWORK_NAME,
+      url: LOCAL_RPC_URL,
       chainId: LOCAL_CHAIN_ID,
       privateKey: await resolvePrivateKey({ prompt: !options.noPrompt }),
     };
   }
 
-  const networkName = targetNetwork || config.defaultNetwork || DEFAULT_NETWORK;
+  const networkName =
+    targetNetwork || config.defaultNetwork || LOCAL_NETWORK_NAME;
   const network = config.networks?.[networkName];
 
   if (!network) {

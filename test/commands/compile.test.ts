@@ -87,12 +87,12 @@ describe("runCompile trust gate", () => {
     process.stdin.isTTY = false;
     const { runCompile } = await import("../../src/commands/compile");
 
-    await expect(runCompile()).rejects.toThrow("exit:1");
+    // runCompile reports by throwing; the command handler turns that into the
+    // "compile failed" banner and the exit code.
+    await expect(runCompile()).rejects.toThrow(/non-interactive session/);
+    await expect(runCompile()).rejects.toThrow(/--yes/);
 
     expect(fs.existsSync(marker)).toBe(false);
-    const errors = (console.error as any).mock.calls.flat().join("\n");
-    expect(errors).toMatch(/non-interactive session/);
-    expect(errors).toMatch(/--yes/);
   });
 
   it("proceeds past the gate with --yes, without prompting", async () => {
@@ -102,12 +102,63 @@ describe("runCompile trust gate", () => {
     const { runCompile } = await import("../../src/commands/compile");
 
     // No contracts/ dir, so this is the first failure *after* the gate.
-    await expect(runCompile({ yes: true })).rejects.toThrow("exit:1");
+    await expect(runCompile({ yes: true })).rejects.toThrow(
+      /contracts\/ directory not found/,
+    );
 
     expect(prompt).not.toHaveBeenCalled();
     expect(fs.existsSync(marker)).toBe(true);
-    expect((console.error as any).mock.calls.flat().join("\n")).toMatch(
-      /contracts\/ directory not found/,
+  });
+});
+
+// Both `cmu compile` and `cmu deploy` register ts-node to require() a
+// cmu.config.ts. They used to do it two different ways, and compile's swallowed
+// the failure behind a warning, so a broken registration silently downgraded to
+// default compiler settings instead of reporting anything. Both go through
+// registerTsNode() now; this pins compile's half.
+
+describe("runCompile config loading", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-compile-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, "contracts"));
+    fs.writeFileSync(
+      path.join(tmpDir, "contracts", "Tiny.sol"),
+      "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\ncontract Tiny {}\n",
+    );
+    // ts-node resolves "typescript" from the project being loaded, so the
+    // fixture needs a real one to resolve.
+    fs.mkdirSync(path.join(tmpDir, "node_modules"));
+    fs.symlinkSync(
+      path.resolve(__dirname, "../../node_modules/typescript"),
+      path.join(tmpDir, "node_modules", "typescript"),
+      "dir",
+    );
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loads a real cmu.config.ts instead of warning and falling back", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "cmu.config.ts"),
+      `export default { compiler: { settings: { optimizer: { enabled: true, runs: 999 } } } };`,
+    );
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { runCompile } = await import("../../src/commands/compile");
+    await runCompile({ yes: true });
+
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("could not load"),
+    );
+    expect(fs.existsSync(path.join(tmpDir, "artifacts", "Tiny.json"))).toBe(
+      true,
     );
   });
 });

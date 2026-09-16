@@ -1,25 +1,25 @@
+import { writeFile } from "fs/promises";
+import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
+
 const TYPESCRIPT_LANG = "typescript";
 const TS_CONFIG_FILE = "cmu.config.ts";
 const JS_CONFIG_FILE = "cmu.config.js";
 const ENV_EXAMPLE_FILE = ".env.example";
 const GITIGNORE_FILE = ".gitignore";
-const ENCODING = "utf8";
-const FS_EXTRA_PKG = "fs-extra";
-const PATH_PKG = "path";
 
 const cmuConfigJs = `module.exports = {
-  defaultNetwork: "local",
+  defaultNetwork: "${LOCAL_NETWORK_NAME}",
   networks: {
-    local: {
-      url: "http://127.0.0.1:8585",
-      chainId: 1912,
+    ${LOCAL_NETWORK_NAME}: {
+      url: "${LOCAL_RPC_URL}",
+      chainId: ${LOCAL_CHAIN_ID},
     },
     // Set this to your own CointMU mainnet RPC endpoint before deploying.
     // Keep it on https://: a plaintext http:// endpoint can be intercepted and
     // made to return spoofed chain state (balances, nonces, gas, receipts).
     mainnet: {
       url: "",
-      chainId: 1912,
+      chainId: ${LOCAL_CHAIN_ID},
     },
   },
   wallet: {
@@ -32,18 +32,18 @@ const cmuConfigJs = `module.exports = {
 `;
 
 const cmuConfigTs = `export default {
-  defaultNetwork: "local",
+  defaultNetwork: "${LOCAL_NETWORK_NAME}",
   networks: {
-    local: {
-      url: "http://127.0.0.1:8585",
-      chainId: 1912,
+    ${LOCAL_NETWORK_NAME}: {
+      url: "${LOCAL_RPC_URL}",
+      chainId: ${LOCAL_CHAIN_ID},
     },
     // Set this to your own CointMU mainnet RPC endpoint before deploying.
     // Keep it on https://: a plaintext http:// endpoint can be intercepted and
     // made to return spoofed chain state (balances, nonces, gas, receipts).
     mainnet: {
       url: "",
-      chainId: 1912,
+      chainId: ${LOCAL_CHAIN_ID},
     },
   },
   wallet: {
@@ -99,30 +99,28 @@ export async function generateConfigFiles(
   language: string,
 ): Promise<void> {
   try {
-    const fs =
-      (await import(FS_EXTRA_PKG)).default || (await import(FS_EXTRA_PKG));
-    const path = await import(PATH_PKG);
+    const path = await import("path");
 
     const isTypeScript = language === TYPESCRIPT_LANG;
     const configFileName = isTypeScript ? TS_CONFIG_FILE : JS_CONFIG_FILE;
     const configContent = isTypeScript ? cmuConfigTs : cmuConfigJs;
 
-    await fs.writeFile(
+    await writeFile(
       path.join(projectPath, configFileName),
       configContent,
-      ENCODING,
+      "utf8",
     );
 
-    await fs.writeFile(
+    await writeFile(
       path.join(projectPath, ENV_EXAMPLE_FILE),
       envExampleTemplate,
-      ENCODING,
+      "utf8",
     );
 
-    await fs.writeFile(
+    await writeFile(
       path.join(projectPath, GITIGNORE_FILE),
       gitignoreTemplate,
-      ENCODING,
+      "utf8",
     );
   } catch (error) {
     throw new Error(

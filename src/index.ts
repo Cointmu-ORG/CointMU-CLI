@@ -8,29 +8,26 @@ import * as fs from "fs";
 import * as path from "path";
 import { Command } from "commander";
 
-const CLI_NAME = "cmu";
-const EXIT_FAILURE = 1;
-const PKG_ENCODING = "utf8";
-const HARDHAT_CONFIG_ENV = "HARDHAT_CONFIG";
-const HARDHAT_CONFIG_PATH = "../hardhat.config.js";
-const DOTENV_QUIET = true;
-const PKG_FILE = "package.json";
-const FLAG_VERSION_SHORT = "-V";
-const FLAG_VERSION_LONG = "--version";
-const FLAG_HELP_SHORT = "-h";
+// A missing .env is normal - dotenv was silent about it too, and most
+// invocations are outside a project. Anything else (unreadable file, bad
+// permissions) is a real problem the user needs to see.
+try {
+  process.loadEnvFile(path.resolve(process.cwd(), ".env"));
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+}
+process.env.HARDHAT_CONFIG = path.resolve(__dirname, "../hardhat.config.js");
 
-require("dotenv").config({ quiet: DOTENV_QUIET });
-process.env[HARDHAT_CONFIG_ENV] = path.resolve(__dirname, HARDHAT_CONFIG_PATH);
-
-const pkgPath = path.resolve(__dirname, "..", PKG_FILE);
-const pkg = JSON.parse(fs.readFileSync(pkgPath, PKG_ENCODING));
+const pkgPath = path.resolve(__dirname, "..", "package.json");
+const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
 
 const program = new Command();
 
 program
-  .name(CLI_NAME)
+  .name("cmu")
+  .option("-v, --verbose", "Print full stack traces on failure")
   .description(
-    `${pkg.description}\nTip: Run ${CLI_NAME} <command> ${FLAG_HELP_SHORT} to see detailed options for a specific command.`,
+    `${pkg.description}\nTip: Run cmu <command> -h to see detailed options for a specific command.`,
   );
 
 /**
@@ -43,7 +40,6 @@ const commandMap: Record<string, () => Promise<Record<string, any>>> = {
   deploy: () => import("./commands/deploy"),
   wallet: () => import("./commands/wallet"),
   create: () => import("./commands/create"),
-  explorer: () => import("./commands/explorer"),
   node: () => import("./commands/node"),
   audit: () => import("./commands/audit"),
   aries: () => import("./commands/aries"),
@@ -85,22 +81,18 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const cmdStr = args[0];
 
-  if (
-    args.length === 1 &&
-    (cmdStr === FLAG_VERSION_SHORT || cmdStr === FLAG_VERSION_LONG)
-  ) {
+  if (args.length === 1 && (cmdStr === "-V" || cmdStr === "--version")) {
     const { runVersion } = await import("./commands/version");
     await runVersion();
     return;
   }
 
-  if (!cmdStr || commandMap[cmdStr]) {
-    await registerCommands(cmdStr ? [cmdStr] : Object.keys(commandMap));
-  } else {
-    // An unknown command, -h/--help, or a bare flag: load everything so
-    // commander can render full help or report the command as unknown.
-    await registerCommands(Object.keys(commandMap));
-  }
+  // A known command loads on its own. Anything else - no command, an unknown
+  // one, -h/--help, a bare flag - loads everything, so commander can render
+  // full help or report the command as unknown.
+  await registerCommands(
+    commandMap[cmdStr] ? [cmdStr] : Object.keys(commandMap),
+  );
 
   if (args.length === 0) {
     program.help();
@@ -114,19 +106,14 @@ async function main(): Promise<void> {
       "\x1b[31merror:\x1b[0m command failed:",
       error instanceof Error ? error.message : String(error),
     );
-    process.exit(EXIT_FAILURE);
+    process.exit(1);
   }
 }
 
-try {
-  main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(EXIT_FAILURE);
-  });
-} catch (fatalError) {
+main().catch((error) => {
   console.error(
     "\x1b[31merror:\x1b[0m cmu failed to start:",
-    fatalError instanceof Error ? fatalError.message : String(fatalError),
+    error instanceof Error ? error.message : String(error),
   );
-  process.exit(EXIT_FAILURE);
-}
+  process.exit(1);
+});

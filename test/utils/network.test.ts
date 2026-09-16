@@ -129,3 +129,131 @@ describe("getDeployNetwork private key resolution", () => {
     expect(network.url).toBe("http://127.0.0.1:8585");
   });
 });
+
+// runNetworkInfo, runNetworkPing and runNetworkList each carried their own copy
+// of "read the session, look the active network up in .cmu-networks.json".
+// These cover the shared pair that replaced them.
+
+describe("activeNetwork", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-active-net-"));
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    // networkStorage keys .cmu-networks.json off os.homedir().
+    vi.stubEnv("HOME", tmpDir);
+    vi.stubEnv("USERPROFILE", tmpDir);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    vi.resetModules();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeSession(activeNetwork?: string): void {
+    fs.writeFileSync(
+      path.join(tmpDir, ".cmu-session"),
+      JSON.stringify({
+        address: "0xTest",
+        ...(activeNetwork && { activeNetwork }),
+      }),
+    );
+  }
+
+  function writeNetworks(entries: { name: string; rpcUrl: string }[]): void {
+    fs.writeFileSync(
+      path.join(tmpDir, ".cmu-networks.json"),
+      JSON.stringify(entries),
+    );
+  }
+
+  it("returns the saved entry the session points at", async () => {
+    writeSession("staging");
+    writeNetworks([{ name: "staging", rpcUrl: "https://rpc.example.com" }]);
+
+    const { activeNetwork } = await import("../../src/utils/network");
+
+    expect(await activeNetwork()).toEqual({
+      name: "staging",
+      rpcUrl: "https://rpc.example.com",
+    });
+  });
+
+  it("reports a missing session, and points at login by default", async () => {
+    const { activeNetwork } = await import("../../src/utils/network");
+
+    await expect(activeNetwork()).rejects.toThrow(/no active session/);
+    await expect(activeNetwork()).rejects.toThrow(/cmu wallet login/);
+  });
+
+  it("lets the caller supply the hint for a missing session", async () => {
+    const { activeNetwork } = await import("../../src/utils/network");
+
+    await expect(activeNetwork("pass a network name.")).rejects.toThrow(
+      /pass a network name\./,
+    );
+  });
+
+  it("separates a session that never picked a network from a missing one", async () => {
+    writeSession();
+    const { activeNetwork } = await import("../../src/utils/network");
+
+    await expect(activeNetwork()).rejects.toThrow(
+      /no active network in the session/,
+    );
+  });
+
+  it("reports an active network that is no longer saved", async () => {
+    writeSession("deleted-one");
+    writeNetworks([{ name: "local", rpcUrl: "http://127.0.0.1:8585" }]);
+
+    const { activeNetwork } = await import("../../src/utils/network");
+
+    await expect(activeNetwork()).rejects.toThrow(
+      /'deleted-one' is no longer saved/,
+    );
+  });
+});
+
+describe("activeNetworkName", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-active-name-"));
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("falls back to local with no session, rather than throwing", async () => {
+    const { activeNetworkName } = await import("../../src/utils/network");
+
+    expect(await activeNetworkName()).toBe("local");
+  });
+
+  it("falls back to local when the session never picked one", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, ".cmu-session"),
+      JSON.stringify({ address: "0xTest" }),
+    );
+    const { activeNetworkName } = await import("../../src/utils/network");
+
+    expect(await activeNetworkName()).toBe("local");
+  });
+
+  it("returns the name the session selected", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, ".cmu-session"),
+      JSON.stringify({ address: "0xTest", activeNetwork: "staging" }),
+    );
+    const { activeNetworkName } = await import("../../src/utils/network");
+
+    expect(await activeNetworkName()).toBe("staging");
+  });
+});
