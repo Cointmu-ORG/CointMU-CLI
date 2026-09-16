@@ -20,7 +20,7 @@ export function scrubHomeDir(text: string): string {
   if (!home || home.length < 2) {
     return text;
   }
-  return text.split(home).join(HOME_PLACEHOLDER);
+  return text.replaceAll(home, HOME_PLACEHOLDER);
 }
 
 /**
