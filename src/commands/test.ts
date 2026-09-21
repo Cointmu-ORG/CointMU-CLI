@@ -23,6 +23,11 @@ const RPC_ALLOWED_HOSTS = new Set([
  * carries an attacker-controlled `Host`. Either one is rejected unless the
  * user explicitly opts in with `--allow-cors`.
  *
+ * Hardhat's own node server has no equivalent, so this gate cannot be handed
+ * off to it: as of hardhat@3.16.0 its JsonRpcHandler sets
+ * `Access-Control-Allow-Origin: *` on every response and never reads
+ * `req.headers` at all, which is the state issue #83 was filed about.
+ *
  * @param {object} headers - Incoming request headers (`req.headers`).
  * @param {boolean} [allowCors] - True when `--allow-cors` was passed.
  * @returns {boolean} True when the request may be proxied to the provider.
@@ -72,6 +77,12 @@ export interface RpcProvider {
  *
  * Always binds TEST_PORT: isRpcRequestAllowed()'s Host allowlist is built from
  * that same port, so a proxy on any other port would reject every request.
+ *
+ * Hardhat's built-in `node` task cannot stand in for this, on top of the CORS
+ * problem noted on isRpcRequestAllowed(). Its run() resolves only once the
+ * server has closed and hands back no handle to close it, whereas this proxy
+ * has to outlive the mocha run so printGasReport() can read the chain back
+ * over HTTP, and is then closed in runTest()'s finally.
  *
  * @param {RpcProvider} provider - The provider to forward calls to.
  * @param {object} [options]
