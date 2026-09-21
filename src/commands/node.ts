@@ -5,25 +5,11 @@ import {
   bootHardhat,
   silenceHardhatNoise,
 } from "../utils/hardhat";
+import { isLoopbackHost, startRpcProxy } from "../utils/rpcProxy";
 import { LOCAL_CHAIN_ID, LOCAL_PORT } from "../utils/defaults";
 
 const DEFAULT_HOST = "127.0.0.1";
 const MAX_PORT = 65535;
-
-const LOOPBACK_HOSTS = ["localhost", "::1", "[::1]", "::ffff:127.0.0.1"];
-
-/**
- * Reports whether a bind host keeps the DevNet reachable only from this machine.
- * @param {string} host - The host the node will bind to.
- * @returns {boolean} True for loopback addresses and localhost.
- */
-export function isLoopbackHost(host: string): boolean {
-  const normalized = host.trim().toLowerCase();
-  return (
-    LOOPBACK_HOSTS.includes(normalized) ||
-    /^127(\.\d{1,3}){3}$/.test(normalized)
-  );
-}
 
 /**
  * Warns, before the node binds, that a non-loopback host exposes the dev RPC
@@ -88,10 +74,11 @@ async function runNodeStart(options: {
   port: string;
   mnemonic?: string;
   log?: boolean;
+  allowCors?: boolean;
   verbose?: boolean;
 }): Promise<void> {
   const isVerbose = options.verbose;
-  const { killPort } = await import("../utils/process");
+  const allowCors = Boolean(options.allowCors);
   const parsedPort = parseInt(options.port, 10);
   const port = !isNaN(parsedPort) ? parsedPort : LOCAL_PORT;
 
@@ -104,7 +91,15 @@ async function runNodeStart(options: {
 
   warnOnNonLoopbackHost(options.host);
 
-  await killPort(port);
+  if (allowCors) {
+    console.warn(
+      `\n\x1b[33mwarning:\x1b[0m --allow-cors - the DevNet RPC on ${options.host}:${port} accepts`,
+    );
+    console.warn(
+      "    requests from any browser origin. Any page you visit can then drive this",
+    );
+    console.warn("    node and spend the accounts printed below.\n");
+  }
 
   const console_ = silenceHardhatNoise({
     verbose: isVerbose,
@@ -125,27 +120,28 @@ async function runNodeStart(options: {
         return true;
       }
 
-      // Suppress hardhat's own startup banner; we print our own below.
-      return (
-        msg.includes("Started HTTP and WebSocket JSON-RPC server at") ||
-        msg.includes("Account #") ||
-        msg.includes("Private Key:") ||
-        msg.includes("WARNING: These accounts, and their private keys") ||
-        msg.includes(
-          "Any funds sent to them on Mainnet or any other live network WILL BE LOST.",
-        ) ||
-        msg.includes("hardhat_")
-      );
+      return false;
     },
   });
   const originalConsoleLog = console_.log;
 
-  const { hre, mnemonic: resolvedMnemonic } = await bootHardhat({
+  const {
+    hre,
+    mnemonic: resolvedMnemonic,
+    override,
+  } = await bootHardhat({
     mnemonic: options.mnemonic,
     loggingEnabled: !!options.log || !!isVerbose,
   });
 
   const host = options.host;
+
+  // create(), not the built-in `node` task: that task opens its own connection
+  // to the `node` network, so the override never reached the chain it served -
+  // it ran on Hardhat's stock chain ID and publicly known accounts while the
+  // keys below said otherwise (issue #117). This is also what makes the
+  // "Chain ID" printed here true.
+  const { provider } = await hre.network.create({ override });
 
   originalConsoleLog(`\nCointMU DevNet listening on http://${host}:${port}`);
   originalConsoleLog(`Chain ID: ${LOCAL_CHAIN_ID}\n`);
@@ -170,17 +166,24 @@ async function runNodeStart(options: {
   }
   originalConsoleLog("\n");
 
+  const server = await startRpcProxy(provider, {
+    port,
+    host,
+    allowCors,
+    command: "cmu node start",
+  });
+
   process.on("SIGINT", () => {
     originalConsoleLog("\nStopping the CointMU DevNet...");
+    server.close();
     originalConsoleLog("CointMU DevNet stopped.");
     process.exit(0);
   });
 
-  // Run the hardhat node natively
-  await hre.tasks.getTask("node").run({
-    hostname: host,
-    port: port,
-  });
+  // Hold the command open while the DevNet serves. The listening socket alone
+  // would keep the process alive, but only as a side effect; this states the
+  // lifetime outright, and gives SIGINT something to end.
+  await new Promise<void>((resolve) => server.on("close", resolve));
 }
 
 export const nodeCommand = new Command("node").description(
@@ -216,6 +219,10 @@ nodeCommand
     "12-word mnemonic for deterministic accounts",
   )
   .option("-l, --log", "Log RPC calls as they arrive")
+  .option(
+    "--allow-cors",
+    "Allow cross-origin browser access to the DevNet RPC; off by default to prevent DNS rebinding",
+  )
   .action((options, command) => {
     // runNodeStart reads verbose itself, for the Hardhat log filter.
     const opts = command.optsWithGlobals();

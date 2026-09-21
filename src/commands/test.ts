@@ -2,174 +2,12 @@ import { existsSync, readdirSync } from "fs";
 import { Command } from "commander";
 import { fail, printCliError } from "../utils/errors";
 import { bootHardhat, silenceHardhatNoise } from "../utils/hardhat";
+import { startRpcProxy } from "../utils/rpcProxy";
 import { LOCAL_CHAIN_ID } from "../utils/defaults";
 
 const TEST_PORT = 8555;
+const TEST_HOST = "127.0.0.1";
 const TEST_DIR_NAME = "test";
-
-const RPC_ALLOWED_HOSTS = new Set([
-  `127.0.0.1:${TEST_PORT}`,
-  `localhost:${TEST_PORT}`,
-  `[::1]:${TEST_PORT}`,
-]);
-
-/**
- * Guards the local test RPC proxy against browser-originated access
- * (DNS rebinding against a localhost JSON-RPC server, issue #83).
- *
- * Node JSON-RPC clients (ethers JsonRpcProvider, the spawned mocha process)
- * send no `Origin` header and always address the loopback `Host`. A browser
- * always sends `Origin` on a cross-origin fetch, and a DNS-rebound request
- * carries an attacker-controlled `Host`. Either one is rejected unless the
- * user explicitly opts in with `--allow-cors`.
- *
- * Hardhat's own node server has no equivalent, so this gate cannot be handed
- * off to it: as of hardhat@3.16.0 its JsonRpcHandler sets
- * `Access-Control-Allow-Origin: *` on every response and never reads
- * `req.headers` at all, which is the state issue #83 was filed about.
- *
- * @param {object} headers - Incoming request headers (`req.headers`).
- * @param {boolean} [allowCors] - True when `--allow-cors` was passed.
- * @returns {boolean} True when the request may be proxied to the provider.
- */
-export function isRpcRequestAllowed(
-  headers: {
-    origin?: string | string[];
-    host?: string | string[];
-  },
-  allowCors = false,
-): boolean {
-  if (allowCors) return true;
-
-  const origin = Array.isArray(headers.origin)
-    ? headers.origin[0]
-    : headers.origin;
-  if (origin != null && origin !== "") return false;
-
-  const host = Array.isArray(headers.host) ? headers.host[0] : headers.host;
-  if (
-    host != null &&
-    host !== "" &&
-    !RPC_ALLOWED_HOSTS.has(host.toLowerCase())
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
-/**
- * Minimal surface this proxy needs from a provider: Hardhat's EIP-1193 request
- * method. Narrowed so the proxy can be tested without a Hardhat runtime.
- */
-export interface RpcProvider {
-  request(payload: { method: string; params: unknown[] }): Promise<unknown>;
-}
-
-/**
- * Serves the in-process Hardhat network over HTTP so the spawned mocha run, and
- * anything else speaking JSON-RPC, can reach it on loopback.
- *
- * Every request passes isRpcRequestAllowed() first; see its notes for why a
- * browser-reachable localhost JSON-RPC server needs a gate at all (issue #83).
- * Batched requests are answered element by element, and a provider error is
- * reported per element rather than failing the whole batch.
- *
- * Always binds TEST_PORT: isRpcRequestAllowed()'s Host allowlist is built from
- * that same port, so a proxy on any other port would reject every request.
- *
- * Hardhat's built-in `node` task cannot stand in for this, on top of the CORS
- * problem noted on isRpcRequestAllowed(). Its run() resolves only once the
- * server has closed and hands back no handle to close it, whereas this proxy
- * has to outlive the mocha run so printGasReport() can read the chain back
- * over HTTP, and is then closed in runTest()'s finally.
- *
- * @param {RpcProvider} provider - The provider to forward calls to.
- * @param {object} [options]
- * @param {boolean} [options.allowCors] - Serve browser origins (`--allow-cors`).
- * @returns {Promise<any>} The listening http.Server.
- */
-export async function startRpcProxy(
-  provider: RpcProvider,
-  options: { allowCors?: boolean } = {},
-): Promise<any> {
-  const http = require("http");
-  const allowCors = Boolean(options.allowCors);
-
-  const server = http.createServer((req: any, res: any) => {
-    let body = "";
-    req.on("data", (chunk: any) => {
-      body += chunk.toString();
-    });
-    req.on("end", async () => {
-      if (!isRpcRequestAllowed(req.headers, allowCors)) {
-        res.statusCode = 403;
-        res.setHeader("Content-Type", "application/json");
-        return res.end(
-          `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Forbidden: cross-origin or non-local request rejected. Pass --allow-cors to cmu test to allow browser access."}}`,
-        );
-      }
-      if (req.method === "OPTIONS") {
-        if (allowCors) {
-          res.setHeader("Access-Control-Allow-Origin", "*");
-          res.setHeader("Access-Control-Allow-Headers", "*");
-          res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-          res.statusCode = 204;
-        } else {
-          res.statusCode = 403;
-        }
-        return res.end();
-      }
-      if (!body) {
-        res.statusCode = 400;
-        return res.end();
-      }
-      try {
-        const json = JSON.parse(body);
-        const isArray = Array.isArray(json);
-        const reqs = isArray ? json : [json];
-        const responses = [];
-
-        for (const r of reqs) {
-          try {
-            const result = await provider.request({
-              method: r.method,
-              params: r.params || [],
-            });
-            responses.push({ jsonrpc: "2.0", id: r.id, result });
-          } catch (error: any) {
-            responses.push({
-              jsonrpc: "2.0",
-              id: r.id,
-              error: { code: error.code || -32603, message: error.message },
-            });
-          }
-        }
-
-        res.setHeader("Content-Type", "application/json");
-        if (allowCors) res.setHeader("Access-Control-Allow-Origin", "*");
-        res.end(JSON.stringify(isArray ? responses : responses[0]));
-      } catch {
-        res.statusCode = 400;
-        res.end(
-          `{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}`,
-        );
-      }
-    });
-  });
-
-  const { killPort } = await import("../utils/process");
-  await killPort(TEST_PORT);
-
-  await new Promise<void>((resolve, reject) => {
-    server.listen(TEST_PORT, "127.0.0.1", (err?: Error) => {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
-
-  return server;
-}
 
 /**
  * Prints per-transaction gas usage for every block the test run produced.
@@ -287,7 +125,7 @@ async function runTest(
   const allowCors = Boolean(options.allowCors);
   if (allowCors) {
     console.warn(
-      "\x1b[33mwarning:\x1b[0m --allow-cors - the test RPC proxy on 127.0.0.1:" +
+      `\x1b[33mwarning:\x1b[0m --allow-cors - the test RPC proxy on ${TEST_HOST}:` +
         `${TEST_PORT} accepts requests from any browser origin`,
     );
   }
@@ -325,7 +163,12 @@ async function runTest(
   const connection = await hre.network.create({ override });
   const provider = connection.provider;
 
-  const server = await startRpcProxy(provider, { allowCors });
+  const server = await startRpcProxy(provider, {
+    port: TEST_PORT,
+    host: TEST_HOST,
+    allowCors,
+    command: "cmu test",
+  });
 
   try {
     const { ethers } = await import("ethers");
