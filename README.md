@@ -98,6 +98,7 @@ Options:
 Commands:
   compile [options]           Compiles smart contracts into ABI and bytecode artifacts
   deploy [options]            Executes deployment scripts to broadcast contracts on-chain
+  console [options]           Opens an interactive REPL against the configured network
   wallet                      Wallet management commands
     create                    Generates a new, secure EVM-compatible wallet
     login                     Securely log into your wallet and create an encrypted session
@@ -136,11 +137,12 @@ Commands:
 `cmu deploy` and `cmu compile` **execute arbitrary code from the project directory**:
 
 - every `.ts`/`.js` file in `deploy/` is run as a program, and receives your decrypted `PRIVATE_KEY` through the environment so it can sign transactions;
-- `cmu.config.ts` / `cmu.config.js` is `require()`d from the current working directory, by `cmu compile`, `cmu test` and `cmu deploy` alike.
+- `cmu.config.ts` / `cmu.config.js` is `require()`d from the current working directory, by `cmu compile`, `cmu test`, `cmu deploy` and `cmu console` alike;
+- `cmu console` then runs whatever you type at the prompt, with your full environment and the key it decrypted for `signer`.
 
 This is by design and cannot be removed without breaking deployment itself — it is the same trust model as Hardhat, Foundry and Truffle. A deploy script that wants to exfiltrate your key only has to read `process.env.PRIVATE_KEY`, and encrypting `.cmu-session` at rest does not help once the script is running.
 
-**Never run `cmu deploy`, `cmu compile` or `cmu test` in a project you did not write or do not trust.** Read `deploy/` and `cmu.config.ts` before the first run, the same way you would read any script before executing it.
+**Never run `cmu deploy`, `cmu compile`, `cmu test` or `cmu console` in a project you did not write or do not trust.** Read `deploy/` and `cmu.config.ts` before the first run, the same way you would read any script before executing it.
 
 To make the boundary explicit, the CLI lists every file it is about to execute and asks for confirmation first:
 
@@ -163,6 +165,7 @@ Pass `-y` / `--yes` to skip the prompt in CI or other non-interactive use:
 cmu deploy --yes
 cmu compile --yes
 cmu test --yes
+cmu console --yes
 ```
 
 When stdin is not a TTY and `--yes` was not given, the command **fails with an error instead of continuing**. The prompt is not silently skipped just because nobody is watching — an unattended run of an untrusted project is exactly the case this gate exists for.
@@ -227,6 +230,23 @@ _(This will automatically and sequentially execute the scripts in your `deploy/`
 ```bash
 cmu node connect
 ```
+
+8. **Poke at a deployed contract without writing a script**: 🛠️
+
+```bash
+cmu console
+```
+
+```text
+cmu> await provider.getBlockNumber()
+cmu> const token = getContract("Token", "0xYOUR_CONTRACT_ADDRESS")
+cmu> await token.totalSupply()
+cmu> .exit
+```
+
+_(The REPL preloads `provider`, `signer`, `ethers` and `getContract(name, address)`. The address is required - the CLI does not track deployed addresses per network yet - and `name` is the contract name, the one `cmu compile` wrote to `artifacts/<Name>.json`.)_
+
+Without `cmu wallet login` or a `PRIVATE_KEY`, `signer` is `undefined` and the console is read-only; `--no-signer` starts that way deliberately and skips the session password prompt. The network follows `defaultNetwork` in `cmu.config.ts` rather than `cmu network use`, exactly like `cmu deploy`.
 
 ---
 

@@ -38,6 +38,7 @@ program
 const commandMap: Record<string, () => Promise<Record<string, any>>> = {
   compile: () => import("./commands/compile"),
   deploy: () => import("./commands/deploy"),
+  console: () => import("./commands/console"),
   wallet: () => import("./commands/wallet"),
   create: () => import("./commands/create"),
   node: () => import("./commands/node"),
