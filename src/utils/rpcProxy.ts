@@ -41,6 +41,11 @@ export interface RpcProxyOptions {
   allowCors?: boolean;
   /** Command name quoted in the rejection message, e.g. "cmu node start". */
   command: string;
+  /**
+   * Clause closing the port-in-use hint, for a command that can change its port.
+   * Defaults to re-running the command, which is all `cmu test` can offer.
+   */
+  portHint?: string;
 }
 
 /**
@@ -116,9 +121,14 @@ export interface RpcProvider {
  * applies to - `new WebSocket()` from any page connects, so it would need its
  * own gate on the upgrade handshake to be worth keeping.
  *
+ * The port is never freed on the caller's behalf: killing whatever holds it is a
+ * surprising default that can take out an unrelated process, so a busy port is
+ * reported instead (issue #115).
+ *
  * @param {RpcProvider} provider - The provider to forward calls to.
  * @param {RpcProxyOptions} options - Where to listen, and the gate's settings.
  * @returns {Promise<any>} The listening http.Server.
+ * @throws {Error} If the port is already in use, or the bind fails otherwise.
  */
 export async function startRpcProxy(
   provider: RpcProvider,
@@ -198,14 +208,23 @@ export async function startRpcProxy(
     });
   });
 
-  const { killPort } = await import("./process");
-  await killPort(options.port);
-
+  // listen()'s callback is a one-shot 'listening' listener; Node never passes it
+  // an error. A bind failure arrives as an 'error' event, and with no listener
+  // for it that is an uncaught exception - the reason a busy port used to print
+  // a raw stack trace instead of going through fail() (issue #115).
   await new Promise<void>((resolve, reject) => {
-    server.listen(options.port, options.host, (err?: Error) => {
-      if (err) return reject(err);
+    server.once("error", reject);
+    server.listen(options.port, options.host, () => {
+      server.removeListener("error", reject);
       resolve();
     });
+  }).catch((error: any) => {
+    if (error?.code !== "EADDRINUSE") throw error;
+    const retry = options.portHint ?? `then run \`${options.command}\` again`;
+    throw new Error(
+      `port ${options.port} is already in use.\n` +
+        `\x1b[2mhint:\x1b[0m stop the process using it, ${retry}.`,
+    );
   });
 
   return server;
