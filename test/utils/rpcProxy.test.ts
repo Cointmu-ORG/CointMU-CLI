@@ -253,3 +253,66 @@ describe("startRpcProxy", () => {
     });
   });
 });
+
+// Issue #115: killPort() used to "free" the port first, which outside Windows
+// meant printing "Port N is free." and binding anyway. Nothing is killed now,
+// so a busy port has to say so itself - and reach fail(), which it could not
+// while a bind error was an uncaught 'error' event rather than a rejection.
+describe("startRpcProxy on a port that is taken", () => {
+  const provider = { request: async () => "ok" };
+  let squatter: any;
+
+  beforeEach(async () => {
+    const http = require("http");
+    squatter = http.createServer(() => {});
+    await new Promise<void>((resolve) =>
+      squatter.listen(PROXY_PORT, "127.0.0.1", resolve),
+    );
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => squatter.close(() => resolve()));
+  });
+
+  it("reports the busy port and how to retry the command that hit it", async () => {
+    const error = await startRpcProxy(provider, {
+      port: PROXY_PORT,
+      host: "127.0.0.1",
+      command: "cmu test",
+    }).catch((e: Error) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain(`port ${PROXY_PORT} is already in use`);
+    expect(message).toContain("hint:");
+    expect(message).toContain("`cmu test` again");
+    // The misleading line the issue was filed about.
+    expect(message).not.toContain("is free");
+  });
+
+  it("points `cmu node start` at -p, which is the port it can change", async () => {
+    const error = await startRpcProxy(provider, {
+      port: PROXY_PORT,
+      host: "127.0.0.1",
+      command: "cmu node start",
+      portHint: "or run `cmu node start` with a different -p",
+    }).catch((e: Error) => e);
+
+    expect((error as Error).message).toContain(
+      "or run `cmu node start` with a different -p",
+    );
+  });
+});
+
+it("rejects other bind failures instead of crashing the process", async () => {
+  // Not EADDRINUSE, so it must surface as itself rather than as a port clash.
+  // Before the 'error' listener existed this took the worker down outright.
+  const error = await startRpcProxy(
+    { request: async () => "ok" },
+    { port: 8555, host: "203.0.113.1", command: "cmu test" },
+  ).catch((e: any) => e);
+
+  expect(error).toBeInstanceOf(Error);
+  expect(error.code).toMatch(/EADDRNOTAVAIL|EINVAL|EACCES/);
+  expect(error.message).not.toContain("already in use");
+});
