@@ -1,24 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isLoopbackHost, warnOnNonLoopbackHost } from "../../src/commands/node";
+import { warnOnNonLoopbackHost } from "../../src/commands/node";
 
 // Issue #86 (b): binding the DevNet to a non-loopback host exposes the RPC
 // endpoint and the private keys the command prints, previously with no warning.
-
-describe("isLoopbackHost", () => {
-  it.each(["127.0.0.1", "127.0.0.2", "localhost", "LOCALHOST", "::1", "[::1]"])(
-    "treats %s as loopback",
-    (host) => {
-      expect(isLoopbackHost(host)).toBe(true);
-    },
-  );
-
-  it.each(["0.0.0.0", "192.168.1.10", "::", "example.local"])(
-    "treats %s as non-loopback",
-    (host) => {
-      expect(isLoopbackHost(host)).toBe(false);
-    },
-  );
-});
+// isLoopbackHost() moved to src/utils/rpcProxy.ts, where the RPC gate also
+// uses it; it is covered in test/utils/rpcProxy.test.ts.
 
 describe("warnOnNonLoopbackHost", () => {
   beforeEach(() => {
