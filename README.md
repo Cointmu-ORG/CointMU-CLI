@@ -99,6 +99,7 @@ Commands:
   compile [options]           Compiles smart contracts into ABI and bytecode artifacts
   deploy [options]            Executes deployment scripts to broadcast contracts on-chain
   console [options]           Opens an interactive REPL against the configured network
+  explorer [options]          Queries block and contract information over RPC
   wallet                      Wallet management commands
     create                    Generates a new, secure EVM-compatible wallet
     login                     Securely log into your wallet and create an encrypted session
@@ -137,12 +138,12 @@ Commands:
 `cmu deploy` and `cmu compile` **execute arbitrary code from the project directory**:
 
 - every `.ts`/`.js` file in `deploy/` is run as a program, and receives your decrypted `PRIVATE_KEY` through the environment so it can sign transactions;
-- `cmu.config.ts` / `cmu.config.js` is `require()`d from the current working directory, by `cmu compile`, `cmu test`, `cmu deploy` and `cmu console` alike;
+- `cmu.config.ts` / `cmu.config.js` is `require()`d from the current working directory, by `cmu compile`, `cmu test`, `cmu deploy`, `cmu console` and `cmu explorer` alike;
 - `cmu console` then runs whatever you type at the prompt, with your full environment and the key it decrypted for `signer`.
 
 This is by design and cannot be removed without breaking deployment itself — it is the same trust model as Hardhat, Foundry and Truffle. A deploy script that wants to exfiltrate your key only has to read `process.env.PRIVATE_KEY`, and encrypting `.cmu-session` at rest does not help once the script is running.
 
-**Never run `cmu deploy`, `cmu compile`, `cmu test` or `cmu console` in a project you did not write or do not trust.** Read `deploy/` and `cmu.config.ts` before the first run, the same way you would read any script before executing it.
+**Never run `cmu deploy`, `cmu compile`, `cmu test`, `cmu console` or `cmu explorer` in a project you did not write or do not trust.** Read `deploy/` and `cmu.config.ts` before the first run, the same way you would read any script before executing it.
 
 To make the boundary explicit, the CLI lists every file it is about to execute and asks for confirmation first:
 
@@ -166,6 +167,7 @@ cmu deploy --yes
 cmu compile --yes
 cmu test --yes
 cmu console --yes
+cmu explorer --block 0 --yes
 ```
 
 When stdin is not a TTY and `--yes` was not given, the command **fails with an error instead of continuing**. The prompt is not silently skipped just because nobody is watching — an unattended run of an untrusted project is exactly the case this gate exists for.
@@ -247,6 +249,32 @@ cmu> .exit
 _(The REPL preloads `provider`, `signer`, `ethers` and `getContract(name, address)`. The address is required - the CLI does not track deployed addresses per network yet - and `name` is the contract name, the one `cmu compile` wrote to `artifacts/<Name>.json`.)_
 
 Without `cmu wallet login` or a `PRIVATE_KEY`, `signer` is `undefined` and the console is read-only; `--no-signer` starts that way deliberately and skips the session password prompt. The network follows `defaultNetwork` in `cmu.config.ts` rather than `cmu network use`, exactly like `cmu deploy`.
+
+9. **Look up a block or a contract without leaving the terminal**: 🔍
+
+```bash
+cmu explorer --block 1
+cmu explorer --contract 0xYOUR_CONTRACT_ADDRESS
+```
+
+```text
+--- Block 1 on 'local' ---
+Hash         : 0x62165bb2c481efbbcabbca8701155c8297307e09e1328bf2360a2564b4316558
+Parent       : 0xa87456ab91ba4a30f9436411cf25f4e4f9291c43ad020278d6c38d5fc3580cb2
+Timestamp    : 2026-09-21T14:20:58.000Z (1790000458)
+Transactions : 1
+Gas used     : 54274 / 60000000 (0.09%)
+Validator    : 0xC014BA5EC014ba5ec014Ba5EC014ba5Ec014bA5E
+
+--- Address on 'local' ---
+Address      : 0x47aD01814e2Bfeb6dEA1B0262723899188bD4F5E
+Bytecode     : 1842 bytes
+Balance      : 0.0 (0 wei)
+```
+
+_(Exactly one of `--block` or `--contract` per run: they answer unrelated questions, and passing neither would otherwise do nothing at all. An address with no bytecode is reported as such and still exits `0` - "not a contract" is an answer, not a failure.)_
+
+The explorer is read-only: there is no signer, so it never asks for your session password even when `.cmu-session` is locked. Like `cmu console` and `cmu deploy`, the network follows `defaultNetwork` in `cmu.config.ts` unless `-n/--network` overrides it.
 
 ---
 
