@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ACCOUNT_BALANCE,
   ACCOUNT_COUNT,
+  bootHardhat,
   devnetOverride,
+  MIN_EDR_NODE_MAJOR,
+  requireEdrNode,
   silenceHardhatNoise,
 } from "../../src/utils/hardhat";
 import { LOCAL_CHAIN_ID } from "../../src/utils/defaults";
@@ -130,6 +133,36 @@ describe("silenceHardhatNoise", () => {
   });
 });
 
+// Issue #121: @nomicfoundation/edr@0.19.0 declares `engines: { node: ">= 22" }`
+// and ships its native code as optional dependencies, which npm skips on an
+// older Node without an error or a non-zero exit. The install looks clean and
+// the chain fails much later, as a module-resolution chain that says nothing
+// about Node. These run on every leg of the CI matrix.
+
+describe("requireEdrNode", () => {
+  it("rejects the Node 20 the CLI still supports everywhere else", () => {
+    expect(() => requireEdrNode("v20.19.0")).toThrow(
+      new RegExp(`Node\\.js ${MIN_EDR_NODE_MAJOR}`),
+    );
+    expect(() => requireEdrNode("v20.19.0")).toThrow(/v20\.19\.0/);
+    // The message has to say what to do, per the convention in src/utils/errors.ts.
+    expect(() => requireEdrNode("v20.19.0")).toThrow(/hint:/);
+  });
+
+  it("rejects every major below the floor, not just 20", () => {
+    expect(() => requireEdrNode("v21.7.3")).toThrow(/Node\.js 22/);
+  });
+
+  it("accepts the floor and anything above it", () => {
+    expect(() => requireEdrNode(`v${MIN_EDR_NODE_MAJOR}.0.0`)).not.toThrow();
+    expect(() => requireEdrNode("v24.1.0")).not.toThrow();
+  });
+
+  it("does not block a runtime whose version string cannot be parsed", () => {
+    expect(() => requireEdrNode("not-a-version")).not.toThrow();
+  });
+});
+
 // Issue #117: the devnet settings used to be written onto
 // `hre.config.networks.hardhat`, a network Hardhat 3 does not have, on the
 // already-resolved config. Nothing read it, so every command ran against
@@ -212,5 +245,18 @@ describe("devnetOverride", () => {
       }
     },
     120_000,
+  );
+  // The mirror of the skip above: on the very legs where the chain cannot
+  // boot, the guard is what the user must hit instead of the resolution chain.
+  // bootHardhat() is otherwise unusable under vitest - it loads Hardhat
+  // through a `new Function` indirection the module runner cannot execute -
+  // but requireEdrNode() throws before that line is reached.
+  it.runIf(!canBootEdr)(
+    "refuses to boot at all on a Node too old for EDR",
+    async () => {
+      await expect(bootHardhat({ loggingEnabled: false })).rejects.toThrow(
+        /Node\.js 22/,
+      );
+    },
   );
 });

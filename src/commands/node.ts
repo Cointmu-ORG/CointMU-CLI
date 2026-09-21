@@ -3,6 +3,7 @@ import { fail } from "../utils/errors";
 import {
   ACCOUNT_COUNT,
   bootHardhat,
+  requireEdrNode,
   silenceHardhatNoise,
 } from "../utils/hardhat";
 import { isLoopbackHost, startRpcProxy } from "../utils/rpcProxy";
@@ -77,6 +78,10 @@ async function runNodeStart(options: {
   allowCors?: boolean;
   verbose?: boolean;
 }): Promise<void> {
+  // First: a Node too old for EDR cannot serve a DevNet at all, and the port
+  // and host warnings below would describe a node that is never going to bind.
+  requireEdrNode();
+
   const isVerbose = options.verbose;
   const allowCors = Boolean(options.allowCors);
   const parsedPort = parseInt(options.port, 10);
