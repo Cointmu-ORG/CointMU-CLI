@@ -311,24 +311,24 @@ async function runTest(
 
   console.log("Starting the CointMU DevNet...");
 
-  const { hre, mnemonic: resolvedMnemonic } = await bootHardhat({
+  const {
+    hre,
+    mnemonic: resolvedMnemonic,
+    override,
+  } = await bootHardhat({
     loggingEnabled: false,
   });
 
-  const connection = await hre.network.getOrCreate();
+  // create(), not getOrCreate(): only create() applies a config override, and
+  // without it the suite runs against Hardhat's stock accounts while
+  // PRIVATE_KEY below is derived from a mnemonic nothing funded (issue #117).
+  const connection = await hre.network.create({ override });
   const provider = connection.provider;
 
   const server = await startRpcProxy(provider, { allowCors });
 
   try {
     const { ethers } = await import("ethers");
-    if (!resolvedMnemonic) {
-      throw new Error(
-        "could not generate a mnemonic for the test accounts.\n" +
-          "\x1b[2mhint:\x1b[0m this usually means the crypto module is unavailable; check your Node.js install.",
-      );
-    }
-
     const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic);
     const wallet = ethers.HDNodeWallet.fromMnemonic(
       mnemonicObj,
