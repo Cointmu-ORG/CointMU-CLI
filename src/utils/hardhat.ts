@@ -174,6 +174,38 @@ export async function devnetOverride(options: {
 }
 
 /**
+ * Lowest Node.js major that can run the devnet: @nomicfoundation/edr@0.19.0,
+ * which hardhat@3.16.0 pulls in, declares `engines: { node: ">= 22" }`.
+ */
+export const MIN_EDR_NODE_MAJOR = 22;
+
+/**
+ * Refuses to go on when the running Node cannot load EDR's native binary.
+ *
+ * EDR ships that binary as optional dependencies, and npm skips an optional
+ * dependency whose `engines` do not match without an error or a non-zero exit.
+ * So on Node 20 the install looks clean and the chain fails much later, as a
+ * module-resolution chain that never mentions Node at all (issue #121).
+ *
+ * @param {string} [version] - A version string such as `process.version`.
+ * @returns {void}
+ * @throws {Error} When the major version is below MIN_EDR_NODE_MAJOR.
+ */
+export function requireEdrNode(version: string = process.version): void {
+  const major = Number(version.replace(/^v/, "").split(".")[0]);
+
+  // Unparseable: assume it is fine rather than block a working runtime, which
+  // is what checkNodeVersion() in src/preflight.ts does with the same input.
+  if (Number.isNaN(major) || major >= MIN_EDR_NODE_MAJOR) return;
+
+  throw new Error(
+    `the local DevNet needs Node.js ${MIN_EDR_NODE_MAJOR} or newer, but this is Node ${version}.\n` +
+      "    npm skips EDR's native binary on older Node without reporting it, so no chain can start.\n" +
+      "\x1b[2mhint:\x1b[0m upgrade Node.js, or install a version manager such as nvm or fnm.",
+  );
+}
+
+/**
  * Loads Hardhat and hands back the devnet override to connect it with.
  *
  * Hardhat 3 is ESM-only, so it is reached through a `new Function` indirection:
@@ -189,6 +221,11 @@ export async function bootHardhat(options: {
   mnemonic?: string;
   loggingEnabled: boolean;
 }): Promise<{ hre: any; mnemonic: string; override: any }> {
+  // Before anything loads: the callers check this too, so a run bails out
+  // before doing any work, but the guard belongs here as well so a future
+  // caller cannot reach EDR without it.
+  requireEdrNode();
+
   const { mnemonic, override } = await devnetOverride(options);
 
   const importDynamic = new Function("modulePath", "return import(modulePath)");

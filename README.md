@@ -8,6 +8,10 @@ Built beautifully with **TypeScript** and packing **Vite-like** interactive prom
 
 ## 📦 Installation Guide
 
+> **Node.js:** 20.12 or newer for the CLI itself. `cmu test` and `cmu node start`
+> need **Node.js 22 or newer**, because the local DevNet runs on EDR, which does
+> not install its native binary on older Node.
+
 ### 🌍 Global Installation via NPM
 
 To install the `cointmu-cli` package globally so you can use the magic `cmu` command from anywhere, run:

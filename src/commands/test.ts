@@ -1,7 +1,11 @@
 import { existsSync, readdirSync } from "fs";
 import { Command } from "commander";
 import { fail, printCliError } from "../utils/errors";
-import { bootHardhat, silenceHardhatNoise } from "../utils/hardhat";
+import {
+  bootHardhat,
+  requireEdrNode,
+  silenceHardhatNoise,
+} from "../utils/hardhat";
 import { startRpcProxy } from "../utils/rpcProxy";
 import { LOCAL_CHAIN_ID } from "../utils/defaults";
 
@@ -121,6 +125,10 @@ async function runTest(
     yes?: boolean;
   } = {},
 ): Promise<void> {
+  // Before the compile: on a Node too old for EDR this run cannot finish, and
+  // compiling first would spend the trust prompt and the build on nothing.
+  requireEdrNode();
+
   const isVerbose = options.verbose;
   const allowCors = Boolean(options.allowCors);
   if (allowCors) {
