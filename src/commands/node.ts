@@ -148,6 +148,17 @@ async function runNodeStart(options: {
   // "Chain ID" printed here true.
   const { provider } = await hre.network.create({ override });
 
+  // Bind before printing anything: a port clash used to surface only after ten
+  // private keys and a "listening on" line that was not yet true had scrolled
+  // past (issue #115).
+  const server = await startRpcProxy(provider, {
+    port,
+    host,
+    allowCors,
+    command: "cmu node start",
+    portHint: "or run `cmu node start` with a different -p",
+  });
+
   originalConsoleLog(`\nCointMU DevNet listening on http://${host}:${port}`);
   originalConsoleLog(`Chain ID: ${LOCAL_CHAIN_ID}\n`);
   originalConsoleLog(`Mnemonic: ${resolvedMnemonic}`);
@@ -170,13 +181,6 @@ async function runNodeStart(options: {
     index++;
   }
   originalConsoleLog("\n");
-
-  const server = await startRpcProxy(provider, {
-    port,
-    host,
-    allowCors,
-    command: "cmu node start",
-  });
 
   process.on("SIGINT", () => {
     originalConsoleLog("\nStopping the CointMU DevNet...");
