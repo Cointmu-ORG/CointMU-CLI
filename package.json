@@ -40,7 +40,7 @@
   "dependencies": {
     "commander": "^15.0.0",
     "ethers": "6.17.0",
-    "hardhat": "3.16.0",
+    "hardhat": "3.17.0",
     "inquirer": "^14.2.0",
     "solc": "0.8.37",
     "ts-node": "^10.9.2"
