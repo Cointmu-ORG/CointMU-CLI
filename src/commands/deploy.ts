@@ -62,9 +62,15 @@ export function maskPrivateKey(pk: string): string {
 /**
  * Pings the given RPC URL to verify network connectivity.
  * @param {string} rpcUrl - The RPC URL to test.
+ * @param {string} [name] - The resolved network name, as the caller knows it.
+ *   ethers has no registered name for the CointMU chain, so without this the
+ *   connection is reported as 'unknown'.
  * @returns {Promise<void>} Resolves if connected, throws Error if unreachable.
  */
-export async function pingNetwork(rpcUrl: string): Promise<void> {
+export async function pingNetwork(
+  rpcUrl: string,
+  name?: string,
+): Promise<void> {
   // An unset url is a config error, not an unreachable endpoint: dialing "" only
   // buys the user a NETWORK_TIMEOUT_MS wait and a message with a hole in it. The
   // stock `cmu create` scaffold ships `mainnet` with url: "", so this is a
@@ -87,7 +93,7 @@ export async function pingNetwork(rpcUrl: string): Promise<void> {
       ),
     ]);
     console.log(
-      `Connected to '${networkData.name}' (chain ID ${networkData.chainId}).`,
+      `Connected to '${name ?? networkData.name}' (chain ID ${networkData.chainId}).`,
     );
   } catch {
     throw new Error(
@@ -155,7 +161,7 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   });
 
   if (options.ping) {
-    await pingNetwork(network.url);
+    await pingNetwork(network.url, network.name);
     return 0;
   }
 

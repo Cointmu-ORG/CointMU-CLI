@@ -168,7 +168,7 @@ export async function runExplorer(
 
   // Fail here, with the endpoint named, rather than on a raw RPC error.
   const { pingNetwork } = await import("./deploy");
-  await pingNetwork(network.url);
+  await pingNetwork(network.url, network.name);
 
   const provider = new ethers.JsonRpcProvider(network.url, undefined, {
     staticNetwork: true,
