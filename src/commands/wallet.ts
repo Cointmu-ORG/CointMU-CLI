@@ -1,9 +1,7 @@
-import { existsSync } from "fs";
-import { readFile } from "fs/promises";
 import { Command } from "commander";
 import { LOCAL_NETWORK_NAME } from "../utils/defaults";
 import { fail } from "../utils/errors";
-import { getSessionFilePath } from "../utils/session";
+import { getSessionFilePath, readSession } from "../utils/session";
 
 /**
  * The activeNetwork a new session should carry: the one the existing session
@@ -14,12 +12,9 @@ import { getSessionFilePath } from "../utils/session";
  * @returns {Promise<string>} The network name the new session should record.
  */
 async function carriedOverNetwork(): Promise<string> {
-  const sessionFile = getSessionFilePath();
-  if (!existsSync(sessionFile)) return LOCAL_NETWORK_NAME;
-
   let previous: string | undefined;
   try {
-    previous = JSON.parse(await readFile(sessionFile, "utf8")).activeNetwork;
+    previous = (await readSession())?.activeNetwork;
   } catch {
     // A corrupt session file must not block login - login is the way out of it.
     return LOCAL_NETWORK_NAME;
@@ -184,16 +179,15 @@ export async function runWalletLogin(): Promise<void> {
  * @returns {Promise<void>}
  */
 async function runWalletBalance(): Promise<void> {
-  const sessionFile = getSessionFilePath();
+  const session = await readSession();
 
-  if (!existsSync(sessionFile)) {
+  if (!session) {
     throw new Error(
       "no active session.\n" +
         "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
     );
   }
 
-  const session = JSON.parse(await readFile(sessionFile, "utf8"));
   const { getDynamicNetwork } = await import("../utils/network");
   const { ethers } = await import("ethers");
 
@@ -214,16 +208,15 @@ async function runWalletBalance(): Promise<void> {
  * @returns {Promise<void>}
  */
 async function runWalletInfo(): Promise<void> {
-  const sessionFile = getSessionFilePath();
+  const session = await readSession();
 
-  if (!existsSync(sessionFile)) {
+  if (!session) {
     throw new Error(
       "no active session.\n" +
         "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
     );
   }
 
-  const session = JSON.parse(await readFile(sessionFile, "utf8"));
   const { getDynamicNetwork } = await import("../utils/network");
   const network = await getDynamicNetwork(session.activeNetwork);
 

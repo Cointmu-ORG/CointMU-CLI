@@ -74,6 +74,23 @@ export interface EncryptedKey {
 }
 
 /**
+ * The parsed .cmu-session of the current project, or null when there is none.
+ *
+ * The one read every caller shares: existsSync + readFile + JSON.parse used to
+ * be copied into each command that needed the session. Malformed JSON still
+ * throws rather than coming back as null - a session file that exists but
+ * cannot be read is not the same thing as no session, and only `wallet login`
+ * treats it as recoverable.
+ *
+ * @returns {Promise<SessionData | null>} The session, or null if absent.
+ */
+export async function readSession(): Promise<SessionData | null> {
+  const sessionFile = getSessionFilePath();
+  if (!existsSync(sessionFile)) return null;
+  return JSON.parse(await readFile(sessionFile, "utf8"));
+}
+
+/**
  * Proportional strength check for a local CLI session password. Not a
  * passphrase-manager replacement: it only rejects the obviously weak
  * choices (too short, single character class, known common passwords).
@@ -227,14 +244,8 @@ export async function resolvePrivateKey(
     return cachedKey;
   }
 
-  const sessionFile = getSessionFilePath();
-
-  if (!existsSync(sessionFile)) {
-    return undefined;
-  }
-
-  const session: SessionData = JSON.parse(await readFile(sessionFile, "utf8"));
-  if (!session.encryptedKey) {
+  const session = await readSession();
+  if (!session?.encryptedKey) {
     return undefined;
   }
   if (options.prompt === false) {

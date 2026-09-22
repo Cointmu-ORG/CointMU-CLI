@@ -8,6 +8,7 @@ import {
   DEFAULT_PBKDF2_ITERATIONS,
   encryptSessionKey,
   LEGACY_PBKDF2_ITERATIONS,
+  readSession,
   validatePasswordStrength,
   writeSessionFile,
   type SessionData,
@@ -103,6 +104,50 @@ describe("writeSessionFile", () => {
       expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("readSession", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-read-session-"));
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns null when the project has no session at all", async () => {
+    expect(await readSession()).toBeNull();
+  });
+
+  it("parses the session file the commands read", async () => {
+    const session = makeSession();
+    await writeSessionFile(path.join(tmpDir, ".cmu-session"), session);
+
+    expect(await readSession()).toEqual(session);
+  });
+
+  it("throws on a corrupt session rather than passing it off as absent", async () => {
+    // The distinction every caller but `wallet login` depends on: "no session"
+    // is a state with a hint, an unreadable one is a fault worth surfacing.
+    fs.writeFileSync(path.join(tmpDir, ".cmu-session"), "{ not json");
+
+    await expect(readSession()).rejects.toThrow();
+  });
+
+  it("follows the working directory rather than caching the first path", async () => {
+    await writeSessionFile(path.join(tmpDir, ".cmu-session"), makeSession());
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-elsewhere-"));
+    try {
+      vi.spyOn(process, "cwd").mockReturnValue(elsewhere);
+      expect(await readSession()).toBeNull();
+    } finally {
+      fs.rmSync(elsewhere, { recursive: true, force: true });
     }
   });
 });
