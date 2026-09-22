@@ -1,0 +1,45 @@
+name: 💡 Feature Request
+description: Propose a capability cointmu-cli does not have yet
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    id: duplicates
+    attributes:
+      label: Preflight
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What can you not do today, and what do you do instead? Describe the situation, not the feature.
+      placeholder: "Inspecting a deployed contract means leaving the CLI for a block explorer or writing a one-off ethers script."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What should cointmu-cli do? Sketch the command, its flags, and its output if you have one in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. Other designs you weighed, and why this one — including doing nothing.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Optional. Prior art in other tools, related issues, or constraints worth knowing.
+    validations:
+      required: false

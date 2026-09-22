@@ -1,0 +1,112 @@
+name: 🐛 Bug Report
+description: Something in cointmu-cli behaves differently from what it documents or promises
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill what you can. A repro and an actual-vs-expected pair are worth more than a long description.
+
+  - type: checkboxes
+    id: duplicates
+    attributes:
+      label: Preflight
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is wrong, in a few sentences. Name the command and the flag if one is involved.
+      placeholder: "`cmu console --no-signer` still attaches a signer when PRIVATE_KEY is in the environment."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A copy-pasteable sequence, starting from `cmu create` where possible. Rendered as a shell block — no backticks needed.
+      render: shell
+      placeholder: |
+        cmu create demo -t erc20 -l typescript
+        cd demo
+        echo "PRIVATE_KEY=0x..." > .env
+        cmu console --no-signer --yes
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened. Paste the real output, not a paraphrase.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened, and what makes you say so — help text, README, or the flag's own documented purpose.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Your best estimate. Maintainers may adjust it.
+      options:
+        - "Critical — key exposure, data loss, or a security control that does not hold"
+        - "High — a documented flag or command does not do what it says; no safe workaround"
+        - "Medium — wrong or misleading behavior with a workaround"
+        - "Low — cosmetic, wording, or a message that overstates or understates what happened"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: cointmu-cli version
+      description: Output of `cmu --version`. Say so if you built from a branch instead.
+      placeholder: "1.3.10 (Komainu)"
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Output of `node --version`.
+      placeholder: "v24.19.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      description: Note whether this is WSL or native Windows — several bugs here only reproduce on one of them.
+      placeholder: "Windows 11 (native PowerShell, not WSL)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: root-cause
+    attributes:
+      label: Root cause / suspected source location
+      description: Optional. If you have already traced it, point at the file and lines — `src/commands/console.ts:41-68` — and say what you think goes wrong there.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Optional. Related issues, logs, or anything that did not fit above.
+    validations:
+      required: false
