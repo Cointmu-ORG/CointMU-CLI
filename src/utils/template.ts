@@ -10,7 +10,7 @@ export const templateChoices = Object.entries(templates).map(
 
 export const validTemplates = Object.keys(templates);
 
-function getDeployScript(
+export function getDeployScript(
   contractName: string,
   contractArgs: string,
   language: string,
@@ -65,11 +65,16 @@ async function main() {
   console.log(\`Deployment saved to \${deploymentPath}\`);
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  // Non-zero exit, so \`cmu deploy\` stops instead of reporting a failed
+  // deploy as "All deploy scripts completed."
+  console.error(error);
+  process.exitCode = 1;
+});
 `;
 }
 
-const blankDeployTemplate = (language: string): string => {
+export const blankDeployTemplate = (language: string): string => {
   const ethersImport =
     language === TYPESCRIPT_LANG
       ? "import { ethers } from 'ethers';"
@@ -83,7 +88,12 @@ async function main() {
   // const provider = new ethers.JsonRpcProvider(process.env.CMU_RPC_URL);
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  // Non-zero exit, so \`cmu deploy\` stops instead of reporting a failed
+  // deploy as "All deploy scripts completed."
+  console.error(error);
+  process.exitCode = 1;
+});
 `;
 };
 
