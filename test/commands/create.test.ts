@@ -43,3 +43,53 @@ describe("printWelcomeBanner", () => {
     expect(count(`${ESC}0m`)).toBe(opened);
   });
 });
+
+// Regression: inquirer v14 dropped the "list" prompt type in favour of
+// "select", so the language and template prompts died with
+// `Prompt type "list" is not registered` the moment they were reached.
+describe("runCreate prompts", () => {
+  let tmpDir: string;
+  let asked: Array<Record<string, unknown>>;
+
+  beforeEach(async () => {
+    const os = await import("os");
+    const path = await import("path");
+    const fs = await import("fs");
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-create-"));
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    asked = [];
+    vi.doMock("../../src/utils/template", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("../../src/utils/template")>()),
+      generateProject: async () => {},
+    }));
+    vi.doMock("inquirer", () => ({
+      default: {
+        prompt: async (questions: Array<Record<string, unknown>>) => {
+          asked.push(...questions);
+          return { language: "typescript", template: "blank" };
+        },
+      },
+    }));
+  });
+
+  afterEach(async () => {
+    const fs = await import("fs");
+    vi.restoreAllMocks();
+    vi.resetModules();
+    vi.doUnmock("inquirer");
+    vi.doUnmock("../../src/utils/template");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("asks for language and template with a prompt type inquirer registers", async () => {
+    const { runCreate } = await import("../../src/commands/create");
+
+    await runCreate("my-dapp", {});
+
+    const types = asked.map((question) => question.type);
+    expect(types).toEqual(["select", "select"]);
+    expect(types).not.toContain("list");
+  });
+});
