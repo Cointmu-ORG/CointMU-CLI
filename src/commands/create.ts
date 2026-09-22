@@ -50,7 +50,7 @@ export function printWelcomeBanner(projectName: string, quote: string): void {
  * @param {CreateOptions} options - CLI options.
  * @returns {Promise<void>} Resolves when the project is fully initialized.
  */
-async function runCreate(
+export async function runCreate(
   project: string | undefined,
   options: CreateOptions,
 ): Promise<void> {
@@ -99,7 +99,7 @@ async function runCreate(
 
   if (!language) {
     questions.push({
-      type: "list",
+      type: "select",
       name: "language",
       message: "Language:",
       choices: [
@@ -111,7 +111,7 @@ async function runCreate(
 
   if (!template) {
     questions.push({
-      type: "list",
+      type: "select",
       name: "template",
       message: "Template:",
       choices: templateChoices,
