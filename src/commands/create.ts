@@ -58,7 +58,7 @@ export async function runCreate(
   const { default: inquirer } = await import("inquirer");
   const { templateChoices, validTemplates, generateProject } =
     await import("../utils/template");
-  const { getRandomQuote } = await import("../utils/quotes");
+  const { pick, QUOTES } = await import("../utils/quotes");
 
   let projectName = project?.trim() ?? "";
 
@@ -148,7 +148,7 @@ export async function runCreate(
 
   await generateProject(projectPath, template, language);
 
-  printWelcomeBanner(projectName, getRandomQuote());
+  printWelcomeBanner(projectName, pick(QUOTES));
 }
 
 export const createCommand = new Command("create")

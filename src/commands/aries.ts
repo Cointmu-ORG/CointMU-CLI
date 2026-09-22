@@ -11,7 +11,7 @@ const RESET_COLOR = "\x1b[0m";
  * @returns {Promise<void>}
  */
 async function runAries(): Promise<void> {
-  const { getRandomSadQuote } = await import("../utils/quotes");
+  const { pick, SAD_QUOTES } = await import("../utils/quotes");
 
   console.log(
     `${DIM_COLOR}init: connecting to peer 127.0.0.1:8333...${RESET_COLOR}`,
@@ -29,7 +29,7 @@ async function runAries(): Promise<void> {
   console.log(
     `${CYAN_COLOR} > The architect behind the scenes is watching.${RESET_COLOR}`,
   );
-  console.log(`${GREEN_COLOR} > ${getRandomSadQuote()}${RESET_COLOR}`);
+  console.log(`${GREEN_COLOR} > ${pick(SAD_QUOTES)}${RESET_COLOR}`);
 }
 
 export const ariesCommand = new Command("aries")
