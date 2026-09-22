@@ -154,8 +154,11 @@ export async function runExplorer(
   // code, so gate it the same way `cmu console` does. Only the config file is
   // listed: the explorer runs nothing else from the project.
   const configPath = findProjectConfig();
+  // readOnly: the explorer never signs and never unlocks the session, so the
+  // PRIVATE_KEY wording `cmu deploy` gets would be untrue here.
   await confirmProjectTrust(configPath ? [configPath] : [], {
     yes: options.yes,
+    readOnly: true,
   });
 
   const { getDeployNetwork } = await import("../utils/network");
@@ -165,7 +168,7 @@ export async function runExplorer(
 
   // Fail here, with the endpoint named, rather than on a raw RPC error.
   const { pingNetwork } = await import("./deploy");
-  await pingNetwork(network.url);
+  await pingNetwork(network.url, network.name);
 
   const provider = new ethers.JsonRpcProvider(network.url, undefined, {
     staticNetwork: true,

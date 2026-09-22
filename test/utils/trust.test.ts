@@ -45,6 +45,44 @@ describe("confirmProjectTrust", () => {
     expect(prompt).toHaveBeenCalledOnce();
   });
 
+  // Frozen verbatim: `deploy` and `console` really do inject a decrypted
+  // PRIVATE_KEY, and this is the wording that says so. Issue #137 changed only
+  // the read-only variant below, so a diff here means a regression there.
+  it("prints the key-injection wording unchanged for deploy and console", async () => {
+    process.stdin.isTTY = true;
+    prompt.mockResolvedValue({ proceed: true });
+    const { confirmProjectTrust } = await loadTrust();
+
+    await confirmProjectTrust([SCRIPT]);
+
+    const output = (console.log as any).mock.calls.flat().join("\n");
+    expect(output).toContain(
+      "\n    They run with your full environment, including the PRIVATE_KEY decrypted from\n" +
+        "    your session and injected for deploy scripts, and can do anything your user\n" +
+        "    account can. This is the same trust model as Hardhat, Foundry and Truffle;\n" +
+        "    see the 'Trust Model' section of the README.\n",
+    );
+  });
+
+  it("claims no key injection for read-only callers (compile, explorer)", async () => {
+    process.stdin.isTTY = true;
+    prompt.mockResolvedValue({ proceed: true });
+    const { confirmProjectTrust } = await loadTrust();
+
+    await confirmProjectTrust(["/tmp/project/cmu.config.ts"], {
+      readOnly: true,
+    });
+
+    const output = (console.log as any).mock.calls.flat().join("\n");
+    expect(output).toContain("/tmp/project/cmu.config.ts");
+    expect(output).not.toContain("PRIVATE_KEY");
+    expect(output).toContain(
+      "does not sign anything and does not unlock your session",
+    );
+    // Still a real gate, whatever the wording.
+    expect(prompt).toHaveBeenCalledOnce();
+  });
+
   it("aborts without executing anything when the user declines", async () => {
     process.stdin.isTTY = true;
     prompt.mockResolvedValue({ proceed: false });

@@ -160,6 +160,8 @@ warning: the following project files will be executed as code:
 ? Execute these files? (y/N)
 ```
 
+`cmu compile` and `cmu explorer` load `cmu.config.ts` but never resolve a key, so they print the same file list with wording that claims no more than they do — no `PRIVATE_KEY` sentence, and an explicit note that the command does not sign anything and does not unlock your session.
+
 Pass `-y` / `--yes` to skip the prompt in CI or other non-interactive use:
 
 ```bash

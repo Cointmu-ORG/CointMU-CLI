@@ -40,6 +40,53 @@ describe("pingNetwork", () => {
       /is unreachable/,
     );
   });
+
+  it("reports the caller's network name, not ethers' 'unknown' for chain 1912", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.doMock("ethers", () => ({
+      ethers: {
+        JsonRpcProvider: class {
+          getNetwork() {
+            // What ethers actually returns for an unregistered chain.
+            return Promise.resolve({ name: "unknown", chainId: 1912n });
+          }
+        },
+      },
+    }));
+
+    await pingNetwork("http://127.0.0.1:8585", "local");
+
+    const output = log.mock.calls.flat().join("\n");
+    expect(output).toContain("Connected to 'local' (chain ID 1912).");
+    expect(output).not.toContain("unknown");
+  });
+
+  it("falls back to the name ethers reports when the caller passes none", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.doMock("ethers", () => ({
+      ethers: {
+        JsonRpcProvider: class {
+          getNetwork() {
+            return Promise.resolve({ name: "sepolia", chainId: 11155111n });
+          }
+        },
+      },
+    }));
+
+    await pingNetwork("http://127.0.0.1:8585");
+
+    expect(log.mock.calls.flat().join("\n")).toContain("Connected to 'sepolia'");
+  });
+
+  it("rejects an empty url as a config error without waiting out the timeout", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await expect(pingNetwork("")).rejects.toThrow(
+      /has no url[\s\S]*cmu\.config\.ts/,
+    );
+    // Never announces a ping it did not attempt.
+    expect(log).not.toHaveBeenCalled();
+  });
 });
 
 // runDeploy() used to call process.exit() from inside its --ping and --config

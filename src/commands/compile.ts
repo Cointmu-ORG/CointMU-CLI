@@ -74,7 +74,12 @@ export async function runCompile(
   if (configPath) {
     // require()ing the config runs project code, so gate it the same way
     // `cmu deploy` gates the scripts in deploy/.
-    await confirmProjectTrust([configPath], { yes: options.yes });
+    // readOnly: compile loads the config for its compiler settings and runs
+    // nothing from deploy/, so no key is ever resolved or injected.
+    await confirmProjectTrust([configPath], {
+      yes: options.yes,
+      readOnly: true,
+    });
     try {
       if (configPath.endsWith(".ts")) {
         await registerTsNode();

@@ -157,7 +157,7 @@ export async function runConsole(
   // Fail here, with the endpoint named, rather than opening a REPL in which
   // every call the user types errors out.
   const { pingNetwork } = await import("./deploy");
-  await pingNetwork(network.url);
+  await pingNetwork(network.url, network.name);
 
   console.log(`\n--- Console configuration ---`);
   console.log(`Network      : ${network.name}`);
