@@ -5,9 +5,6 @@ import { fail } from "../utils/errors";
 import { run } from "../utils/exec";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 
-const MIN_KEY_LENGTH = 10;
-const MASK_START = 5;
-const MASK_END = 4;
 const NETWORK_TIMEOUT_MS = 3000;
 
 interface DeployOptions {
@@ -51,13 +48,16 @@ async function runDeployScript(
 const NO_KEY_LABEL = "unavailable (no key)";
 
 /**
- * Masks a private key for secure console output.
+ * Masks a private key for console output: the 0x plus three digits that make a
+ * key recognisable, and the last four. Anything too short to keep that much
+ * hidden is redacted outright.
+ *
  * @param {string} pk - The private key to mask.
  * @returns {string} The masked private key.
  */
 export function maskPrivateKey(pk: string): string {
-  if (pk.length < MIN_KEY_LENGTH) return "***";
-  return `${pk.substring(0, MASK_START)}...${pk.substring(pk.length - MASK_END)}`;
+  if (pk.length < 10) return "***";
+  return `${pk.substring(0, 5)}...${pk.substring(pk.length - 4)}`;
 }
 
 /**

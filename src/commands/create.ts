@@ -8,7 +8,6 @@ interface CreateOptions {
   verbose?: boolean;
 }
 
-const green = (text: string) => `\x1b[32m${text}\x1b[0m`;
 const cyan = (text: string) => `\x1b[36m${text}\x1b[0m`;
 const bold = (text: string) => `\x1b[1m${text}\x1b[0m`;
 
@@ -33,7 +32,7 @@ export function printWelcomeBanner(projectName: string, quote: string): void {
   console.log(cyan(bold(ASCII_ART)));
   console.log("");
   console.log(
-    `${green(bold("Created"))} CointMU project '${cyan(projectName)}'\n`,
+    `\x1b[32m${bold("Created")}\x1b[0m CointMU project '${cyan(projectName)}'\n`,
   );
 
   console.log(bold("Next steps:"));
