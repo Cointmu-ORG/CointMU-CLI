@@ -197,6 +197,32 @@ describe("resolveConsoleContext", () => {
     ctx.provider.destroy();
   });
 
+  // The prompt is only one of the ways a key gets in. --no-signer promises a
+  // read-only console, so a key already sitting in the environment (or in
+  // wallet.privateKey) must not be turned into a signer either.
+  it("stays read-only with --no-signer when PRIVATE_KEY is set", async () => {
+    process.env.PRIVATE_KEY = PRIVATE_KEY;
+
+    const ctx = await resolve({ signer: false });
+
+    expect(ctx.signer).toBeUndefined();
+    ctx.provider.destroy();
+  });
+
+  it("stays read-only with --no-signer when the config carries a key", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "cmu.config.js"),
+      `module.exports = { defaultNetwork: "local", ` +
+        `wallet: { privateKey: ${JSON.stringify(PRIVATE_KEY)} }, ` +
+        `networks: { local: { url: "http://127.0.0.1:8585", chainId: 1912 } } };`,
+    );
+
+    const ctx = await resolve({ signer: false, yes: true });
+
+    expect(ctx.signer).toBeUndefined();
+    ctx.provider.destroy();
+  });
+
   it("refuses to start on a key it cannot use", async () => {
     process.env.PRIVATE_KEY = "0xnotakey";
 
