@@ -9,6 +9,9 @@ import { decryptSessionKey, type SessionData } from "../../src/utils/session";
 // the generated key into a session without printing anything recoverable.
 
 const PASSWORD = "correct horse 9";
+// Hardhat account #1, so the address in the assertions is a known value.
+const KEY =
+  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
 let tmpDir: string;
 let logged: string[];
@@ -27,9 +30,14 @@ beforeEach(() => {
   };
   vi.spyOn(console, "log").mockImplementation(capture);
   vi.spyOn(console, "error").mockImplementation(capture);
+  // networkStorage keys .cmu-networks.json off os.homedir(); without this the
+  // suite would read the developer's real saved networks.
+  vi.stubEnv("HOME", tmpDir);
+  vi.stubEnv("USERPROFILE", tmpDir);
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   vi.resetModules();
   vi.doUnmock("inquirer");
@@ -46,6 +54,28 @@ function mockPrompt(answer?: Record<string, string>) {
       },
     },
   }));
+}
+
+/** Reads back the session the command under test wrote. */
+function readSession(): SessionData {
+  return JSON.parse(fs.readFileSync(path.join(tmpDir, ".cmu-session"), "utf8"));
+}
+
+/** Writes a session that already picked a network, as `network use` would. */
+function writeSession(activeNetwork: string): void {
+  fs.writeFileSync(
+    path.join(tmpDir, ".cmu-session"),
+    JSON.stringify({ address: "0xTest", activeNetwork }),
+  );
+}
+
+function writeNetworks(names: string[]): void {
+  fs.writeFileSync(
+    path.join(tmpDir, ".cmu-networks.json"),
+    JSON.stringify(
+      names.map((name) => ({ name, rpcUrl: "http://127.0.0.1:9999" })),
+    ),
+  );
 }
 
 describe("wallet create", () => {
@@ -129,5 +159,83 @@ describe("wallet create --login", () => {
 
     const mode = fs.statSync(path.join(tmpDir, ".cmu-session")).mode & 0o777;
     expect(mode).toBe(0o600);
+  });
+});
+
+// Issue #126: createEncryptedSession() hardcoded activeNetwork: "local", so a
+// login threw away whatever `cmu network use <name>` had selected - silently,
+// since no line of the login output mentioned the network at all. Both callers
+// route through that one helper, so both are pinned here.
+
+describe("active network across a login", () => {
+  const run = {
+    "wallet login": async () => {
+      const { runWalletLogin } = await import("../../src/commands/wallet");
+      await runWalletLogin();
+    },
+    "wallet create --login": async () => {
+      const { runWalletCreate } = await import("../../src/commands/wallet");
+      await runWalletCreate({ login: true });
+    },
+  };
+
+  describe.each(Object.keys(run) as (keyof typeof run)[])("%s", (command) => {
+    beforeEach(() => {
+      mockPrompt({ privateKey: KEY, password: PASSWORD });
+    });
+
+    it("keeps an active network that is still saved", async () => {
+      writeSession("testnet");
+      writeNetworks(["local", "testnet"]);
+
+      await run[command]();
+
+      expect(readSession().activeNetwork).toBe("testnet");
+      expect(output()).toContain("Active network: testnet");
+    });
+
+    it("falls back to local when the picked network is gone, and says so", async () => {
+      writeSession("testnet");
+      writeNetworks(["local"]);
+
+      await run[command]();
+
+      expect(readSession().activeNetwork).toBe("local");
+      expect(output()).toContain("warning:");
+      expect(output()).toContain("'testnet' is no longer saved");
+      expect(output()).toContain("Active network: local");
+    });
+
+    it("defaults to local on a first login, with no session to carry over", async () => {
+      await run[command]();
+
+      expect(readSession().activeNetwork).toBe("local");
+      expect(output()).not.toContain("warning: network");
+    });
+
+    it("does not lose the key while carrying the network over", async () => {
+      writeSession("testnet");
+      writeNetworks(["local", "testnet"]);
+
+      await run[command]();
+
+      const session = readSession();
+      expect(session.address).not.toBe("0xTest");
+      expect(decryptSessionKey(PASSWORD, session)).toMatch(/^0x[0-9a-f]{64}$/);
+    });
+  });
+
+  it("logs in as the address the entered key belongs to", async () => {
+    mockPrompt({ privateKey: KEY, password: PASSWORD });
+    writeSession("testnet");
+    writeNetworks(["local", "testnet"]);
+
+    const { runWalletLogin } = await import("../../src/commands/wallet");
+    await runWalletLogin();
+
+    const session = readSession();
+    expect(session.address).toBe("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
+    expect(decryptSessionKey(PASSWORD, session)).toBe(KEY);
+    expect(output()).toContain(`Logged in as ${session.address}`);
   });
 });
