@@ -29,7 +29,8 @@
     "cmu": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "hardhat.config.js"
   ],
   "scripts": {
     "build": "tsup",
