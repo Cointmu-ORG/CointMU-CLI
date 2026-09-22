@@ -154,8 +154,11 @@ export async function runExplorer(
   // code, so gate it the same way `cmu console` does. Only the config file is
   // listed: the explorer runs nothing else from the project.
   const configPath = findProjectConfig();
+  // readOnly: the explorer never signs and never unlocks the session, so the
+  // PRIVATE_KEY wording `cmu deploy` gets would be untrue here.
   await confirmProjectTrust(configPath ? [configPath] : [], {
     yes: options.yes,
+    readOnly: true,
   });
 
   const { getDeployNetwork } = await import("../utils/network");
