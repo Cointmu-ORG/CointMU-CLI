@@ -40,6 +40,16 @@ describe("pingNetwork", () => {
       /is unreachable/,
     );
   });
+
+  it("rejects an empty url as a config error without waiting out the timeout", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await expect(pingNetwork("")).rejects.toThrow(
+      /has no url[\s\S]*cmu\.config\.ts/,
+    );
+    // Never announces a ping it did not attempt.
+    expect(log).not.toHaveBeenCalled();
+  });
 });
 
 // runDeploy() used to call process.exit() from inside its --ping and --config

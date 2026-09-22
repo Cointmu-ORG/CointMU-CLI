@@ -65,6 +65,17 @@ export function maskPrivateKey(pk: string): string {
  * @returns {Promise<void>} Resolves if connected, throws Error if unreachable.
  */
 export async function pingNetwork(rpcUrl: string): Promise<void> {
+  // An unset url is a config error, not an unreachable endpoint: dialing "" only
+  // buys the user a NETWORK_TIMEOUT_MS wait and a message with a hole in it. The
+  // stock `cmu create` scaffold ships `mainnet` with url: "", so this is a
+  // first-run mistake, not an exotic one.
+  if (!rpcUrl) {
+    throw new Error(
+      "the resolved network has no url.\n" +
+        "\x1b[2mhint:\x1b[0m set `url` for this network in cmu.config.ts.",
+    );
+  }
+
   const { ethers } = await import("ethers");
   console.log(`Pinging ${rpcUrl}...`);
   try {
