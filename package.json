@@ -35,6 +35,8 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
+    "preversion": "npm run build",
+    "version": "node scripts/set-codename.js",
     "prepublishOnly": "npm run build",
     "prepare": "husky || true"
   },
