@@ -1,7 +1,7 @@
 {
   "name": "cointmu-cli",
-  "version": "1.3.8",
-  "codename": "Ryu",
+  "version": "1.3.9",
+  "codename": "Kirin",
   "description": "Primary development toolkit for the CointMU blockchain",
   "keywords": [
     "cointmu",
