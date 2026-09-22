@@ -57,7 +57,7 @@ export async function resolveConsoleContext(options: ConsoleOptions = {}) {
   });
 
   let signer;
-  if (network.privateKey) {
+  if (options.signer !== false && network.privateKey) {
     try {
       signer = new ethers.Wallet(network.privateKey, provider);
     } catch {
