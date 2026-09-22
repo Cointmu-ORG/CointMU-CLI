@@ -2,6 +2,7 @@ import { existsSync } from "fs";
 import { readdir } from "fs/promises";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { run } from "../utils/exec";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 
 const MIN_KEY_LENGTH = 10;
@@ -18,32 +19,32 @@ interface DeployOptions {
 }
 
 /**
- * Executes a deployment script using child_process.execSync.
+ * Runs one deploy script as its own process.
+ *
+ * A .js script runs on the same Node that runs the CLI (process.execPath), not
+ * on whichever "node" is first on PATH; a .ts one goes through ts-node.
+ *
  * @param {string} scriptPath - The absolute path to the script to execute.
- * @param {Record<string, string | undefined>} env - Environment variables to inject.
- * @returns {void}
+ * @param {NodeJS.ProcessEnv} env - Environment variables to inject.
+ * @returns {Promise<void>} Resolves when the script exits 0.
+ * @throws {Error} When the script exits non-zero, so the run stops there.
  */
-function runDeployScript(
+async function runDeployScript(
   scriptPath: string,
-  env: Record<string, string | undefined>,
-): void {
-  const { execFileSync } = require("child_process");
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
   const path = require("path");
-
-  const ext = path.extname(scriptPath);
-  const isWin = process.platform === "win32";
-  const runner = ext === ".ts" ? "npx" : "node";
-  const args = ext === ".ts" ? ["ts-node", scriptPath] : [scriptPath];
+  const isTypeScript = path.extname(scriptPath) === ".ts";
 
   console.log(`\n========================================`);
   console.log(`Running ${path.basename(scriptPath)}`);
   console.log(`========================================\n`);
 
-  execFileSync(runner, args, {
-    stdio: "inherit",
-    env,
-    shell: isWin,
-  });
+  await run(
+    isTypeScript ? "npx" : process.execPath,
+    isTypeScript ? ["ts-node", scriptPath] : [scriptPath],
+    { env, label: path.basename(scriptPath) },
+  );
 }
 
 /** Stands in for the deployer address when `--config` finds no key. */
@@ -230,7 +231,7 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
 
   for (const script of scripts) {
     const fullPath = path.join(deployDir, script);
-    runDeployScript(fullPath, injectedEnv);
+    await runDeployScript(fullPath, injectedEnv);
   }
 
   console.log("\nAll deploy scripts completed.");

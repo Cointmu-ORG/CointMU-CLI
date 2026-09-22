@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "fs";
 import { Command } from "commander";
 import { fail, printCliError } from "../utils/errors";
+import { run } from "../utils/exec";
 import {
   bootHardhat,
   requireEdrNode,
@@ -97,19 +98,7 @@ async function runMochaSuite(
   console.log(`Running tests with Mocha`);
   console.log(`========================================\n`);
 
-  const { spawn } = require("child_process");
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("npx", runnerArgs, {
-      stdio: "inherit",
-      env,
-      shell: process.platform === "win32",
-    });
-    child.on("close", (code: number) => {
-      if (code === 0) resolve();
-      else reject(new Error(`test run exited with code ${code}`));
-    });
-    child.on("error", (err: Error) => reject(err));
-  });
+  await run("npx", runnerArgs, { env, label: "test run" });
 }
 
 /**
