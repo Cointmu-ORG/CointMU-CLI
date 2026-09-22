@@ -25,7 +25,7 @@ async function runMineStart(): Promise<void> {
   const { ethers } = await import("ethers");
 
   const network = await getDynamicNetwork(session.activeNetwork);
-  const provider = new ethers.JsonRpcProvider(network.url);
+  const provider = new ethers.JsonRpcProvider(network.rpcUrl);
 
   console.log(`Setting etherbase to ${session.address}...`);
   await provider.send("miner_setEtherbase", [session.address]);
@@ -56,7 +56,7 @@ async function runMineStop(): Promise<void> {
   const { ethers } = await import("ethers");
 
   const network = await getDynamicNetwork(session.activeNetwork);
-  const provider = new ethers.JsonRpcProvider(network.url);
+  const provider = new ethers.JsonRpcProvider(network.rpcUrl);
 
   console.log(`Stopping miner on ${network.name}...`);
   await provider.send("miner_stop", []);

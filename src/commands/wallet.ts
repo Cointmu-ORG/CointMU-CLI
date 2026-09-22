@@ -198,9 +198,9 @@ async function runWalletBalance(): Promise<void> {
   const { ethers } = await import("ethers");
 
   const network = await getDynamicNetwork(session.activeNetwork);
-  const provider = new ethers.JsonRpcProvider(network.url);
+  const provider = new ethers.JsonRpcProvider(network.rpcUrl);
 
-  console.log(`Connecting to ${network.name} (${network.url})...`);
+  console.log(`Connecting to ${network.name} (${network.rpcUrl})...`);
   const balance = await provider.getBalance(session.address);
 
   console.log("---------------------------");
@@ -230,7 +230,7 @@ async function runWalletInfo(): Promise<void> {
   console.log("--- Active session ---");
   console.log(`Address      : ${session.address}`);
   console.log(`Network      : ${network.name}`);
-  console.log(`RPC endpoint : ${network.url}`);
+  console.log(`RPC endpoint : ${network.rpcUrl}`);
   console.log("----------------------");
 }
 

@@ -52,7 +52,7 @@ async function runNodeConnect(options: {
   const { ethers } = await import("ethers");
 
   const networkConfig = await getDynamicNetwork(options.network);
-  const rpcUrl = networkConfig.url;
+  const rpcUrl = networkConfig.rpcUrl;
 
   console.log(`Pinging ${rpcUrl}...`);
   const provider = new ethers.JsonRpcProvider(rpcUrl);

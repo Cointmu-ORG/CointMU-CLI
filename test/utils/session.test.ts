@@ -138,7 +138,7 @@ describe("getDynamicNetwork", () => {
     else process.env.PRIVATE_KEY = prevKey;
   });
 
-  it("prefers the PRIVATE_KEY env var over the encrypted session file", async () => {
+  it("returns the saved entry and nothing else - no key field at all", async () => {
     fs.writeFileSync(
       path.join(tmpDir, ".cmu-session"),
       JSON.stringify(makeSession()),
@@ -148,7 +148,9 @@ describe("getDynamicNetwork", () => {
     const { getDynamicNetwork } = await import("../../src/utils/network");
     const network = await getDynamicNetwork("local");
 
-    expect(network.privateKey).toBe("0xenv");
+    // toEqual, not a per-field check: it is what pins that no key reaches the
+    // callers of this function, whatever PRIVATE_KEY happens to hold.
+    expect(network).toEqual({ name: "local", rpcUrl: "http://127.0.0.1:1" });
   });
 
   it("does not prompt for a password when a key-bearing session exists but no env var is set", async () => {
@@ -162,7 +164,6 @@ describe("getDynamicNetwork", () => {
     // inquirer.prompt is mocked to throw; this resolving proves no prompt fired.
     const network = await getDynamicNetwork("local");
 
-    expect(network.privateKey).toBeUndefined();
-    expect(network.url).toBe("http://127.0.0.1:1");
+    expect(network).toEqual({ name: "local", rpcUrl: "http://127.0.0.1:1" });
   });
 });
