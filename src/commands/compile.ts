@@ -56,10 +56,15 @@ export function findImports(
  * Compiles all Solidity contracts found in the contracts directory.
  * Writes the artifacts to the artifacts directory.
  * @param {object} options - CLI options.
+ * @param {boolean} [options.readOnly] - Whether the *calling command* signs
+ *   nothing, for the trust prompt's wording. Off by default: `cmu compile` opts
+ *   in, and a caller that forgets gets the stronger warning rather than a
+ *   reassurance that may be false for it (`cmu test` runs test/ with a
+ *   PRIVATE_KEY in the environment).
  * @returns {Promise<void>} Resolves when compilation finishes successfully.
  */
 export async function runCompile(
-  options: { verbose?: boolean; yes?: boolean } = {},
+  options: { verbose?: boolean; yes?: boolean; readOnly?: boolean } = {},
 ): Promise<void> {
   const solc = require("solc");
   const path = require("path");
@@ -74,11 +79,11 @@ export async function runCompile(
   if (configPath) {
     // require()ing the config runs project code, so gate it the same way
     // `cmu deploy` gates the scripts in deploy/.
-    // readOnly: compile loads the config for its compiler settings and runs
-    // nothing from deploy/, so no key is ever resolved or injected.
+    // This gate is the first one `cmu test` hits too, so the wording follows
+    // the calling command, not the compile step.
     await confirmProjectTrust([configPath], {
       yes: options.yes,
-      readOnly: true,
+      readOnly: options.readOnly,
     });
     try {
       if (configPath.endsWith(".ts")) {
@@ -178,5 +183,9 @@ export const compileCommand = new Command("compile")
       "compile projects you trust; see the 'Trust Model' section of the README.",
   )
   .action((options: { yes?: boolean }, command) =>
-    runCompile(options).catch(fail("compile", command.optsWithGlobals())),
+    // readOnly: compile loads the config for its compiler settings, runs
+    // nothing from deploy/ or test/, and never resolves a key.
+    runCompile({ ...options, readOnly: true }).catch(
+      fail("compile", command.optsWithGlobals()),
+    ),
   );

@@ -162,3 +162,61 @@ describe("runCompile config loading", () => {
     );
   });
 });
+
+// The gate `cmu compile` shows is also the first one `cmu test` and `cmu deploy`
+// reach, so its wording has to follow the calling command. `cmu test` runs every
+// file in test/ with a PRIVATE_KEY in the environment: telling it "this command
+// does not sign anything" would be worse than saying nothing.
+describe("runCompile trust wording", () => {
+  let cwd: string;
+  let confirmProjectTrust: ReturnType<typeof vi.fn>;
+
+  async function loadCompile() {
+    vi.resetModules();
+    confirmProjectTrust = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("../../src/utils/trust", () => ({
+      confirmProjectTrust,
+      findProjectConfig: () => path.join(cwd, "cmu.config.js"),
+    }));
+    return import("../../src/commands/compile");
+  }
+
+  beforeEach(() => {
+    cwd = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-compile-trust-"));
+    fs.writeFileSync(path.join(cwd, "cmu.config.js"), "module.exports = {};");
+    vi.spyOn(process, "cwd").mockReturnValue(cwd);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock("../../src/utils/trust");
+    vi.resetModules();
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  // No contracts/ here, so the run stops just past the gate - which is all
+  // these two cases are about.
+  it("does not claim read-only when the caller did not say so", async () => {
+    const { runCompile } = await loadCompile();
+
+    await expect(runCompile()).rejects.toThrow(/contracts\/ directory/);
+
+    expect(confirmProjectTrust).toHaveBeenCalledWith(
+      [path.join(cwd, "cmu.config.js")],
+      expect.objectContaining({ readOnly: undefined }),
+    );
+  });
+
+  it("passes the caller's read-only claim through (cmu compile)", async () => {
+    const { runCompile } = await loadCompile();
+
+    await expect(runCompile({ readOnly: true })).rejects.toThrow(
+      /contracts\/ directory/,
+    );
+
+    expect(confirmProjectTrust).toHaveBeenCalledWith(
+      [path.join(cwd, "cmu.config.js")],
+      expect.objectContaining({ readOnly: true }),
+    );
+  });
+});
