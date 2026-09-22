@@ -2,11 +2,9 @@ import { existsSync } from "fs";
 import { readdir } from "fs/promises";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { run } from "../utils/exec";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 
-const MIN_KEY_LENGTH = 10;
-const MASK_START = 5;
-const MASK_END = 4;
 const NETWORK_TIMEOUT_MS = 3000;
 
 interface DeployOptions {
@@ -18,45 +16,48 @@ interface DeployOptions {
 }
 
 /**
- * Executes a deployment script using child_process.execSync.
+ * Runs one deploy script as its own process.
+ *
+ * A .js script runs on the same Node that runs the CLI (process.execPath), not
+ * on whichever "node" is first on PATH; a .ts one goes through ts-node.
+ *
  * @param {string} scriptPath - The absolute path to the script to execute.
- * @param {Record<string, string | undefined>} env - Environment variables to inject.
- * @returns {void}
+ * @param {NodeJS.ProcessEnv} env - Environment variables to inject.
+ * @returns {Promise<void>} Resolves when the script exits 0.
+ * @throws {Error} When the script exits non-zero, so the run stops there.
  */
-function runDeployScript(
+async function runDeployScript(
   scriptPath: string,
-  env: Record<string, string | undefined>,
-): void {
-  const { execFileSync } = require("child_process");
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
   const path = require("path");
-
-  const ext = path.extname(scriptPath);
-  const isWin = process.platform === "win32";
-  const runner = ext === ".ts" ? "npx" : "node";
-  const args = ext === ".ts" ? ["ts-node", scriptPath] : [scriptPath];
+  const isTypeScript = path.extname(scriptPath) === ".ts";
 
   console.log(`\n========================================`);
   console.log(`Running ${path.basename(scriptPath)}`);
   console.log(`========================================\n`);
 
-  execFileSync(runner, args, {
-    stdio: "inherit",
-    env,
-    shell: isWin,
-  });
+  await run(
+    isTypeScript ? "npx" : process.execPath,
+    isTypeScript ? ["ts-node", scriptPath] : [scriptPath],
+    { env, label: path.basename(scriptPath) },
+  );
 }
 
 /** Stands in for the deployer address when `--config` finds no key. */
 const NO_KEY_LABEL = "unavailable (no key)";
 
 /**
- * Masks a private key for secure console output.
+ * Masks a private key for console output: the 0x plus three digits that make a
+ * key recognisable, and the last four. Anything too short to keep that much
+ * hidden is redacted outright.
+ *
  * @param {string} pk - The private key to mask.
  * @returns {string} The masked private key.
  */
 export function maskPrivateKey(pk: string): string {
-  if (pk.length < MIN_KEY_LENGTH) return "***";
-  return `${pk.substring(0, MASK_START)}...${pk.substring(pk.length - MASK_END)}`;
+  if (pk.length < 10) return "***";
+  return `${pk.substring(0, 5)}...${pk.substring(pk.length - 4)}`;
 }
 
 /**
@@ -230,7 +231,7 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
 
   for (const script of scripts) {
     const fullPath = path.join(deployDir, script);
-    runDeployScript(fullPath, injectedEnv);
+    await runDeployScript(fullPath, injectedEnv);
   }
 
   console.log("\nAll deploy scripts completed.");

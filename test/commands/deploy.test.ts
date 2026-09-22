@@ -12,7 +12,7 @@ describe("maskPrivateKey", () => {
     expect(maskPrivateKey(pk)).toBe("0x59c...690d");
   });
 
-  it("fully redacts a key shorter than MIN_KEY_LENGTH", () => {
+  it("fully redacts a key too short to mask meaningfully", () => {
     expect(maskPrivateKey("0x1234")).toBe("***");
   });
 });

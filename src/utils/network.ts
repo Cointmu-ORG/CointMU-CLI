@@ -1,9 +1,8 @@
 import { existsSync } from "fs";
-import { readFile } from "fs/promises";
 import { loadNetworks, type NetworkEntry } from "./networkStorage";
 import { registerTsNode } from "./tsNode";
 import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
-import { getSessionFilePath, resolvePrivateKey } from "./session";
+import { readSession, resolvePrivateKey } from "./session";
 
 const TS_CONFIG_FILE = "cmu.config.ts";
 const JS_CONFIG_FILE = "cmu.config.js";
@@ -23,11 +22,8 @@ export interface NetworkConfig {
  * @returns {Promise<string>} The active network name.
  */
 export async function activeNetworkName(): Promise<string> {
-  const sessionFile = getSessionFilePath();
-  if (!existsSync(sessionFile)) return LOCAL_NETWORK_NAME;
-
-  const session = JSON.parse(await readFile(sessionFile, "utf8"));
-  return session.activeNetwork || LOCAL_NETWORK_NAME;
+  const session = await readSession();
+  return session?.activeNetwork || LOCAL_NETWORK_NAME;
 }
 
 /**
@@ -46,14 +42,13 @@ export async function activeNetworkName(): Promise<string> {
 export async function activeNetwork(
   noSessionHint = "run `cmu wallet login`, then `cmu network use <name>`.",
 ): Promise<NetworkEntry> {
-  const sessionFile = getSessionFilePath();
-  if (!existsSync(sessionFile)) {
+  const session = await readSession();
+  if (!session) {
     throw new Error(
       "no active session.\n" + `\x1b[2mhint:\x1b[0m ${noSessionHint}`,
     );
   }
 
-  const session = JSON.parse(await readFile(sessionFile, "utf8"));
   if (!session.activeNetwork) {
     throw new Error(
       "no active network in the session.\n" +
@@ -75,24 +70,23 @@ export async function activeNetwork(
 }
 
 /**
- * Resolves the dynamic network configuration using .cmu-networks.json
- * and the active CLI session. Used for wallet, mining, and node connections.
+ * The saved network a read-only command should talk to: the one named, or the
+ * one the session selected, falling back to the local devnet.
  *
- * These callers only need url/chainId/name, so the private key is NOT resolved
- * here: `privateKey` is populated from PRIVATE_KEY when set, but an encrypted
- * .cmu-session is never touched and no password prompt is triggered. Anything
- * that actually needs to sign uses getDeployNetwork().
+ * Unlike getDeployNetwork() this resolves no private key and opens no
+ * connection - callers here only need somewhere to point a provider at, so the
+ * encrypted .cmu-session is never touched and no password prompt is triggered.
+ * Anything that actually needs to sign uses getDeployNetwork().
  *
  * @param {string} [targetNetwork] - An optional override network name.
- * @returns {Promise<NetworkConfig>} The dynamic network configuration.
+ * @returns {Promise<NetworkEntry>} The resolved network entry.
+ * @throws {Error} When the named network is not saved.
  */
 export async function getDynamicNetwork(
   targetNetwork?: string,
-): Promise<NetworkConfig> {
+): Promise<NetworkEntry> {
   const networkName = targetNetwork || (await activeNetworkName());
-  const networks = await loadNetworks();
-
-  const network = networks.find((n) => n.name === networkName);
+  const network = (await loadNetworks()).find((n) => n.name === networkName);
 
   if (!network) {
     throw new Error(
@@ -101,23 +95,7 @@ export async function getDynamicNetwork(
     );
   }
 
-  const { ethers } = await import("ethers");
-  let chainId = 0;
-
-  try {
-    const provider = new ethers.JsonRpcProvider(network.rpcUrl);
-    const net = await provider.getNetwork();
-    chainId = Number(net.chainId);
-  } catch {
-    chainId = networkName === LOCAL_NETWORK_NAME ? LOCAL_CHAIN_ID : 0;
-  }
-
-  return {
-    name: networkName,
-    url: network.rpcUrl,
-    chainId,
-    privateKey: process.env.PRIVATE_KEY,
-  };
+  return network;
 }
 
 /**

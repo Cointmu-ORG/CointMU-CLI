@@ -1,39 +1,6 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
-
-/**
- * Executes an external command in a child process.
- * @param {string} command - The command to execute (e.g. 'npm', 'npx').
- * @param {string[]} args - The arguments to pass to the command.
- * @returns {Promise<void>} Resolves when the command successfully completes.
- */
-async function runCommand(command: string, args: string[]): Promise<void> {
-  const { spawn } = await import("child_process");
-
-  return new Promise((resolve, reject) => {
-    console.log(`\x1b[36m> ${command} ${args.join(" ")}\x1b[0m`);
-
-    const executable =
-      process.platform === "win32" ? `${command}.cmd` : command;
-
-    const child = spawn(executable, args, {
-      stdio: "inherit",
-      shell: false,
-    });
-
-    child.on("error", (error) => {
-      reject(error);
-    });
-
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`${command} exited with code ${code}`));
-      } else {
-        resolve();
-      }
-    });
-  });
-}
+import { run } from "../utils/exec";
 
 /**
  * Runs the dependency and Solidity audits in turn.
@@ -53,7 +20,8 @@ async function runAudit(options: { fix?: boolean }): Promise<void> {
     npmArgs.push("fix");
   }
 
-  await runCommand("npm", npmArgs).catch(() => {
+  console.log(`\x1b[36m> npm ${npmArgs.join(" ")}\x1b[0m`);
+  await run("npm", npmArgs).catch(() => {
     console.warn(
       "\x1b[33mwarning:\x1b[0m npm audit reported issues in the dependency tree.",
     );
@@ -66,7 +34,8 @@ async function runAudit(options: { fix?: boolean }): Promise<void> {
     solhintArgs.push("--fix");
   }
 
-  await runCommand("npx", solhintArgs).catch(() => {
+  console.log(`\x1b[36m> npx ${solhintArgs.join(" ")}\x1b[0m`);
+  await run("npx", solhintArgs).catch(() => {
     console.warn(
       "\x1b[33mwarning:\x1b[0m solhint reported issues in the Solidity sources.",
     );

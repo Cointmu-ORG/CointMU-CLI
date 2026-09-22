@@ -1,3 +1,4 @@
+import type { Block } from "ethers";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
@@ -9,18 +10,6 @@ interface ExplorerOptions {
   contract?: string;
   verbose?: boolean;
   yes?: boolean;
-}
-
-/** The parts of an ethers Block this command prints. */
-export interface BlockLike {
-  number: number;
-  hash: string | null;
-  parentHash: string;
-  timestamp: number;
-  transactions: readonly string[];
-  gasUsed: bigint;
-  gasLimit: bigint;
-  miner: string;
 }
 
 /**
@@ -51,11 +40,11 @@ export function parseBlockNumber(raw: string): number {
 /**
  * Renders a block as the report the command prints.
  *
- * @param {BlockLike} block - The block, as ethers returned it.
+ * @param {Block} block - The block, as ethers returned it.
  * @param {string} networkName - The network it was read from.
  * @returns {string} The printable report.
  */
-export function formatBlock(block: BlockLike, networkName: string): string {
+export function formatBlock(block: Block, networkName: string): string {
   // A zero gasLimit is not a real chain, but dividing by it would print NaN%
   // over a block the user can see is otherwise fine.
   const used =
@@ -188,7 +177,7 @@ export async function runExplorer(
             `\x1b[2mhint:\x1b[0m the chain is at block ${tip}.`,
         );
       }
-      console.log(formatBlock(found as unknown as BlockLike, network.name));
+      console.log(formatBlock(found, network.name));
     } else {
       const [code, balance] = await Promise.all([
         provider.getCode(contract as string),

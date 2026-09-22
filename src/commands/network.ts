@@ -1,8 +1,6 @@
-import { existsSync } from "fs";
-import { readFile } from "fs/promises";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
-import { getSessionFilePath } from "../utils/session";
+import { getSessionFilePath, readSession } from "../utils/session";
 
 /**
  * Validates that a value is a well-formed RPC endpoint.
@@ -125,15 +123,11 @@ async function runNetworkDelete(name: string): Promise<void> {
     );
   }
 
-  const sessionFile = getSessionFilePath();
-  if (existsSync(sessionFile)) {
-    const session = JSON.parse(await readFile(sessionFile, "utf8"));
-    if (session.activeNetwork === name) {
-      throw new Error(
-        `network '${name}' is currently active and cannot be deleted.\n` +
-          "\x1b[2mhint:\x1b[0m switch away first with `cmu network use <name>`.",
-      );
-    }
+  if ((await readSession())?.activeNetwork === name) {
+    throw new Error(
+      `network '${name}' is currently active and cannot be deleted.\n` +
+        "\x1b[2mhint:\x1b[0m switch away first with `cmu network use <name>`.",
+    );
   }
 
   if (!(await deleteNetwork(name))) {
@@ -160,17 +154,16 @@ async function runNetworkUse(name: string): Promise<void> {
     );
   }
 
-  const sessionFile = getSessionFilePath();
-  if (!existsSync(sessionFile)) {
+  const session = await readSession();
+  if (!session) {
     throw new Error(
       "no active session.\n" +
         "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
     );
   }
 
-  const session = JSON.parse(await readFile(sessionFile, "utf8"));
   session.activeNetwork = name;
-  await writeSessionFile(sessionFile, session);
+  await writeSessionFile(getSessionFilePath(), session);
   console.log(`Active network is now ${network.name}`);
 }
 

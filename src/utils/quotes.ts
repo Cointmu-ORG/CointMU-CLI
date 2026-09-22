@@ -1,4 +1,4 @@
-const QUOTES = [
+export const QUOTES = [
   '"Code is law, but you write the code." - Web3 Builder',
   '"Trust, but verify." - Satoshi Nakamoto',
   '"Vires in Numeris." - Bitcoin Motto',
@@ -41,7 +41,7 @@ const QUOTES = [
   '"Hash first, trust later." - Miner Motto',
 ];
 
-const SAD_QUOTES = [
+export const SAD_QUOTES = [
   "Her heart was immutable, but my feelings got rekt in the mempool.",
   "I tried to deploy our future on mainnet, but she rolled back to her ex.",
   "Git commit -m 'trying to fix us', but the merge conflict was unresolvable.",
@@ -85,17 +85,11 @@ const SAD_QUOTES = [
 ];
 
 /**
- * Retrieves a random Web3 quote from the predefined list.
- * @returns {string} The randomly selected quote.
+ * One element of a list, at random.
+ *
+ * @param {T[]} items - The list to draw from; must not be empty.
+ * @returns {T} One of its elements.
  */
-export function getRandomQuote(): string {
-  return QUOTES[Math.floor(Math.random() * QUOTES.length)];
-}
-
-/**
- * Retrieves a random sad developer quote for the aries easter egg.
- * @returns {string} The randomly selected quote.
- */
-export function getRandomSadQuote(): string {
-  return SAD_QUOTES[Math.floor(Math.random() * SAD_QUOTES.length)];
+export function pick<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
 }

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Block } from "ethers";
 import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
@@ -35,6 +36,8 @@ describe("parseBlockNumber", () => {
 });
 
 describe("formatBlock", () => {
+  // Only the fields formatBlock reads; the rest of an ethers Block is not
+  // needed to print one.
   const block = {
     number: 42,
     hash: "0xaaa",
@@ -44,7 +47,7 @@ describe("formatBlock", () => {
     gasUsed: 210000n,
     gasLimit: 30000000n,
     miner: "0xccc",
-  };
+  } as unknown as Block;
 
   it("prints the readable timestamp, the count and the gas ratio", () => {
     const out = formatBlock(block, "local");

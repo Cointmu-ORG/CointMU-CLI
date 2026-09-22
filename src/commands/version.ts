@@ -8,24 +8,6 @@ import { fail } from "../utils/errors";
 declare const __CMU_BUILD_ID__: string | undefined;
 
 /**
- * Resolves the short Git commit hash of the current HEAD.
- * @returns {Promise<string>} The short commit hash, or "unknown".
- */
-async function resolveGitCommit(): Promise<string> {
-  try {
-    const { execSync } = await import("child_process");
-    return execSync("git rev-parse --short HEAD", {
-      stdio: "pipe",
-      cwd: __dirname,
-    })
-      .toString()
-      .trim();
-  } catch {
-    return "unknown";
-  }
-}
-
-/**
  * Prints detailed version information to the console.
  * @returns {Promise<void>} Resolves when the version info is printed.
  */
@@ -47,7 +29,6 @@ export async function runVersion(): Promise<void> {
   const solcRaw = await import("solc");
   const solc = solcRaw.default || solcRaw;
   const { ethers } = await import("ethers");
-  const gitCommit = await resolveGitCommit();
 
   console.log("cmu");
   console.log(`version      : ${pkg.version}`);
@@ -59,7 +40,6 @@ export async function runVersion(): Promise<void> {
     `solidity     : ${typeof solc.version === "function" ? solc.version() : "unknown"}`,
   );
   console.log(`ethers       : ${ethers.version}`);
-  console.log(`git commit   : ${gitCommit}`);
 }
 
 export const versionCommand = new Command("version")
