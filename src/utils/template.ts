@@ -175,9 +175,9 @@ describe("Deployment Template Test", function () {
     );
   }
 
-  const spec = templates[template];
+  const { contract, source, deployArgs } = templates[template] ?? {};
 
-  if (!spec?.load) {
+  if (!contract || !source) {
     // "blank", and anything else with no contract behind it.
     await writeFile(
       path.join(projectPath, "contracts", ".gitkeep"),
@@ -190,19 +190,14 @@ describe("Deployment Template Test", function () {
       "utf8",
     );
   } else {
-    const contractName = spec.contract!;
     await writeFile(
-      path.join(projectPath, "contracts", `${contractName}.sol`),
-      await spec.load(),
+      path.join(projectPath, "contracts", `${contract}.sol`),
+      source,
       "utf8",
     );
     await writeFile(
-      path.join(
-        projectPath,
-        "deploy",
-        `01_${contractName.toLowerCase()}.${ext}`,
-      ),
-      getDeployScript(contractName, spec.deployArgs ?? "", language),
+      path.join(projectPath, "deploy", `01_${contract.toLowerCase()}.${ext}`),
+      getDeployScript(contract, deployArgs ?? "", language),
       "utf8",
     );
   }

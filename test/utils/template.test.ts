@@ -30,18 +30,17 @@ describe("template registry", () => {
   });
 
   it("gives blank no contract to write", () => {
-    expect(templates.blank.load).toBeUndefined();
+    expect(templates.blank.source).toBeUndefined();
     expect(templates.blank.contract).toBeUndefined();
   });
 
-  it.each(
-    Object.entries(templates).filter(([, spec]) => spec.load !== undefined),
-  )("loads real Solidity for %s", async (_name, spec) => {
-    const source = await spec.load!();
-
-    expect(source).toContain("SPDX-License-Identifier");
-    expect(source).toContain(`contract ${spec.contract}`);
-  });
+  it.each(Object.entries(templates).filter(([, spec]) => spec.source))(
+    "carries real Solidity for %s",
+    (_name, spec) => {
+      expect(spec.source).toContain("SPDX-License-Identifier");
+      expect(spec.source).toContain(`contract ${spec.contract}`);
+    },
+  );
 
   it.each(Object.entries(templates).filter(([, spec]) => spec.contract))(
     "names %s with a contract the deploy script can resolve",
