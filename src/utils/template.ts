@@ -4,6 +4,19 @@ import { templates } from "../templates";
 
 const TYPESCRIPT_LANG = "typescript";
 
+/**
+ * What every generated deploy script imports, as binding + module. One list
+ * rather than a TS block and a JS block: the two used to be edited apart, and
+ * a module added to only one of them scaffolds a broken script in the other
+ * language.
+ */
+const DEPLOY_IMPORTS = [
+  ["{ ethers }", "ethers"],
+  ["{ existsSync }", "fs"],
+  ["{ mkdir, readFile, writeFile }", "fs/promises"],
+  ["path", "path"],
+] as const;
+
 export const templateChoices = Object.entries(templates).map(
   ([value, spec]) => ({ name: spec.label, value }),
 );
@@ -15,17 +28,13 @@ export function getDeployScript(
   contractArgs: string,
   language: string,
 ): string {
-  const tsImports = `import { ethers } from 'ethers';
-import { existsSync } from 'fs';
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import path from 'path';`;
+  const imports = DEPLOY_IMPORTS.map(([binding, from]) =>
+    language === TYPESCRIPT_LANG
+      ? `import ${binding} from '${from}';`
+      : `const ${binding} = require('${from}');`,
+  ).join("\n");
 
-  const jsImports = `const { ethers } = require('ethers');
-const { existsSync } = require('fs');
-const { mkdir, readFile, writeFile } = require('fs/promises');
-const path = require('path');`;
-
-  return `${language === TYPESCRIPT_LANG ? tsImports : jsImports}
+  return `${imports}
 
 async function main() {
   console.log('Deploying ${contractName}...');
