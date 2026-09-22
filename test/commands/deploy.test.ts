@@ -89,6 +89,53 @@ describe("runDeploy exit codes", () => {
     await expect(runDeploy({ config: true, yes: true })).resolves.toBe(0);
   });
 
+  // A locked .cmu-session resolves to no key at all under --config, which used
+  // to be fatal. --config never signs, so it now reports the gap as a field.
+  it("prints the config with no deployer when no key is reachable", async () => {
+    delete process.env.PRIVATE_KEY;
+    mockCompile();
+    const logged: string[] = [];
+    vi.mocked(console.log).mockImplementation((...a: unknown[]) => {
+      logged.push(a.join(" "));
+    });
+    const { runDeploy } = await import("../../src/commands/deploy");
+
+    await expect(runDeploy({ config: true, yes: true })).resolves.toBe(0);
+    expect(logged).toContain("Deployer     : unavailable (no key)");
+    expect(logged).toContain("Private key  : unavailable (no key)");
+  });
+
+  it("still prints the deployer under --config when a key is reachable", async () => {
+    mockCompile();
+    const logged: string[] = [];
+    vi.mocked(console.log).mockImplementation((...a: unknown[]) => {
+      logged.push(a.join(" "));
+    });
+    const { runDeploy } = await import("../../src/commands/deploy");
+
+    await expect(runDeploy({ config: true, yes: true })).resolves.toBe(0);
+    expect(logged).toContain(
+      "Deployer     : 0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    );
+    expect(logged.some((l) => l.startsWith("Private key  : 0x59c"))).toBe(true);
+  });
+
+  // The relaxation above is scoped to --config: a real deploy has to sign, so
+  // a missing key must still stop it before anything is broadcast.
+  it("still refuses a real deploy with no key", async () => {
+    delete process.env.PRIVATE_KEY;
+    fs.writeFileSync(
+      path.join(tmpDir, "deploy", "01_deploy.js"),
+      "throw new Error('this script must not run');",
+    );
+    mockCompile();
+    const { runDeploy } = await import("../../src/commands/deploy");
+
+    await expect(runDeploy({ yes: true })).rejects.toThrow(
+      /no private key available for signing/,
+    );
+  });
+
   it("returns 0 from --ping when the endpoint answers", async () => {
     mockCompile();
     vi.doMock("ethers", () => ({

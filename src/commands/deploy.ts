@@ -46,6 +46,9 @@ function runDeployScript(
   });
 }
 
+/** Stands in for the deployer address when `--config` finds no key. */
+const NO_KEY_LABEL = "unavailable (no key)";
+
 /**
  * Masks a private key for secure console output.
  * @param {string} pk - The private key to mask.
@@ -151,7 +154,10 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
     delete process.env.PRIVATE_KEY;
   }
 
-  if (!privateKey) {
+  // --config prints what was resolved and stops; it never signs, so a project
+  // whose only key sits in a locked .cmu-session still has a configuration
+  // worth showing. Everything past the config block below does sign.
+  if (!privateKey && !options.config) {
     throw new Error(
       "no private key available for signing.\n" +
         "\x1b[2mhint:\x1b[0m run `cmu wallet login`, or set PRIVATE_KEY in .env or cmu.config.ts.",
@@ -160,22 +166,28 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
 
   const { ethers } = await import("ethers");
   let wallet;
-  try {
-    wallet = new ethers.Wallet(privateKey);
-  } catch {
-    throw new Error(
-      "invalid private key.\n" +
-        "\x1b[2mhint:\x1b[0m expected a 32-byte hex key (0x-prefixed); run `cmu wallet login` to store one.",
-    );
+  if (privateKey) {
+    try {
+      wallet = new ethers.Wallet(privateKey);
+    } catch {
+      throw new Error(
+        "invalid private key.\n" +
+          "\x1b[2mhint:\x1b[0m expected a 32-byte hex key (0x-prefixed); run `cmu wallet login` to store one.",
+      );
+    }
   }
 
   console.log(`\n--- Deploy configuration ---`);
   console.log(`Network      : ${network.name}`);
   console.log(`RPC endpoint : ${network.url}`);
   console.log(`Chain ID     : ${network.chainId}`);
-  console.log(`Deployer     : ${wallet.address}`);
+  // Kept as a field rather than dropped: the line existing but reading
+  // "unavailable" is what tells the user no key was found, not a gap.
+  console.log(`Deployer     : ${wallet ? wallet.address : NO_KEY_LABEL}`);
   if (options.config) {
-    console.log(`Private key  : ${maskPrivateKey(privateKey)}`);
+    console.log(
+      `Private key  : ${privateKey ? maskPrivateKey(privateKey) : NO_KEY_LABEL}`,
+    );
   }
   console.log(`----------------------------\n`);
 
