@@ -70,7 +70,7 @@ describe("confirmProjectTrust", () => {
     const { confirmProjectTrust } = await loadTrust();
 
     await confirmProjectTrust(["/tmp/project/cmu.config.ts"], {
-      readOnly: true,
+      variant: "readOnly",
     });
 
     const output = (console.log as any).mock.calls.flat().join("\n");
@@ -80,6 +80,30 @@ describe("confirmProjectTrust", () => {
       "does not sign anything and does not unlock your session",
     );
     // Still a real gate, whatever the wording.
+    expect(prompt).toHaveBeenCalledOnce();
+  });
+
+  // `cmu test` derives its key from the devnet mnemonic and hands it to mocha,
+  // so neither half of the default sentence is true for it (issue #147).
+  it("names the devnet mnemonic and the mocha suite for cmu test", async () => {
+    process.stdin.isTTY = true;
+    prompt.mockResolvedValue({ proceed: true });
+    const { confirmProjectTrust } = await loadTrust();
+
+    await confirmProjectTrust(["/tmp/project/test/Template.test.ts"], {
+      variant: "test",
+    });
+
+    const output = (console.log as any).mock.calls.flat().join("\n");
+    expect(output).toContain("/tmp/project/test/Template.test.ts");
+    expect(output).toContain(
+      "\n    They run with your full environment, including a PRIVATE_KEY derived from the\n" +
+        "    devnet mnemonic and passed to the mocha test suite, and can do anything your\n" +
+        "    user account can. This is the same trust model as Hardhat, Foundry and\n" +
+        "    Truffle; see the 'Trust Model' section of the README.\n",
+    );
+    // Not the session key, and not deploy/.
+    expect(output).not.toContain("decrypted from");
     expect(prompt).toHaveBeenCalledOnce();
   });
 

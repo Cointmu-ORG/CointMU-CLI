@@ -2,7 +2,11 @@ import { existsSync } from "fs";
 import { mkdir, readdir, readFile, writeFile } from "fs/promises";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
-import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
+import {
+  confirmProjectTrust,
+  findProjectConfig,
+  type TrustVariant,
+} from "../utils/trust";
 import { registerTsNode } from "../utils/tsNode";
 
 const JSON_SPACES = 2;
@@ -56,15 +60,15 @@ export function findImports(
  * Compiles all Solidity contracts found in the contracts directory.
  * Writes the artifacts to the artifacts directory.
  * @param {object} options - CLI options.
- * @param {boolean} [options.readOnly] - Whether the *calling command* signs
- *   nothing, for the trust prompt's wording. Off by default: `cmu compile` opts
- *   in, and a caller that forgets gets the stronger warning rather than a
- *   reassurance that may be false for it (`cmu test` runs test/ with a
- *   PRIVATE_KEY in the environment).
+ * @param {TrustVariant} [options.variant] - The *calling command's* consequence
+ *   wording for the trust prompt. Defaults to the strongest one: a caller that
+ *   forgets gets the key-injection warning rather than a reassurance that may
+ *   be false for it (`cmu test` runs test/ with a PRIVATE_KEY in the
+ *   environment).
  * @returns {Promise<void>} Resolves when compilation finishes successfully.
  */
 export async function runCompile(
-  options: { verbose?: boolean; yes?: boolean; readOnly?: boolean } = {},
+  options: { verbose?: boolean; yes?: boolean; variant?: TrustVariant } = {},
 ): Promise<void> {
   const solc = require("solc");
   const path = require("path");
@@ -83,7 +87,7 @@ export async function runCompile(
     // the calling command, not the compile step.
     await confirmProjectTrust([configPath], {
       yes: options.yes,
-      readOnly: options.readOnly,
+      variant: options.variant,
     });
     try {
       if (configPath.endsWith(".ts")) {
@@ -185,7 +189,7 @@ export const compileCommand = new Command("compile")
   .action((options: { yes?: boolean }, command) =>
     // readOnly: compile loads the config for its compiler settings, runs
     // nothing from deploy/ or test/, and never resolves a key.
-    runCompile({ ...options, readOnly: true }).catch(
+    runCompile({ ...options, variant: "readOnly" }).catch(
       fail("compile", command.optsWithGlobals()),
     ),
   );

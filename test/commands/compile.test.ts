@@ -203,20 +203,20 @@ describe("runCompile trust wording", () => {
 
     expect(confirmProjectTrust).toHaveBeenCalledWith(
       [path.join(cwd, "cmu.config.js")],
-      expect.objectContaining({ readOnly: undefined }),
+      expect.objectContaining({ variant: undefined }),
     );
   });
 
   it("passes the caller's read-only claim through (cmu compile)", async () => {
     const { runCompile } = await loadCompile();
 
-    await expect(runCompile({ readOnly: true })).rejects.toThrow(
+    await expect(runCompile({ variant: "readOnly" })).rejects.toThrow(
       /contracts\/ directory/,
     );
 
     expect(confirmProjectTrust).toHaveBeenCalledWith(
       [path.join(cwd, "cmu.config.js")],
-      expect.objectContaining({ readOnly: true }),
+      expect.objectContaining({ variant: "readOnly" }),
     );
   });
 });

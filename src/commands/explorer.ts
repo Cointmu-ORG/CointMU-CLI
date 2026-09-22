@@ -158,7 +158,7 @@ export async function runExplorer(
   // PRIVATE_KEY wording `cmu deploy` gets would be untrue here.
   await confirmProjectTrust(configPath ? [configPath] : [], {
     yes: options.yes,
-    readOnly: true,
+    variant: "readOnly",
   });
 
   const { getDeployNetwork } = await import("../utils/network");

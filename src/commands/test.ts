@@ -7,6 +7,7 @@ import {
   silenceHardhatNoise,
 } from "../utils/hardhat";
 import { startRpcProxy } from "../utils/rpcProxy";
+import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 import { LOCAL_CHAIN_ID } from "../utils/defaults";
 
 const TEST_PORT = 8555;
@@ -117,7 +118,7 @@ async function runMochaSuite(
  * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when tests complete.
  */
-async function runTest(
+export async function runTest(
   options: {
     gas?: boolean;
     verbose?: boolean;
@@ -139,12 +140,6 @@ async function runTest(
   }
   const path = await import("path");
 
-  console.log("Compiling contracts...");
-  // Compile failures keep reporting themselves as "compile failed" rather than
-  // being relabelled by the command that triggered the compile.
-  const { runCompile } = await import("./compile");
-  await runCompile({ yes: options.yes }).catch(fail("compile", options));
-
   const testDir = path.resolve(process.cwd(), TEST_DIR_NAME);
   if (!existsSync(testDir)) {
     throw new Error(
@@ -152,6 +147,32 @@ async function runTest(
         "\x1b[2mhint:\x1b[0m run `cmu test` from the root of your CointMU project.",
     );
   }
+
+  // Gate up front, the way `cmu deploy` does, and list what actually runs: the
+  // suite in test/ executes with a PRIVATE_KEY in its environment, so naming
+  // only the config would leave the interesting files unnamed (issue #147).
+  // runCompile() gates again below; the per-process memo makes that a no-op, so
+  // the user is asked exactly once.
+  const configPath = findProjectConfig();
+  await confirmProjectTrust(
+    [
+      ...(configPath ? [configPath] : []),
+      // recursive: mocha's glob is test/**/*, so a file in a subdirectory
+      // executes just like a top-level one and has to be listed too.
+      ...readdirSync(testDir, { recursive: true })
+        .map(String)
+        .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
+        .sort((a, b) => a.localeCompare(b))
+        .map((f) => path.join(testDir, f)),
+    ],
+    { yes: options.yes, variant: "test" },
+  );
+
+  console.log("Compiling contracts...");
+  // Compile failures keep reporting themselves as "compile failed" rather than
+  // being relabelled by the command that triggered the compile.
+  const { runCompile } = await import("./compile");
+  await runCompile({ yes: options.yes }).catch(fail("compile", options));
 
   silenceHardhatNoise({ verbose: isVerbose });
 
