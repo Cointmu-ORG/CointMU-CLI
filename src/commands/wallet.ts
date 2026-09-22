@@ -1,8 +1,40 @@
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { Command } from "commander";
+import { LOCAL_NETWORK_NAME } from "../utils/defaults";
 import { fail } from "../utils/errors";
 import { getSessionFilePath } from "../utils/session";
+
+/**
+ * The activeNetwork a new session should carry: the one the existing session
+ * selected, as long as it is still saved. Falls back to the local devnet for a
+ * first login, an unreadable session file, or a pick that has since been
+ * deleted - and says so in that last case, since the user did choose it.
+ *
+ * @returns {Promise<string>} The network name the new session should record.
+ */
+async function carriedOverNetwork(): Promise<string> {
+  const sessionFile = getSessionFilePath();
+  if (!existsSync(sessionFile)) return LOCAL_NETWORK_NAME;
+
+  let previous: string | undefined;
+  try {
+    previous = JSON.parse(await readFile(sessionFile, "utf8")).activeNetwork;
+  } catch {
+    // A corrupt session file must not block login - login is the way out of it.
+    return LOCAL_NETWORK_NAME;
+  }
+  if (!previous) return LOCAL_NETWORK_NAME;
+
+  const { loadNetworks } = await import("../utils/networkStorage");
+  if ((await loadNetworks()).some((n) => n.name === previous)) return previous;
+
+  console.log(
+    `\x1b[33mwarning:\x1b[0m network '${previous}' is no longer saved - ` +
+      `active network reset to ${LOCAL_NETWORK_NAME}.`,
+  );
+  return LOCAL_NETWORK_NAME;
+}
 
 /**
  * Prompts for a session password, encrypts the given private key with it and
@@ -12,9 +44,12 @@ import { getSessionFilePath } from "../utils/session";
  * implementation of the encrypt-and-store path. The key is never printed.
  *
  * @param {string} privateKey - The private key to encrypt.
- * @returns {Promise<string>} The address the session belongs to.
+ * @returns {Promise<{address: string, activeNetwork: string}>} The address the
+ *   session belongs to, and the network it ended up pointing at.
  */
-async function createEncryptedSession(privateKey: string): Promise<string> {
+async function createEncryptedSession(
+  privateKey: string,
+): Promise<{ address: string; activeNetwork: string }> {
   const inquirer = (await import("inquirer")).default;
   const { ethers } = await import("ethers");
   const { encryptSessionKey, validatePasswordStrength, writeSessionFile } =
@@ -31,14 +66,15 @@ async function createEncryptedSession(privateKey: string): Promise<string> {
   ]);
 
   const wallet = new ethers.Wallet(privateKey);
+  const activeNetwork = await carriedOverNetwork();
 
   await writeSessionFile(getSessionFilePath(), {
     address: wallet.address,
-    activeNetwork: "local",
+    activeNetwork,
     ...encryptSessionKey(password, privateKey),
   });
 
-  return wallet.address;
+  return { address: wallet.address, activeNetwork };
 }
 
 /**
@@ -55,12 +91,15 @@ export async function runWalletCreate(
     // The generated key goes straight into the encrypted session. Neither it
     // nor the mnemonic is passed to console.log anywhere on this path, so
     // nothing recoverable reaches scrollback or a CI log.
-    const address = await createEncryptedSession(wallet.privateKey);
+    const { address, activeNetwork } = await createEncryptedSession(
+      wallet.privateKey,
+    );
     console.log("New CointMU wallet");
     console.log("===========================");
     console.log(`Address : ${address}`);
     console.log("===========================");
     console.log("Session encrypted and saved.");
+    console.log(`Active network: ${activeNetwork}`);
     console.log(
       "\n\x1b[33mwarning:\x1b[0m the private key and mnemonic were not printed - this wallet",
     );
@@ -110,7 +149,7 @@ export async function runWalletCreate(
  * Securely log into a wallet and create an encrypted session.
  * @returns {Promise<void>}
  */
-async function runWalletLogin(): Promise<void> {
+export async function runWalletLogin(): Promise<void> {
   const inquirer = (await import("inquirer")).default;
   const { ethers } = await import("ethers");
 
@@ -131,9 +170,10 @@ async function runWalletLogin(): Promise<void> {
     },
   ]);
 
-  const address = await createEncryptedSession(privateKey);
+  const { address, activeNetwork } = await createEncryptedSession(privateKey);
   console.log("Session encrypted and saved.");
   console.log(`Logged in as ${address}`);
+  console.log(`Active network: ${activeNetwork}`);
   console.log(
     "`cmu deploy` will use this key automatically when PRIVATE_KEY is not set.",
   );
