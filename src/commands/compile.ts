@@ -1,5 +1,6 @@
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { mkdir, readdir, readFile, writeFile } from "fs/promises";
+import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
@@ -19,9 +20,6 @@ export function findImports(
   importPath: string,
 ): { contents: string } | { error: string } {
   try {
-    const fs = require("fs");
-    const path = require("path");
-
     // True when `target` is strictly inside `root` (not root itself, not a sibling
     // whose name merely shares a string prefix, not an escape via "..").
     const isContained = (root: string, target: string): boolean => {
@@ -33,17 +31,17 @@ export function findImports(
     const localPath = path.resolve(cwd, importPath);
 
     // Ensure the resolved path remains within the current working directory
-    if (isContained(cwd, localPath) && fs.existsSync(localPath)) {
-      return { contents: fs.readFileSync(localPath, "utf8") };
+    if (isContained(cwd, localPath) && existsSync(localPath)) {
+      return { contents: readFileSync(localPath, "utf8") };
     }
 
     const nodeModulesRoot = path.resolve(cwd, "node_modules");
     const nodeModulesPath = path.resolve(nodeModulesRoot, importPath);
     if (
       isContained(nodeModulesRoot, nodeModulesPath) &&
-      fs.existsSync(nodeModulesPath)
+      existsSync(nodeModulesPath)
     ) {
-      return { contents: fs.readFileSync(nodeModulesPath, "utf8") };
+      return { contents: readFileSync(nodeModulesPath, "utf8") };
     }
 
     return { error: "File not found or access denied" };
@@ -62,7 +60,6 @@ export async function runCompile(
   options: { verbose?: boolean; yes?: boolean } = {},
 ): Promise<void> {
   const solc = require("solc");
-  const path = require("path");
 
   const cwd = process.cwd();
   const contractsDir = path.resolve(cwd, "contracts");
@@ -137,18 +134,17 @@ export async function runCompile(
     solc.compile(JSON.stringify(input), { import: findImports }),
   );
 
-  if (output.errors) {
-    let hasError = false;
-    for (const err of output.errors) {
-      console.error(err.formattedMessage);
-      if (err.severity === "error") hasError = true;
-    }
-    if (hasError) {
-      throw new Error(
-        "compilation aborted on Solidity errors.\n" +
-          "\x1b[2mhint:\x1b[0m fix the errors reported above, then run `cmu compile` again.",
-      );
-    }
+  // Warnings arrive in the same list as errors; only an error stops the build.
+  const errors: { severity: string; formattedMessage: string }[] =
+    output.errors ?? [];
+  for (const err of errors) {
+    console.error(err.formattedMessage);
+  }
+  if (errors.some((err) => err.severity === "error")) {
+    throw new Error(
+      "compilation aborted on Solidity errors.\n" +
+        "\x1b[2mhint:\x1b[0m fix the errors reported above, then run `cmu compile` again.",
+    );
   }
 
   await mkdir(artifactsDir, { recursive: true });

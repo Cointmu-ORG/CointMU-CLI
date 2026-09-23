@@ -1,4 +1,5 @@
 import { existsSync, readdirSync } from "fs";
+import * as path from "path";
 import { Command } from "commander";
 import { fail, printCliError } from "../utils/errors";
 import { run } from "../utils/exec";
@@ -126,7 +127,6 @@ async function runTest(
         `${TEST_PORT} accepts requests from any browser origin`,
     );
   }
-  const path = await import("path");
 
   console.log("Compiling contracts...");
   // Compile failures keep reporting themselves as "compile failed" rather than
@@ -169,12 +169,8 @@ async function runTest(
 
   try {
     const { ethers } = await import("ethers");
-    const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic);
-    const wallet = ethers.HDNodeWallet.fromMnemonic(
-      mnemonicObj,
-      "m/44'/60'/0'/0/0",
-    );
-    const privateKey = wallet.privateKey;
+    // No path: ethers' default, m/44'/60'/0'/0/0, is devnet account #0.
+    const { privateKey } = ethers.HDNodeWallet.fromPhrase(resolvedMnemonic);
 
     const injectedEnv = {
       ...process.env,

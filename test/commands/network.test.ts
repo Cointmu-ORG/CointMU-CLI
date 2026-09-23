@@ -126,6 +126,37 @@ describe("networkCommand wiring", () => {
     expect(exit).toHaveBeenCalledWith(1);
   });
 
+  // ping/use/delete each did their own lookup in .cmu-networks.json; they now
+  // go through getDynamicNetwork(), and delete through deleteNetwork()'s false.
+  it.each([["ping"], ["use"], ["delete"]])(
+    "`network %s` refuses a network that is not saved",
+    async (sub) => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+        throw new Error("exited");
+      }) as any);
+
+      await expect(run(sub, "ghost")).rejects.toThrow("exited");
+
+      const output = (error as any).mock.calls.flat().join("\n");
+      expect(output).toContain("network 'ghost' is not saved");
+      expect(output).toContain("cmu network list");
+      expect(exit).toHaveBeenCalledWith(1);
+    },
+  );
+
+  it("deletes a saved network that is not the active one", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await run("save", "http://127.0.0.1:9000", "--name", "staging");
+
+    await run("delete", "staging");
+
+    const saved = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, ".cmu-networks.json"), "utf8"),
+    );
+    expect(saved.map((n: any) => n.name)).toEqual(["local"]);
+  });
+
   it.each([
     [
       ["--save", "http://127.0.0.1:9000", "--name", "staging"],

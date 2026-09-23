@@ -9,6 +9,7 @@ import {
   encryptSessionKey,
   LEGACY_PBKDF2_ITERATIONS,
   readSession,
+  requireSession,
   validatePasswordStrength,
   writeSessionFile,
   type SessionData,
@@ -149,6 +150,47 @@ describe("readSession", () => {
     } finally {
       fs.rmSync(elsewhere, { recursive: true, force: true });
     }
+  });
+});
+
+// wallet balance/info, mine start/stop, network use and activeNetwork() each
+// turned a null readSession() into the same error by hand.
+describe("requireSession", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-require-session-"));
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns the session when there is one", async () => {
+    const session = makeSession();
+    await writeSessionFile(path.join(tmpDir, ".cmu-session"), session);
+
+    expect(await requireSession()).toEqual(session);
+  });
+
+  it("turns a missing session into an error that points at login", async () => {
+    await expect(requireSession()).rejects.toThrow(
+      /^no active session\.\n.*hint:.*run `cmu wallet login` first\.$/,
+    );
+  });
+
+  it("carries the caller's hint instead, when given one", async () => {
+    await expect(requireSession("pass a network name.")).rejects.toThrow(
+      /hint:.*pass a network name\.$/,
+    );
+  });
+
+  it("still throws on a corrupt session rather than calling it missing", async () => {
+    fs.writeFileSync(path.join(tmpDir, ".cmu-session"), "{ not json");
+
+    await expect(requireSession()).rejects.toThrow(SyntaxError);
   });
 });
 

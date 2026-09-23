@@ -1,5 +1,7 @@
 import { mkdir, writeFile } from "fs/promises";
+import * as path from "path";
 import { generateConfigFiles } from "./configGenerator";
+import { run } from "./exec";
 import { templates } from "../templates";
 
 const TYPESCRIPT_LANG = "typescript";
@@ -111,9 +113,6 @@ export async function generateProject(
   template: string,
   language: string,
 ): Promise<void> {
-  const path = await import("path");
-  const { execSync } = await import("child_process");
-
   const dirs = [
     "contracts",
     "scripts",
@@ -149,14 +148,6 @@ describe("Deployment Template Test", function () {
 
   await generateConfigFiles(projectPath, language);
 
-  await writeFile(path.join(projectPath, "artifacts", ".gitkeep"), "", "utf8");
-  await writeFile(
-    path.join(projectPath, "deployments", ".gitkeep"),
-    "",
-    "utf8",
-  );
-  await writeFile(path.join(projectPath, "scripts", ".gitkeep"), "", "utf8");
-
   if (language === TYPESCRIPT_LANG) {
     const tsconfig = {
       compilerOptions: {
@@ -176,14 +167,12 @@ describe("Deployment Template Test", function () {
   }
 
   const { contract, source, deployArgs } = templates[template] ?? {};
+  // Directories the scaffold leaves empty, kept in git by a .gitkeep.
+  const emptyDirs = ["artifacts", "deployments", "scripts"];
 
   if (!contract || !source) {
     // "blank", and anything else with no contract behind it.
-    await writeFile(
-      path.join(projectPath, "contracts", ".gitkeep"),
-      "",
-      "utf8",
-    );
+    emptyDirs.push("contracts");
     await writeFile(
       path.join(projectPath, "deploy", `01_deploy.${ext}`),
       blankDeployTemplate(language),
@@ -200,6 +189,10 @@ describe("Deployment Template Test", function () {
       getDeployScript(contract, deployArgs ?? "", language),
       "utf8",
     );
+  }
+
+  for (const dir of emptyDirs) {
+    await writeFile(path.join(projectPath, dir, ".gitkeep"), "", "utf8");
   }
 
   const projectName = path.basename(projectPath);
@@ -219,25 +212,14 @@ describe("Deployment Template Test", function () {
   );
 
   console.log("Installing dependencies...");
-  execSync("npm install ethers", {
-    cwd: projectPath,
-    stdio: "inherit",
-  });
+  await run("npm", ["install", "ethers"], { cwd: projectPath });
 
-  if (language === TYPESCRIPT_LANG) {
-    console.log("Installing dev dependencies...");
-    execSync(
-      "npm install --save-dev @types/node mocha chai @types/mocha @types/chai ts-node typescript@5",
-      {
-        cwd: projectPath,
-        stdio: "inherit",
-      },
-    );
-  } else {
-    console.log("Installing dev dependencies...");
-    execSync("npm install --save-dev mocha chai", {
-      cwd: projectPath,
-      stdio: "inherit",
-    });
-  }
+  const devDependencies =
+    language === TYPESCRIPT_LANG
+      ? "@types/node mocha chai @types/mocha @types/chai ts-node typescript@5"
+      : "mocha chai";
+  console.log("Installing dev dependencies...");
+  await run("npm", ["install", "--save-dev", ...devDependencies.split(" ")], {
+    cwd: projectPath,
+  });
 }

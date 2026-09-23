@@ -1,5 +1,7 @@
 import { existsSync } from "fs";
 import { readFile, writeFile } from "fs/promises";
+import { homedir } from "os";
+import * as path from "path";
 import { LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
 
 const NETWORKS_FILE_NAME = ".cmu-networks.json";
@@ -11,13 +13,12 @@ export interface NetworkEntry {
 }
 
 /**
- * Gets the absolute path to the networks storage file lazily.
- * @returns {Promise<string>} The file path.
+ * Absolute path to the networks storage file. Resolved per call: tests point
+ * HOME at a temp directory.
+ * @returns {string} The file path.
  */
-async function getNetworksFilePath(): Promise<string> {
-  const os = await import("os");
-  const path = await import("path");
-  return path.join(os.homedir(), NETWORKS_FILE_NAME);
+function getNetworksFilePath(): string {
+  return path.join(homedir(), NETWORKS_FILE_NAME);
 }
 
 /**
@@ -39,7 +40,7 @@ async function writeNetworks(
  * @returns {Promise<NetworkEntry[]>} The array of saved networks.
  */
 export async function loadNetworks(): Promise<NetworkEntry[]> {
-  const filePath = await getNetworksFilePath();
+  const filePath = getNetworksFilePath();
 
   if (!existsSync(filePath)) {
     const defaultNetworks: NetworkEntry[] = [
@@ -58,7 +59,7 @@ export async function loadNetworks(): Promise<NetworkEntry[]> {
  * @returns {Promise<void>}
  */
 export async function saveNetwork(name: string, rpcUrl: string): Promise<void> {
-  const filePath = await getNetworksFilePath();
+  const filePath = getNetworksFilePath();
   const networks = await loadNetworks();
   const existingIndex = networks.findIndex((n) => n.name === name);
 
@@ -77,7 +78,7 @@ export async function saveNetwork(name: string, rpcUrl: string): Promise<void> {
  * @returns {Promise<boolean>} True if deleted, false if not found.
  */
 export async function deleteNetwork(name: string): Promise<boolean> {
-  const filePath = await getNetworksFilePath();
+  const filePath = getNetworksFilePath();
   const networks = await loadNetworks();
   const existingIndex = networks.findIndex((n) => n.name === name);
 

@@ -1,7 +1,11 @@
 import { Command } from "commander";
 import { LOCAL_NETWORK_NAME } from "../utils/defaults";
 import { fail } from "../utils/errors";
-import { getSessionFilePath, readSession } from "../utils/session";
+import {
+  getSessionFilePath,
+  readSession,
+  requireSession,
+} from "../utils/session";
 
 /**
  * The activeNetwork a new session should carry: the one the existing session
@@ -179,14 +183,7 @@ export async function runWalletLogin(): Promise<void> {
  * @returns {Promise<void>}
  */
 async function runWalletBalance(): Promise<void> {
-  const session = await readSession();
-
-  if (!session) {
-    throw new Error(
-      "no active session.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
-    );
-  }
+  const session = await requireSession();
 
   const { getDynamicNetwork } = await import("../utils/network");
   const { ethers } = await import("ethers");
@@ -208,14 +205,7 @@ async function runWalletBalance(): Promise<void> {
  * @returns {Promise<void>}
  */
 async function runWalletInfo(): Promise<void> {
-  const session = await readSession();
-
-  if (!session) {
-    throw new Error(
-      "no active session.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
-    );
-  }
+  const session = await requireSession();
 
   const { getDynamicNetwork } = await import("../utils/network");
   const network = await getDynamicNetwork(session.activeNetwork);

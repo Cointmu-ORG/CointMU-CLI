@@ -75,7 +75,9 @@ describe("pingNetwork", () => {
 
     await pingNetwork("http://127.0.0.1:8585");
 
-    expect(log.mock.calls.flat().join("\n")).toContain("Connected to 'sepolia'");
+    expect(log.mock.calls.flat().join("\n")).toContain(
+      "Connected to 'sepolia'",
+    );
   });
 
   it("rejects an empty url as a config error without waiting out the timeout", async () => {
@@ -91,9 +93,9 @@ describe("pingNetwork", () => {
 
 // runDeploy() used to call process.exit() from inside its --ping and --config
 // branches, so neither could be observed without stubbing the process. It now
-// returns the code and the command handler does the exiting.
+// resolves, and the command handler does the exiting.
 
-describe("runDeploy exit codes", () => {
+describe("runDeploy exits", () => {
   let tmpDir: string;
   const prevKey = process.env.PRIVATE_KEY;
 
@@ -125,7 +127,7 @@ describe("runDeploy exit codes", () => {
     }));
   }
 
-  it("returns 0 from --config without running any deploy script", async () => {
+  it("finishes --config without running any deploy script", async () => {
     fs.writeFileSync(
       path.join(tmpDir, "deploy", "01_deploy.js"),
       "throw new Error('this script must not run');",
@@ -133,7 +135,9 @@ describe("runDeploy exit codes", () => {
     mockCompile();
     const { runDeploy } = await import("../../src/commands/deploy");
 
-    await expect(runDeploy({ config: true, yes: true })).resolves.toBe(0);
+    await expect(
+      runDeploy({ config: true, yes: true }),
+    ).resolves.toBeUndefined();
   });
 
   // A locked .cmu-session resolves to no key at all under --config, which used
@@ -147,7 +151,9 @@ describe("runDeploy exit codes", () => {
     });
     const { runDeploy } = await import("../../src/commands/deploy");
 
-    await expect(runDeploy({ config: true, yes: true })).resolves.toBe(0);
+    await expect(
+      runDeploy({ config: true, yes: true }),
+    ).resolves.toBeUndefined();
     expect(logged).toContain("Deployer     : unavailable (no key)");
     expect(logged).toContain("Private key  : unavailable (no key)");
   });
@@ -160,7 +166,9 @@ describe("runDeploy exit codes", () => {
     });
     const { runDeploy } = await import("../../src/commands/deploy");
 
-    await expect(runDeploy({ config: true, yes: true })).resolves.toBe(0);
+    await expect(
+      runDeploy({ config: true, yes: true }),
+    ).resolves.toBeUndefined();
     expect(logged).toContain(
       "Deployer     : 0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
     );
@@ -183,7 +191,7 @@ describe("runDeploy exit codes", () => {
     );
   });
 
-  it("returns 0 from --ping when the endpoint answers", async () => {
+  it("finishes --ping when the endpoint answers", async () => {
     mockCompile();
     vi.doMock("ethers", () => ({
       ethers: {
@@ -194,7 +202,7 @@ describe("runDeploy exit codes", () => {
     }));
     const { runDeploy } = await import("../../src/commands/deploy");
 
-    await expect(runDeploy({ ping: true, yes: true })).resolves.toBe(0);
+    await expect(runDeploy({ ping: true, yes: true })).resolves.toBeUndefined();
   });
 
   it("throws rather than exiting when the deploy directory is missing", async () => {
@@ -210,10 +218,10 @@ describe("runDeploy exit codes", () => {
     expect(exit).not.toHaveBeenCalled();
   });
 
-  it("returns 0 when there is nothing in deploy/ to run", async () => {
+  it("finishes when there is nothing in deploy/ to run", async () => {
     mockCompile();
     const { runDeploy } = await import("../../src/commands/deploy");
 
-    await expect(runDeploy({ yes: true })).resolves.toBe(0);
+    await expect(runDeploy({ yes: true })).resolves.toBeUndefined();
   });
 });

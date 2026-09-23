@@ -186,17 +186,15 @@ async function runNodeStart(options: {
   originalConsoleLog("\nPre-funded developer accounts (100 ETH each):");
 
   const { ethers } = await import("ethers");
-  let index = 0;
-  const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic);
   for (let i = 0; i < ACCOUNT_COUNT; i++) {
-    const wallet = ethers.HDNodeWallet.fromMnemonic(
-      mnemonicObj,
+    const wallet = ethers.HDNodeWallet.fromPhrase(
+      resolvedMnemonic,
+      undefined,
       `m/44'/60'/0'/0/${i}`,
     );
-    originalConsoleLog(`\nAccount #${index}`);
+    originalConsoleLog(`\nAccount #${i}`);
     originalConsoleLog(`Address     : ${wallet.address}`);
     originalConsoleLog(`Private key : ${wallet.privateKey}`);
-    index++;
   }
   originalConsoleLog("\n");
 

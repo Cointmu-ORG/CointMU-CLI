@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
-import { readSession } from "../utils/session";
+import { requireSession } from "../utils/session";
 
 const MINER_THREAD_COUNT = 1;
 
@@ -9,14 +9,7 @@ const MINER_THREAD_COUNT = 1;
  * @returns {Promise<void>} Resolves when mining is started successfully.
  */
 async function runMineStart(): Promise<void> {
-  const session = await readSession();
-
-  if (!session) {
-    throw new Error(
-      "no active session.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
-    );
-  }
+  const session = await requireSession();
 
   const { getDynamicNetwork } = await import("../utils/network");
   const { ethers } = await import("ethers");
@@ -39,14 +32,7 @@ async function runMineStart(): Promise<void> {
  * @returns {Promise<void>} Resolves when mining is stopped successfully.
  */
 async function runMineStop(): Promise<void> {
-  const session = await readSession();
-
-  if (!session) {
-    throw new Error(
-      "no active session.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
-    );
-  }
+  const session = await requireSession();
 
   const { getDynamicNetwork } = await import("../utils/network");
   const { ethers } = await import("ethers");

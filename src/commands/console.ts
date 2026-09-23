@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "fs";
+import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
@@ -36,10 +37,7 @@ export async function resolveConsoleContext(options: ConsoleOptions = {}) {
   // getDeployNetwork() require()s cmu.config.ts, which is arbitrary project
   // code, so gate it the same way `cmu compile` does. Only the config file is
   // listed: unlike deploy, the console never executes deploy/.
-  const configPath = findProjectConfig();
-  await confirmProjectTrust(configPath ? [configPath] : [], {
-    yes: options.yes,
-  });
+  await confirmProjectTrust([findProjectConfig()], { yes: options.yes });
 
   const { getDeployNetwork } = await import("../utils/network");
   // --no-signer skips the session password prompt entirely, so a read-only
@@ -91,7 +89,6 @@ export async function resolveConsoleContext(options: ConsoleOptions = {}) {
  */
 export function makeGetContract(ctx: { provider: any; signer?: any }) {
   const { ethers } = require("ethers");
-  const path = require("path");
 
   return function getContract(name: string, address: string) {
     if (!address) {
@@ -143,15 +140,13 @@ export function makeGetContract(ctx: { provider: any; signer?: any }) {
 /**
  * Opens the interactive console.
  *
- * Returns the exit code rather than calling process.exit() itself, following
- * runDeploy(); the single exit lives in the command handler below.
+ * Never calls process.exit() itself, following runDeploy(); the single exit
+ * lives in the command handler below.
  *
  * @param {ConsoleOptions} options - CLI options.
- * @returns {Promise<number>} The process exit code, once the REPL is closed.
+ * @returns {Promise<void>} Resolves once the REPL is closed.
  */
-export async function runConsole(
-  options: ConsoleOptions = {},
-): Promise<number> {
+export async function runConsole(options: ConsoleOptions = {}): Promise<void> {
   const { network, provider, signer } = await resolveConsoleContext(options);
 
   // Fail here, with the endpoint named, rather than opening a REPL in which
@@ -194,7 +189,6 @@ export async function runConsole(
   // would kill the process on the first Ctrl+C instead.
   await new Promise<void>((resolve) => server.on("exit", () => resolve()));
   provider.destroy();
-  return 0;
 }
 
 export const consoleCommand = new Command("console")
@@ -220,5 +214,5 @@ export const consoleCommand = new Command("console")
     // the endpoint or the wallet session, and each of those errors already
     // carries the hint that fits it.
     const opts = command.optsWithGlobals() as ConsoleOptions;
-    return runConsole(opts).then(process.exit, fail("console", opts));
+    return runConsole(opts).then(() => process.exit(0), fail("console", opts));
   });

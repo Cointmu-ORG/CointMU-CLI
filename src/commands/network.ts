@@ -1,6 +1,10 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
-import { getSessionFilePath, readSession } from "../utils/session";
+import {
+  getSessionFilePath,
+  readSession,
+  requireSession,
+} from "../utils/session";
 
 /**
  * Validates that a value is a well-formed RPC endpoint.
@@ -38,30 +42,12 @@ async function runNetworkInfo(): Promise<void> {
  * @returns {Promise<void>} Resolves when the ping is completed.
  */
 async function runNetworkPing(name?: string): Promise<void> {
-  const { loadNetworks } = await import("../utils/networkStorage");
-
-  let rpcUrl = "";
-  let networkName = "";
-
-  if (name) {
-    const networks = await loadNetworks();
-    const network = networks.find((n: any) => n.name === name);
-    if (!network) {
-      throw new Error(
-        `network '${name}' is not saved.\n` +
-          "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`.",
+  const { activeNetwork, getDynamicNetwork } = await import("../utils/network");
+  const { name: networkName, rpcUrl } = name
+    ? await getDynamicNetwork(name)
+    : await activeNetwork(
+        "pass a network name, or run `cmu wallet login` first.",
       );
-    }
-    rpcUrl = network.rpcUrl;
-    networkName = network.name;
-  } else {
-    const { activeNetwork } = await import("../utils/network");
-    const network = await activeNetwork(
-      "pass a network name, or run `cmu wallet login` first.",
-    );
-    rpcUrl = network.rpcUrl;
-    networkName = network.name;
-  }
 
   console.log(`Pinging ${networkName} (${rpcUrl})...`);
   const { ethers } = await import("ethers");
@@ -112,16 +98,7 @@ async function runNetworkSave(
  * @returns {Promise<void>} Resolves when the network is deleted.
  */
 async function runNetworkDelete(name: string): Promise<void> {
-  const { loadNetworks, deleteNetwork } =
-    await import("../utils/networkStorage");
-
-  const networks = await loadNetworks();
-  if (!networks.some((n: any) => n.name === name)) {
-    throw new Error(
-      `network '${name}' is not saved.\n` +
-        "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`.",
-    );
-  }
+  const { deleteNetwork } = await import("../utils/networkStorage");
 
   if ((await readSession())?.activeNetwork === name) {
     throw new Error(
@@ -130,8 +107,13 @@ async function runNetworkDelete(name: string): Promise<void> {
     );
   }
 
+  // false is deleteNetwork()'s "no such network": one lookup, not a check
+  // beforehand that the delete then repeats.
   if (!(await deleteNetwork(name))) {
-    throw new Error(`could not delete network '${name}'.`);
+    throw new Error(
+      `network '${name}' is not saved.\n` +
+        "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`.",
+    );
   }
   console.log(`Deleted network '${name}'`);
 }
@@ -142,27 +124,14 @@ async function runNetworkDelete(name: string): Promise<void> {
  * @returns {Promise<void>} Resolves when the active network is switched.
  */
 async function runNetworkUse(name: string): Promise<void> {
-  const { loadNetworks } = await import("../utils/networkStorage");
+  const { getDynamicNetwork } = await import("../utils/network");
   const { writeSessionFile } = await import("../utils/session");
 
-  const networks = await loadNetworks();
-  const network = networks.find((n: any) => n.name === name);
-  if (!network) {
-    throw new Error(
-      `network '${name}' is not saved.\n` +
-        "\x1b[2mhint:\x1b[0m list saved networks with `cmu network list`.",
-    );
-  }
+  const network = await getDynamicNetwork(name);
 
-  const session = await readSession();
-  if (!session) {
-    throw new Error(
-      "no active session.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
-    );
-  }
+  const session = await requireSession();
 
-  session.activeNetwork = name;
+  session.activeNetwork = network.name;
   await writeSessionFile(getSessionFilePath(), session);
   console.log(`Active network is now ${network.name}`);
 }

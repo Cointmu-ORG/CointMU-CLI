@@ -1,5 +1,6 @@
 import { existsSync } from "fs";
 import { readdir } from "fs/promises";
+import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { run } from "../utils/exec";
@@ -30,7 +31,6 @@ async function runDeployScript(
   scriptPath: string,
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
-  const path = require("path");
   const isTypeScript = path.extname(scriptPath) === ".ts";
 
   console.log(`\n========================================`);
@@ -107,23 +107,15 @@ export async function pingNetwork(
 /**
  * Executes the deployment process.
  *
- * Returns the exit code rather than calling process.exit() itself, so the
- * --config and --ping paths can be exercised without stubbing process.exit.
- * The single exit lives in the command handler below.
+ * Never calls process.exit() itself, so the --config and --ping paths can be
+ * exercised without stubbing it. The single exit lives in the command handler
+ * below.
  *
  * @param {DeployOptions} options - CLI deployment options.
- * @returns {Promise<number>} The process exit code.
+ * @returns {Promise<void>} Resolves when the run is finished.
  * @throws {Error} When the deployment cannot proceed.
  */
-export async function runDeploy(options: DeployOptions): Promise<number> {
-  const path = await import("path");
-  // See src/index.ts: a missing .env is not an error.
-  try {
-    process.loadEnvFile(path.resolve(process.cwd(), ".env"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-
+export async function runDeploy(options: DeployOptions): Promise<void> {
   const deployDir = path.resolve(process.cwd(), "deploy");
 
   if (!existsSync(deployDir)) {
@@ -141,10 +133,9 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   // --config / --ping exit before any deploy script runs; only the project
   // config is loaded on those paths.
   const dryRun = Boolean(options.config || options.ping);
-  const configPath = findProjectConfig();
   await confirmProjectTrust(
     [
-      ...(configPath ? [configPath] : []),
+      findProjectConfig(),
       ...(dryRun ? [] : scripts.map((s) => path.join(deployDir, s))),
     ],
     { yes: options.yes },
@@ -163,14 +154,12 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
 
   if (options.ping) {
     await pingNetwork(network.url, network.name);
-    return 0;
+    return;
   }
 
   const privateKey = network.privateKey;
 
-  if (process.env.PRIVATE_KEY) {
-    delete process.env.PRIVATE_KEY;
-  }
+  delete process.env.PRIVATE_KEY;
 
   // --config prints what was resolved and stops; it never signs, so a project
   // whose only key sits in a locked .cmu-session still has a configuration
@@ -210,12 +199,12 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   console.log(`----------------------------\n`);
 
   if (options.config) {
-    return 0;
+    return;
   }
 
   if (scripts.length === 0) {
     console.log("No deploy scripts found in deploy/.");
-    return 0;
+    return;
   }
 
   console.log(
@@ -235,7 +224,6 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   }
 
   console.log("\nAll deploy scripts completed.");
-  return 0;
 }
 
 export const deployCommand = new Command("deploy")
@@ -257,5 +245,5 @@ export const deployCommand = new Command("deploy")
     // runDeploy reports its own compile step, so it needs the inherited
     // --verbose too, not just the options declared on `deploy` itself.
     const opts = command.optsWithGlobals() as DeployOptions;
-    return runDeploy(opts).then(process.exit, fail("deploy", opts));
+    return runDeploy(opts).then(() => process.exit(0), fail("deploy", opts));
   });

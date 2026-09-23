@@ -1,11 +1,8 @@
-import { existsSync } from "fs";
 import { loadNetworks, type NetworkEntry } from "./networkStorage";
 import { registerTsNode } from "./tsNode";
 import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
-import { readSession, resolvePrivateKey } from "./session";
-
-const TS_CONFIG_FILE = "cmu.config.ts";
-const JS_CONFIG_FILE = "cmu.config.js";
+import { readSession, requireSession, resolvePrivateKey } from "./session";
+import { findProjectConfig, TS_CONFIG_FILE } from "./trust";
 
 export interface NetworkConfig {
   name: string;
@@ -42,12 +39,7 @@ export async function activeNetworkName(): Promise<string> {
 export async function activeNetwork(
   noSessionHint = "run `cmu wallet login`, then `cmu network use <name>`.",
 ): Promise<NetworkEntry> {
-  const session = await readSession();
-  if (!session) {
-    throw new Error(
-      "no active session.\n" + `\x1b[2mhint:\x1b[0m ${noSessionHint}`,
-    );
-  }
+  const session = await requireSession(noSessionHint);
 
   if (!session.activeNetwork) {
     throw new Error(
@@ -114,18 +106,13 @@ export async function getDeployNetwork(
   targetNetwork?: string,
   options: { noPrompt?: boolean } = {},
 ): Promise<NetworkConfig> {
-  const path = await import("path");
-
   let config: any = null;
-  const tsConfigPath = path.resolve(process.cwd(), TS_CONFIG_FILE);
-  const jsConfigPath = path.resolve(process.cwd(), JS_CONFIG_FILE);
+  const configPath = findProjectConfig();
 
-  if (existsSync(tsConfigPath)) {
-    await registerTsNode();
-    const mod = require(tsConfigPath);
-    config = mod.default || mod;
-  } else if (existsSync(jsConfigPath)) {
-    config = require(jsConfigPath);
+  if (configPath) {
+    if (configPath.endsWith(".ts")) await registerTsNode();
+    const mod = require(configPath);
+    config = mod?.default || mod;
   }
 
   if (!config) {

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { realpathSync } from "fs";
+import { tmpdir } from "os";
 import { run } from "../../src/utils/exec";
 
 // The fixtures are the Node already running this suite, so there is nothing to
@@ -35,6 +37,20 @@ describe("run", () => {
         process.execPath,
         ["-e", "process.exit(process.env.CMU_TEST_FLAG === 'on' ? 0 : 9)"],
         { env: { ...process.env, CMU_TEST_FLAG: "on" } },
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("runs the child in the directory it was given", async () => {
+    const dir = realpathSync(tmpdir());
+    await expect(
+      run(
+        process.execPath,
+        [
+          "-e",
+          `process.exit(process.cwd() === ${JSON.stringify(dir)} ? 0 : 9)`,
+        ],
+        { cwd: dir },
       ),
     ).resolves.toBeUndefined();
   });

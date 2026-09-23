@@ -1,11 +1,9 @@
 import { writeFile } from "fs/promises";
+import * as path from "path";
 import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
+import { JS_CONFIG_FILE, TS_CONFIG_FILE } from "./trust";
 
 const TYPESCRIPT_LANG = "typescript";
-const TS_CONFIG_FILE = "cmu.config.ts";
-const JS_CONFIG_FILE = "cmu.config.js";
-const ENV_EXAMPLE_FILE = ".env.example";
-const GITIGNORE_FILE = ".gitignore";
 
 /**
  * The scaffolded cmu.config, which differs between the two languages only in
@@ -84,29 +82,16 @@ export async function generateConfigFiles(
   language: string,
 ): Promise<void> {
   try {
-    const path = await import("path");
-
     const isTypeScript = language === TYPESCRIPT_LANG;
-    const configFileName = isTypeScript ? TS_CONFIG_FILE : JS_CONFIG_FILE;
-    const configContent = cmuConfig(isTypeScript);
+    const files = [
+      [isTypeScript ? TS_CONFIG_FILE : JS_CONFIG_FILE, cmuConfig(isTypeScript)],
+      [".env.example", envExampleTemplate],
+      [".gitignore", gitignoreTemplate],
+    ];
 
-    await writeFile(
-      path.join(projectPath, configFileName),
-      configContent,
-      "utf8",
-    );
-
-    await writeFile(
-      path.join(projectPath, ENV_EXAMPLE_FILE),
-      envExampleTemplate,
-      "utf8",
-    );
-
-    await writeFile(
-      path.join(projectPath, GITIGNORE_FILE),
-      gitignoreTemplate,
-      "utf8",
-    );
+    for (const [name, content] of files) {
+      await writeFile(path.join(projectPath, name), content, "utf8");
+    }
   } catch (error) {
     throw new Error(
       `could not write the project config files: ${error instanceof Error ? error.message : String(error)}`,

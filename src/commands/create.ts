@@ -1,4 +1,5 @@
 import { existsSync } from "fs";
+import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 
@@ -53,7 +54,6 @@ export async function runCreate(
   project: string | undefined,
   options: CreateOptions,
 ): Promise<void> {
-  const path = await import("path");
   const { default: inquirer } = await import("inquirer");
   const { templateChoices, validTemplates, generateProject } =
     await import("../utils/template");

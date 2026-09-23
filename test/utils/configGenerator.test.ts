@@ -33,5 +33,16 @@ describe("generateConfigFiles", () => {
       expect(config).toContain('url: "http://127.0.0.1:8585"');
       expect(config).toContain("https://");
     });
+
+    it(`writes ${file}, .env.example and .gitignore for ${language}`, async () => {
+      await generateConfigFiles(tmpDir, language);
+
+      expect(fs.readdirSync(tmpDir).sort()).toEqual(
+        [".env.example", ".gitignore", file].sort(),
+      );
+      expect(
+        fs.readFileSync(path.join(tmpDir, ".gitignore"), "utf8"),
+      ).toContain(".cmu-session");
+    });
   }
 });
