@@ -1,3 +1,4 @@
+import { execFileSync, spawnSync } from "child_process";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { readPkg } from "../utils/pkg";
@@ -32,7 +33,6 @@ export async function resolveTargetVersion(
     );
   }
 
-  const { execFileSync } = await import("child_process");
   const spec = requested ? `${PACKAGE_NAME}@${requested}` : PACKAGE_NAME;
 
   try {
@@ -110,8 +110,6 @@ export function explainInstallFailure(stderr: string): string {
  * @returns {Promise<void>} Resolves when the update is complete.
  */
 async function runUpdate(options: UpdateOptions = {}): Promise<void> {
-  const { spawnSync } = await import("child_process");
-
   const current = readPkg().version;
   console.log("Checking the npm registry...");
   const target = await resolveTargetVersion(options.to);

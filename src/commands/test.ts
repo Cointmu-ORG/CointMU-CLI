@@ -1,4 +1,5 @@
 import { existsSync, readdirSync } from "fs";
+import * as path from "path";
 import { Command } from "commander";
 import { fail, printCliError } from "../utils/errors";
 import { run } from "../utils/exec";
@@ -126,7 +127,6 @@ async function runTest(
         `${TEST_PORT} accepts requests from any browser origin`,
     );
   }
-  const path = await import("path");
 
   console.log("Compiling contracts...");
   // Compile failures keep reporting themselves as "compile failed" rather than

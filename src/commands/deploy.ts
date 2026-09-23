@@ -1,5 +1,6 @@
 import { existsSync } from "fs";
 import { readdir } from "fs/promises";
+import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { run } from "../utils/exec";
@@ -30,7 +31,6 @@ async function runDeployScript(
   scriptPath: string,
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
-  const path = require("path");
   const isTypeScript = path.extname(scriptPath) === ".ts";
 
   console.log(`\n========================================`);
@@ -116,7 +116,6 @@ export async function pingNetwork(
  * @throws {Error} When the deployment cannot proceed.
  */
 export async function runDeploy(options: DeployOptions): Promise<number> {
-  const path = await import("path");
   // See src/index.ts: a missing .env is not an error.
   try {
     process.loadEnvFile(path.resolve(process.cwd(), ".env"));

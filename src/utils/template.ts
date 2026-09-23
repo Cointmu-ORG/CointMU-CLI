@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from "fs/promises";
+import * as path from "path";
 import { generateConfigFiles } from "./configGenerator";
 import { run } from "./exec";
 import { templates } from "../templates";
@@ -112,8 +113,6 @@ export async function generateProject(
   template: string,
   language: string,
 ): Promise<void> {
-  const path = await import("path");
-
   const dirs = [
     "contracts",
     "scripts",

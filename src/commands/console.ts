@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "fs";
+import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
@@ -91,7 +92,6 @@ export async function resolveConsoleContext(options: ConsoleOptions = {}) {
  */
 export function makeGetContract(ctx: { provider: any; signer?: any }) {
   const { ethers } = require("ethers");
-  const path = require("path");
 
   return function getContract(name: string, address: string) {
     if (!address) {

@@ -1,4 +1,5 @@
 import { writeFile } from "fs/promises";
+import * as path from "path";
 import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
 import { JS_CONFIG_FILE, TS_CONFIG_FILE } from "./trust";
 
@@ -81,8 +82,6 @@ export async function generateConfigFiles(
   language: string,
 ): Promise<void> {
   try {
-    const path = await import("path");
-
     const isTypeScript = language === TYPESCRIPT_LANG;
     const files = [
       [isTypeScript ? TS_CONFIG_FILE : JS_CONFIG_FILE, cmuConfig(isTypeScript)],
