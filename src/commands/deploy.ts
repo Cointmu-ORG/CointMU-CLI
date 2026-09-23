@@ -159,9 +159,7 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
 
   const privateKey = network.privateKey;
 
-  if (process.env.PRIVATE_KEY) {
-    delete process.env.PRIVATE_KEY;
-  }
+  delete process.env.PRIVATE_KEY;
 
   // --config prints what was resolved and stops; it never signs, so a project
   // whose only key sits in a locked .cmu-session still has a configuration

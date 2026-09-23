@@ -134,18 +134,17 @@ export async function runCompile(
     solc.compile(JSON.stringify(input), { import: findImports }),
   );
 
-  if (output.errors) {
-    let hasError = false;
-    for (const err of output.errors) {
-      console.error(err.formattedMessage);
-      if (err.severity === "error") hasError = true;
-    }
-    if (hasError) {
-      throw new Error(
-        "compilation aborted on Solidity errors.\n" +
-          "\x1b[2mhint:\x1b[0m fix the errors reported above, then run `cmu compile` again.",
-      );
-    }
+  // Warnings arrive in the same list as errors; only an error stops the build.
+  const errors: { severity: string; formattedMessage: string }[] =
+    output.errors ?? [];
+  for (const err of errors) {
+    console.error(err.formattedMessage);
+  }
+  if (errors.some((err) => err.severity === "error")) {
+    throw new Error(
+      "compilation aborted on Solidity errors.\n" +
+        "\x1b[2mhint:\x1b[0m fix the errors reported above, then run `cmu compile` again.",
+    );
   }
 
   await mkdir(artifactsDir, { recursive: true });

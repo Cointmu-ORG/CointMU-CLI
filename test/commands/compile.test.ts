@@ -162,3 +162,51 @@ describe("runCompile config loading", () => {
     );
   });
 });
+
+// solc reports warnings and errors in one list. Every entry is printed, but
+// only an entry of severity "error" may stop the build.
+describe("runCompile diagnostics", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-compile-diag-"));
+    fs.mkdirSync(path.join(tmpDir, "contracts"));
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeContract(source: string): void {
+    fs.writeFileSync(path.join(tmpDir, "contracts", "C.sol"), source);
+  }
+
+  it("prints a warning and still writes the artifact", async () => {
+    // No SPDX line: a warning, not an error.
+    writeContract("pragma solidity ^0.8.20;\ncontract C {}\n");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { runCompile } = await import("../../src/commands/compile");
+    await runCompile();
+
+    expect(error.mock.calls.flat().join("\n")).toMatch(/SPDX/);
+    expect(fs.existsSync(path.join(tmpDir, "artifacts", "C.json"))).toBe(true);
+  });
+
+  it("prints an error and aborts before writing anything", async () => {
+    writeContract(
+      "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n" +
+        "contract C { function f() public { undeclared = 1; } }\n",
+    );
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { runCompile } = await import("../../src/commands/compile");
+    await expect(runCompile()).rejects.toThrow(/compilation aborted/);
+
+    expect(error.mock.calls.flat().join("\n")).toMatch(/Undeclared identifier/);
+    expect(fs.existsSync(path.join(tmpDir, "artifacts"))).toBe(false);
+  });
+});
