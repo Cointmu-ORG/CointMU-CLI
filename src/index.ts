@@ -19,7 +19,7 @@ import { networkCommand } from "./commands/network";
 import { nodeCommand } from "./commands/node";
 import { testCommand } from "./commands/test";
 import { updateCommand } from "./commands/update";
-import { versionCommand } from "./commands/version";
+import { runVersion, versionCommand } from "./commands/version";
 import { walletCommand } from "./commands/wallet";
 
 // A missing .env is normal - dotenv was silent about it too, and most
@@ -75,7 +75,6 @@ async function main(): Promise<void> {
   const cmdStr = args[0];
 
   if (args.length === 1 && (cmdStr === "-V" || cmdStr === "--version")) {
-    const { runVersion } = await import("./commands/version");
     await runVersion();
     return;
   }

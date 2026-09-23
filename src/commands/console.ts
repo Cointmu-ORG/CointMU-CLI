@@ -2,7 +2,9 @@ import { existsSync, readFileSync } from "fs";
 import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { getDeployNetwork } from "../utils/network";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
+import { pingNetwork } from "./deploy";
 
 /** Shown in place of an address when the console starts without a signer. */
 const NO_SIGNER_LABEL = "none (read-only) - run `cmu wallet login`";
@@ -39,7 +41,6 @@ export async function resolveConsoleContext(options: ConsoleOptions = {}) {
   // listed: unlike deploy, the console never executes deploy/.
   await confirmProjectTrust([findProjectConfig()], { yes: options.yes });
 
-  const { getDeployNetwork } = await import("../utils/network");
   // --no-signer skips the session password prompt entirely, so a read-only
   // console can open in a project whose .cmu-session is locked.
   const network = await getDeployNetwork(options.network, {
@@ -151,7 +152,6 @@ export async function runConsole(options: ConsoleOptions = {}): Promise<void> {
 
   // Fail here, with the endpoint named, rather than opening a REPL in which
   // every call the user types errors out.
-  const { pingNetwork } = await import("./deploy");
   await pingNetwork(network.url, network.name);
 
   console.log(`\n--- Console configuration ---`);

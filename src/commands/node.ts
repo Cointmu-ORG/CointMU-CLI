@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { getDynamicNetwork } from "../utils/network";
 import {
   ACCOUNT_COUNT,
   bootHardhat,
@@ -74,7 +75,6 @@ async function runNodeConnect(options: {
   network?: string;
   verbose?: boolean;
 }): Promise<void> {
-  const { getDynamicNetwork } = await import("../utils/network");
   const { ethers } = await import("ethers");
 
   const networkConfig = await getDynamicNetwork(options.network);

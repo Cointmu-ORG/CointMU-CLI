@@ -10,6 +10,7 @@ import {
 } from "../utils/hardhat";
 import { startRpcProxy } from "../utils/rpcProxy";
 import { LOCAL_CHAIN_ID } from "../utils/defaults";
+import { runCompile } from "./compile";
 
 const TEST_PORT = 8555;
 const TEST_HOST = "127.0.0.1";
@@ -131,7 +132,6 @@ async function runTest(
   console.log("Compiling contracts...");
   // Compile failures keep reporting themselves as "compile failed" rather than
   // being relabelled by the command that triggered the compile.
-  const { runCompile } = await import("./compile");
   await runCompile({ yes: options.yes }).catch(fail("compile", options));
 
   const testDir = path.resolve(process.cwd(), TEST_DIR_NAME);

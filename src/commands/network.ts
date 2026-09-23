@@ -1,9 +1,20 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 import {
+  activeNetwork,
+  activeNetworkName,
+  getDynamicNetwork,
+} from "../utils/network";
+import {
+  deleteNetwork,
+  loadNetworks,
+  saveNetwork,
+} from "../utils/networkStorage";
+import {
   getSessionFilePath,
   readSession,
   requireSession,
+  writeSessionFile,
 } from "../utils/session";
 
 /**
@@ -27,7 +38,6 @@ export function isValidRpcUrl(value: string): boolean {
  * @returns {Promise<void>} Resolves when the info is displayed.
  */
 async function runNetworkInfo(): Promise<void> {
-  const { activeNetwork } = await import("../utils/network");
   const network = await activeNetwork();
 
   console.log("--- Active network ---");
@@ -42,7 +52,6 @@ async function runNetworkInfo(): Promise<void> {
  * @returns {Promise<void>} Resolves when the ping is completed.
  */
 async function runNetworkPing(name?: string): Promise<void> {
-  const { activeNetwork, getDynamicNetwork } = await import("../utils/network");
   const { name: networkName, rpcUrl } = name
     ? await getDynamicNetwork(name)
     : await activeNetwork(
@@ -87,7 +96,6 @@ async function runNetworkSave(
     );
   }
 
-  const { saveNetwork } = await import("../utils/networkStorage");
   await saveNetwork(options.name, url);
   console.log(`Saved network '${options.name}' (${url})`);
 }
@@ -98,8 +106,6 @@ async function runNetworkSave(
  * @returns {Promise<void>} Resolves when the network is deleted.
  */
 async function runNetworkDelete(name: string): Promise<void> {
-  const { deleteNetwork } = await import("../utils/networkStorage");
-
   if ((await readSession())?.activeNetwork === name) {
     throw new Error(
       `network '${name}' is currently active and cannot be deleted.\n` +
@@ -124,9 +130,6 @@ async function runNetworkDelete(name: string): Promise<void> {
  * @returns {Promise<void>} Resolves when the active network is switched.
  */
 async function runNetworkUse(name: string): Promise<void> {
-  const { getDynamicNetwork } = await import("../utils/network");
-  const { writeSessionFile } = await import("../utils/session");
-
   const network = await getDynamicNetwork(name);
 
   const session = await requireSession();
@@ -141,10 +144,7 @@ async function runNetworkUse(name: string): Promise<void> {
  * @returns {Promise<void>} Resolves when the table is printed.
  */
 async function runNetworkList(): Promise<void> {
-  const { loadNetworks } = await import("../utils/networkStorage");
-
   const networks = await loadNetworks();
-  const { activeNetworkName } = await import("../utils/network");
   const activeName = await activeNetworkName();
 
   console.log("\nSaved networks");

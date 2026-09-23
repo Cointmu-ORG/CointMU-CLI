@@ -4,7 +4,9 @@ import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { run } from "../utils/exec";
+import { getDeployNetwork } from "../utils/network";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
+import { runCompile } from "./compile";
 
 const NETWORK_TIMEOUT_MS = 3000;
 
@@ -144,10 +146,8 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
   console.log("Compiling contracts...");
   // Compile failures keep reporting themselves as "compile failed" rather than
   // being relabelled by the command that triggered the compile.
-  const { runCompile } = await import("./compile");
   await runCompile({ yes: options.yes }).catch(fail("compile", options));
 
-  const { getDeployNetwork } = await import("../utils/network");
   const network = await getDeployNetwork(options.network, {
     noPrompt: options.config || options.ping,
   });

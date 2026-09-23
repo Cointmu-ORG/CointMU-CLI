@@ -60,6 +60,10 @@ describe("runCreate prompts", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
 
     asked = [];
+    // The import at the top of this file already loaded create.ts with the
+    // real template module bound to it; drop it so runCreate() below is loaded
+    // against the mock instead of scaffolding for real.
+    vi.resetModules();
     vi.doMock("../../src/utils/template", async (importOriginal) => ({
       ...(await importOriginal<typeof import("../../src/utils/template")>()),
       generateProject: async () => {},

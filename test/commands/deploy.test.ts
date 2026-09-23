@@ -103,6 +103,10 @@ describe("runDeploy exits", () => {
     // The pingNetwork suite above registers an ethers mock with no Wallet, and
     // vi.resetModules() clears the module cache but not the mock registry.
     vi.doUnmock("ethers");
+    // The import at the top of this file already loaded deploy.ts with the
+    // real compile module bound to it. Without this, mockCompile() only works
+    // when a suite above happened to reset modules first.
+    vi.resetModules();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-deploy-"));
     fs.mkdirSync(path.join(tmpDir, "deploy"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);

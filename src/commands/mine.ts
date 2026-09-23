@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { getDynamicNetwork } from "../utils/network";
 import { requireSession } from "../utils/session";
 
 const MINER_THREAD_COUNT = 1;
@@ -11,7 +12,6 @@ const MINER_THREAD_COUNT = 1;
 async function runMineStart(): Promise<void> {
   const session = await requireSession();
 
-  const { getDynamicNetwork } = await import("../utils/network");
   const { ethers } = await import("ethers");
 
   const network = await getDynamicNetwork(session.activeNetwork);
@@ -34,7 +34,6 @@ async function runMineStart(): Promise<void> {
 async function runMineStop(): Promise<void> {
   const session = await requireSession();
 
-  const { getDynamicNetwork } = await import("../utils/network");
   const { ethers } = await import("ethers");
 
   const network = await getDynamicNetwork(session.activeNetwork);

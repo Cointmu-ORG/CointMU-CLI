@@ -2,6 +2,12 @@ import { existsSync } from "fs";
 import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { pick, QUOTES } from "../utils/quotes";
+import {
+  generateProject,
+  templateChoices,
+  validTemplates,
+} from "../utils/template";
 
 interface CreateOptions {
   template?: string;
@@ -55,9 +61,6 @@ export async function runCreate(
   options: CreateOptions,
 ): Promise<void> {
   const { default: inquirer } = await import("inquirer");
-  const { templateChoices, validTemplates, generateProject } =
-    await import("../utils/template");
-  const { pick, QUOTES } = await import("../utils/quotes");
 
   let projectName = project?.trim() ?? "";
 
