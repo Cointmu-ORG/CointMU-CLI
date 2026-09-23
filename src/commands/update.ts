@@ -107,6 +107,15 @@ export function explainInstallFailure(stderr: string): string {
       `  npm install -g ${PACKAGE_NAME}@latest`,
     ].join("\n");
   }
+  // A 404 on our own tarball URL means `npm view` already resolved the version
+  // but the .tgz has not reached the CDN yet. Any other E404 stays generic.
+  const tarball = stderr.match(/\/-\/cointmu-cli-([^/\s]+)\.tgz/);
+  if (stderr.includes("E404") && tarball) {
+    return [
+      `version ${tarball[1]} resolves on the registry but its tarball has not finished propagating yet.`,
+      `\x1b[2mhint:\x1b[0m wait a minute or two, then run \`cmu update\` again.`,
+    ].join("\n");
+  }
   return "npm install failed; see the npm output above.";
 }
 

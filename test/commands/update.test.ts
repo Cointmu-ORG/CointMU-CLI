@@ -91,6 +91,32 @@ describe("explainInstallFailure", () => {
     expect(message).not.toContain("npm config set");
   });
 
+  it("explains an E404 on the tarball as a propagation delay worth retrying", () => {
+    const stderr = [
+      "npm error code E404",
+      "npm error 404 Not Found - GET https://registry.npmjs.org/cointmu-cli/-/cointmu-cli-1.3.7.tgz - Not found",
+      "npm error 404",
+      "npm error 404  The requested resource 'cointmu-cli@https://registry.npmjs.org/cointmu-cli/-/cointmu-cli-1.3.7.tgz' could not be found or you do not have permission to access it.",
+    ].join("\n");
+
+    const message = explainInstallFailure(stderr);
+    expect(message).toContain("version 1.3.7");
+    expect(message).toContain("propagating");
+    expect(message).toContain("run `cmu update` again");
+  });
+
+  it("keeps an E404 without a tarball URL on the generic message", () => {
+    const stderr = [
+      "npm error code E404",
+      "npm error 404 Not Found - GET https://registry.npmjs.org/cointmu-clii - Not found",
+      "npm error 404  'cointmu-clii@1.3.7' is not in this registry.",
+    ].join("\n");
+
+    expect(explainInstallFailure(stderr)).toBe(
+      "npm install failed; see the npm output above.",
+    );
+  });
+
   it("falls back to a generic message for unrelated npm failures", () => {
     const message = explainInstallFailure("npm error code EACCES");
     expect(message).toBe("npm install failed; see the npm output above.");
