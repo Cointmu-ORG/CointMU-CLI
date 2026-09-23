@@ -15,20 +15,12 @@ import { LOCAL_CHAIN_ID } from "../../src/utils/defaults";
 // to carry their own copy of this filter. These cover the shared one.
 
 describe("silenceHardhatNoise", () => {
-  const handles: { restore(): void }[] = [];
-
-  function silence(...args: Parameters<typeof silenceHardhatNoise>) {
-    const handle = silenceHardhatNoise(...args);
-    handles.push(handle);
-    return handle;
-  }
+  // silenceHardhatNoise() patches console for the rest of the process and has
+  // no undo, so each case puts the real functions back itself.
+  const { log, warn, error } = console;
 
   afterEach(() => {
-    // Restore in reverse order, innermost patch first.
-    handles
-      .splice(0)
-      .reverse()
-      .forEach((handle) => handle.restore());
+    Object.assign(console, { log, warn, error });
     vi.restoreAllMocks();
   });
 
@@ -38,7 +30,7 @@ describe("silenceHardhatNoise", () => {
       warn: vi.spyOn(console, "warn").mockImplementation(() => {}),
       log: vi.spyOn(console, "log").mockImplementation(() => {}),
     };
-    silence();
+    silenceHardhatNoise();
 
     console.error("Cannot find module 'uws_win32'");
     console.warn("Falling back to a NodeJS implementation");
@@ -53,7 +45,7 @@ describe("silenceHardhatNoise", () => {
     // The filter used to match a bare "Cannot find module" / "Require stack:",
     // so a project missing a real dependency reported nothing at all.
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    silence();
+    silenceHardhatNoise();
 
     console.error("Error: Cannot find module 'ethers'");
     console.error("Require stack:\n- /app/deploy/01_token.js");
@@ -63,7 +55,7 @@ describe("silenceHardhatNoise", () => {
 
   it("lets anything that is not noise through untouched", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    silence();
+    silenceHardhatNoise();
 
     console.log("Compiling contracts...", 42);
 
@@ -72,16 +64,16 @@ describe("silenceHardhatNoise", () => {
 
   it("prints everything when verbose is set", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    silence({ verbose: true });
+    silenceHardhatNoise({ verbose: true });
 
     console.error("Cannot find module 'uws_win32'");
 
     expect(error).toHaveBeenCalledOnce();
   });
 
-  it("swallows caller-supplied patterns too", () => {
+  it("swallows Hardhat's complaint about running outside a Hardhat project", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    silence({ extraPatterns: ["You are not inside a Hardhat project"] });
+    silenceHardhatNoise();
 
     console.log("Warning: You are not inside a Hardhat project");
     console.log("kept");
@@ -93,8 +85,8 @@ describe("silenceHardhatNoise", () => {
   it("lets onLog take over a line so it is not printed twice", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const seen: string[] = [];
-    silence({
-      onLog: (msg, _args, originalLog) => {
+    silenceHardhatNoise({
+      onLog: (msg, originalLog) => {
         if (!msg.startsWith("eth_")) return false;
         seen.push(msg);
         originalLog(`rpc: ${msg}`);
@@ -114,22 +106,19 @@ describe("silenceHardhatNoise", () => {
   it("never consults onLog for a line the noise filter already dropped", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const onLog = vi.fn(() => false);
-    silence({ onLog });
+    silenceHardhatNoise({ onLog });
 
     console.log("Cannot find module 'uws_win32'");
 
     expect(onLog).not.toHaveBeenCalled();
   });
 
-  it("hands back the unpatched functions, and restore() puts them back", () => {
+  it("hands back the unpatched console.log", () => {
     const before = console.log;
-    const handle = silenceHardhatNoise();
+    const originalLog = silenceHardhatNoise();
 
-    expect(handle.log).toBe(before);
+    expect(originalLog).toBe(before);
     expect(console.log).not.toBe(before);
-
-    handle.restore();
-    expect(console.log).toBe(before);
   });
 });
 

@@ -124,12 +124,9 @@ async function runNodeStart(options: {
     console.warn("    node and spend the accounts printed below.\n");
   }
 
-  const console_ = silenceHardhatNoise({
+  const originalConsoleLog = silenceHardhatNoise({
     verbose: isVerbose,
-    // Hardhat only complains about this when driven from outside a project,
-    // which is exactly how `cmu node start` drives it.
-    extraPatterns: ["You are not inside a Hardhat project"],
-    onLog: (msg, _args, originalLog) => {
+    onLog: (msg, originalLog) => {
       // Reformat the provider's RPC chatter, or drop it when --log is off.
       if (
         msg.includes("eth_") ||
@@ -146,7 +143,6 @@ async function runNodeStart(options: {
       return false;
     },
   });
-  const originalConsoleLog = console_.log;
 
   const {
     hre,
