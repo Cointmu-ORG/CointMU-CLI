@@ -1,8 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
-const TS_CONFIG_FILE = "cmu.config.ts";
-const JS_CONFIG_FILE = "cmu.config.js";
+export const TS_CONFIG_FILE = "cmu.config.ts";
+export const JS_CONFIG_FILE = "cmu.config.js";
 
 /**
  * Locates the project's cmu.config file, preferring the TypeScript variant.

@@ -1,9 +1,8 @@
 import { writeFile } from "fs/promises";
 import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
+import { JS_CONFIG_FILE, TS_CONFIG_FILE } from "./trust";
 
 const TYPESCRIPT_LANG = "typescript";
-const TS_CONFIG_FILE = "cmu.config.ts";
-const JS_CONFIG_FILE = "cmu.config.js";
 
 /**
  * The scaffolded cmu.config, which differs between the two languages only in
