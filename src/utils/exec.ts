@@ -20,6 +20,7 @@ import { once } from "node:events";
  * @param {string[]} args - The arguments to pass it.
  * @param {object} [options]
  * @param {NodeJS.ProcessEnv} [options.env] - Child environment; inherited when absent.
+ * @param {string} [options.cwd] - Child working directory; inherited when absent.
  * @param {string} [options.label] - What to call the command in the failure
  *   message. Defaults to the command itself.
  * @returns {Promise<void>} Resolves when the child exits 0.
@@ -28,7 +29,7 @@ import { once } from "node:events";
 export async function run(
   command: string,
   args: string[],
-  options: { env?: NodeJS.ProcessEnv; label?: string } = {},
+  options: { env?: NodeJS.ProcessEnv; cwd?: string; label?: string } = {},
 ): Promise<void> {
   const executable =
     process.platform === "win32" && !isAbsolute(command)
@@ -38,6 +39,7 @@ export async function run(
   const child = spawn(executable, args, {
     stdio: "inherit",
     env: options.env,
+    cwd: options.cwd,
     shell: false,
   });
 
