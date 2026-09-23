@@ -169,12 +169,8 @@ async function runTest(
 
   try {
     const { ethers } = await import("ethers");
-    const mnemonicObj = ethers.Mnemonic.fromPhrase(resolvedMnemonic);
-    const wallet = ethers.HDNodeWallet.fromMnemonic(
-      mnemonicObj,
-      "m/44'/60'/0'/0/0",
-    );
-    const privateKey = wallet.privateKey;
+    // No path: ethers' default, m/44'/60'/0'/0/0, is devnet account #0.
+    const { privateKey } = ethers.HDNodeWallet.fromPhrase(resolvedMnemonic);
 
     const injectedEnv = {
       ...process.env,
