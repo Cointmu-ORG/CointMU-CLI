@@ -10,14 +10,13 @@ export const MIN_NODE_MINOR = 12;
 export function checkNodeVersion(version: string): string | null {
   const [major, minor] = version.replace(/^v/, "").split(".").map(Number);
 
-  // Unparseable version: assume it is fine rather than block a working runtime.
-  // The same applies to a bare major ("v20"), where there is no minor to judge.
-  if (Number.isNaN(major)) return null;
-  if (major !== MIN_NODE_MAJOR) {
-    if (major > MIN_NODE_MAJOR) return null;
-  } else if (!Number.isFinite(minor) || minor >= MIN_NODE_MINOR) {
-    return null;
-  }
+  // Every comparison with NaN or a missing minor is false, so an unparseable
+  // version, or a bare major ("v20") with no minor to judge, passes rather than
+  // blocking a working runtime.
+  const tooOld =
+    major < MIN_NODE_MAJOR ||
+    (major === MIN_NODE_MAJOR && minor < MIN_NODE_MINOR);
+  if (!tooOld) return null;
 
   return (
     `\x1b[31merror:\x1b[0m cmu requires Node.js ${MIN_NODE_MAJOR}.${MIN_NODE_MINOR} or newer, but this is Node ${version}.\n` +
