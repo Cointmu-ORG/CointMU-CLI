@@ -3,8 +3,11 @@ import { mkdir, readdir, readFile, writeFile } from "fs/promises";
 import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
-import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
-import { registerTsNode } from "../utils/tsNode";
+import {
+  confirmProjectTrust,
+  findProjectConfig,
+  loadProjectConfig,
+} from "../utils/trust";
 
 const JSON_SPACES = 2;
 const DEFAULT_EVM_VERSION = "paris";
@@ -78,11 +81,7 @@ export async function runCompile(
       readOnly: true,
     });
     try {
-      if (configPath.endsWith(".ts")) {
-        await registerTsNode();
-      }
-      const loadedConfig = require(configPath);
-      const cmuConfig = loadedConfig?.default ?? loadedConfig;
+      const cmuConfig = await loadProjectConfig(configPath);
       compilerSettings = cmuConfig?.compiler?.settings ?? {};
     } catch {
       console.warn(

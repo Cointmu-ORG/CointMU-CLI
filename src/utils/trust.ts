@@ -20,6 +20,38 @@ export function findProjectConfig(cwd: string = process.cwd()): string | null {
 }
 
 /**
+ * require()s a config found by findProjectConfig(), registering ts-node first
+ * when it is TypeScript. This runs project code: confirmProjectTrust() must
+ * have been passed the same path before this is called.
+ *
+ * `compiler` is the bare package name "typescript" on purpose. ts-node
+ * resolves that with its own project-local resolver, relative to the project
+ * being loaded, which is where TypeScript actually lives - this CLI does not
+ * depend on typescript at runtime, so resolving it relative to the CLI's own
+ * install would find nothing in a global install.
+ *
+ * An earlier version passed "typescript@5", which is an npm install spec that
+ * require() cannot resolve, and every TypeScript project failed to load
+ * (64b2875). Keep this in one place so that fix cannot drift back out of one
+ * of the call sites.
+ *
+ * @param {string} configPath - Absolute path to cmu.config.ts or cmu.config.js.
+ * @returns {Promise<any>} The config's default export, or the module itself.
+ */
+export async function loadProjectConfig(configPath: string): Promise<any> {
+  if (configPath.endsWith(".ts")) {
+    const tsNode = await import("ts-node");
+    tsNode.register({
+      transpileOnly: true,
+      compiler: "typescript",
+      compilerOptions: { module: "CommonJS" },
+    });
+  }
+  const mod = require(configPath);
+  return mod?.default ?? mod;
+}
+
+/**
  * One confirmation per CLI process. `cmu deploy` gates up front and then calls
  * runCompile(), which gates again; without this the user would be asked twice
  * about the same project.

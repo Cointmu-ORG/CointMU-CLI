@@ -115,7 +115,7 @@ describe("runCompile trust gate", () => {
 // cmu.config.ts. They used to do it two different ways, and compile's swallowed
 // the failure behind a warning, so a broken registration silently downgraded to
 // default compiler settings instead of reporting anything. Both go through
-// registerTsNode() now; this pins compile's half.
+// loadProjectConfig() now; this pins compile's half.
 
 describe("runCompile config loading", () => {
   let tmpDir: string;

@@ -1,8 +1,7 @@
 import { loadNetworks, type NetworkEntry } from "./networkStorage";
-import { registerTsNode } from "./tsNode";
 import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
 import { readSession, requireSession, resolvePrivateKey } from "./session";
-import { findProjectConfig, TS_CONFIG_FILE } from "./trust";
+import { findProjectConfig, loadProjectConfig, TS_CONFIG_FILE } from "./trust";
 
 export interface NetworkConfig {
   name: string;
@@ -106,14 +105,8 @@ export async function getDeployNetwork(
   targetNetwork?: string,
   options: { noPrompt?: boolean } = {},
 ): Promise<NetworkConfig> {
-  let config: any = null;
   const configPath = findProjectConfig();
-
-  if (configPath) {
-    if (configPath.endsWith(".ts")) await registerTsNode();
-    const mod = require(configPath);
-    config = mod?.default || mod;
-  }
+  const config = configPath ? await loadProjectConfig(configPath) : null;
 
   if (!config) {
     if (targetNetwork && targetNetwork !== LOCAL_NETWORK_NAME) {
