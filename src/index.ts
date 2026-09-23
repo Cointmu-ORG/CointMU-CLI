@@ -4,9 +4,9 @@
 // (commander included) loads before a version check placed further down runs.
 import "./preflight";
 
-import * as fs from "fs";
 import * as path from "path";
 import { Command } from "commander";
+import { readPkg } from "./utils/pkg";
 
 // A missing .env is normal - dotenv was silent about it too, and most
 // invocations are outside a project. Anything else (unreadable file, bad
@@ -18,8 +18,7 @@ try {
 }
 process.env.HARDHAT_CONFIG = path.resolve(__dirname, "../hardhat.config.js");
 
-const pkgPath = path.resolve(__dirname, "..", "package.json");
-const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+const pkg = readPkg();
 
 const program = new Command();
 

@@ -1,7 +1,6 @@
-import { existsSync } from "fs";
-import { readFile } from "fs/promises";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { readPkg } from "../utils/pkg";
 
 // Inlined at bundle time by tsup (see tsup.config.ts `define`); undefined
 // when running unbundled (e.g. ts-node in dev).
@@ -12,15 +11,7 @@ declare const __CMU_BUILD_ID__: string | undefined;
  * @returns {Promise<void>} Resolves when the version info is printed.
  */
 export async function runVersion(): Promise<void> {
-  const path = await import("path");
-
-  const pkgPath = path.resolve(__dirname, "..", "package.json");
-
-  let pkg = { version: "unknown", codename: "unknown" };
-
-  if (existsSync(pkgPath)) {
-    pkg = JSON.parse(await readFile(pkgPath, "utf8"));
-  }
+  const pkg = readPkg();
 
   // Inlined by tsup at build time; undefined when running unbundled.
   const build =

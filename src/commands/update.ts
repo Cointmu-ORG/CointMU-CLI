@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { readPkg } from "../utils/pkg";
 
 const PACKAGE_NAME = "cointmu-cli";
 
@@ -12,22 +13,6 @@ const VALID_TO = /^[0-9A-Za-z*~^><=][0-9A-Za-z .+~^><=*-]{0,99}$/;
 interface UpdateOptions {
   to?: string;
   verbose?: boolean;
-}
-
-/**
- * Reads the version of the currently installed CLI from its package.json.
- * @returns {Promise<string>} The installed version, or "unknown".
- */
-async function resolveCurrentVersion(): Promise<string> {
-  try {
-    const fs = await import("fs");
-    const path = await import("path");
-    const pkgPath = path.resolve(__dirname, "..", "package.json");
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-    return pkg.version ?? "unknown";
-  } catch {
-    return "unknown";
-  }
 }
 
 /**
@@ -127,7 +112,7 @@ export function explainInstallFailure(stderr: string): string {
 async function runUpdate(options: UpdateOptions = {}): Promise<void> {
   const { spawnSync } = await import("child_process");
 
-  const current = await resolveCurrentVersion();
+  const current = readPkg().version;
   console.log("Checking the npm registry...");
   const target = await resolveTargetVersion(options.to);
 
