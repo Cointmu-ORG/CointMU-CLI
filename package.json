@@ -11,13 +11,13 @@
     "hardhat",
     "web3"
   ],
-  "homepage": "https://github.com/kakonoomoidee/CointMU-CLI#readme",
+  "homepage": "https://github.com/Cointmu-ORG/CointMU-CLI#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kakonoomoidee/CointMU-CLI.git"
+    "url": "git+https://github.com/Cointmu-ORG/CointMU-CLI.git"
   },
   "bugs": {
-    "url": "https://github.com/kakonoomoidee/CointMU-CLI/issues"
+    "url": "https://github.com/Cointmu-ORG/CointMU-CLI/issues"
   },
   "author": "tvrststtp",
   "license": "MIT",

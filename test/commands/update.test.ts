@@ -82,7 +82,7 @@ describe("explainInstallFailure", () => {
     const stderr = [
       "npm error code EALLOWGIT",
       'npm error Fetching packages of type "git" have been disabled',
-      'npm error Refusing to fetch "git+https://github.com/kakonoomoidee/CointMU-CLI.git"',
+      'npm error Refusing to fetch "git+https://github.com/Cointmu-ORG/CointMU-CLI.git"',
     ].join("\n");
 
     const message = explainInstallFailure(stderr);
