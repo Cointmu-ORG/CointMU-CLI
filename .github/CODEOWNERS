@@ -1,10 +1,10 @@
 # Global default owner
-* @kakonoomoidee
+* @Cointmu-ORG/admin-dev
 
 # Core contracts and security critical paths
-/contracts/ @kakonoomoidee
-/src/templates/ @kakonoomoidee
+/contracts/ @Cointmu-ORG/admin-dev
+/src/templates/ @Cointmu-ORG/admin-dev
 
 # Configuration and workflows
-/.github/ @kakonoomoidee
-/package.json @kakonoomoidee
+/.github/ @Cointmu-ORG/admin-dev
+/package.json @Cointmu-ORG/admin-dev
