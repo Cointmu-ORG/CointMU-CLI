@@ -78,32 +78,6 @@ export async function printGasReport(
 }
 
 /**
- * Runs the project's mocha suite against the test RPC proxy.
- *
- * The runner is picked from what is in test/: a TypeScript suite needs
- * ts-node/register, a JavaScript one must not have it.
- *
- * @param {string} testDir - Absolute path to the project's test directory.
- * @param {Record<string, string | undefined>} env - Environment for the child.
- * @returns {Promise<void>} Resolves when mocha exits 0, rejects otherwise.
- */
-async function runMochaSuite(
-  testDir: string,
-  env: Record<string, string | undefined>,
-): Promise<void> {
-  const hasTsFiles = readdirSync(testDir).some((f) => f.endsWith(".ts"));
-  const runnerArgs = hasTsFiles
-    ? ["mocha", "-r", "ts-node/register", "test/**/*.ts"]
-    : ["mocha", "test/**/*.js"];
-
-  console.log(`\n========================================`);
-  console.log(`Running tests with Mocha`);
-  console.log(`========================================\n`);
-
-  await run("npx", runnerArgs, { env, label: "test run" });
-}
-
-/**
  * Executes the automated smart contract test suite.
  * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when tests complete.
@@ -179,7 +153,18 @@ async function runTest(
       PRIVATE_KEY: privateKey,
     };
 
-    await runMochaSuite(testDir, injectedEnv);
+    // The runner is picked from what is in test/: a TypeScript suite needs
+    // ts-node/register, a JavaScript one must not have it.
+    const hasTsFiles = readdirSync(testDir).some((f) => f.endsWith(".ts"));
+    const runnerArgs = hasTsFiles
+      ? ["mocha", "-r", "ts-node/register", "test/**/*.ts"]
+      : ["mocha", "test/**/*.js"];
+
+    console.log(`\n========================================`);
+    console.log(`Running tests with Mocha`);
+    console.log(`========================================\n`);
+
+    await run("npx", runnerArgs, { env: injectedEnv, label: "test run" });
 
     console.log("\nAll tests passed.");
   } finally {
