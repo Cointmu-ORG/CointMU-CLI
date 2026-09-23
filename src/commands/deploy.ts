@@ -133,10 +133,9 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
   // --config / --ping exit before any deploy script runs; only the project
   // config is loaded on those paths.
   const dryRun = Boolean(options.config || options.ping);
-  const configPath = findProjectConfig();
   await confirmProjectTrust(
     [
-      ...(configPath ? [configPath] : []),
+      findProjectConfig(),
       ...(dryRun ? [] : scripts.map((s) => path.join(deployDir, s))),
     ],
     { yes: options.yes },

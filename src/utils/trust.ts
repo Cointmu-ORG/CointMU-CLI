@@ -47,7 +47,9 @@ let confirmed = false;
  * environments (CI, scripts) where a hostile project is least likely to be
  * noticed.
  *
- * @param {string[]} targets - Absolute paths of the files that will execute.
+ * @param {(string | null)[]} targets - Absolute paths of the files that will
+ *   execute. A null - findProjectConfig() finding no config - is skipped, so
+ *   callers can pass its result straight in.
  * @param {object} [options]
  * @param {boolean} [options.yes] - Skip the prompt (`--yes`).
  * @param {boolean} [options.readOnly] - Print the wording for a command that
@@ -55,15 +57,16 @@ let confirmed = false;
  * @returns {Promise<void>} Resolves when execution is authorised.
  */
 export async function confirmProjectTrust(
-  targets: string[],
+  targets: (string | null)[],
   options: { yes?: boolean; readOnly?: boolean } = {},
 ): Promise<void> {
-  if (confirmed || targets.length === 0) return;
+  const files = targets.filter((target) => target !== null);
+  if (confirmed || files.length === 0) return;
 
   console.log(
     "\n\x1b[33mwarning:\x1b[0m the following project files will be executed as code:",
   );
-  for (const target of targets) {
+  for (const target of files) {
     console.log(`      ${path.basename(target)}  ->  ${target}`);
   }
   console.log(

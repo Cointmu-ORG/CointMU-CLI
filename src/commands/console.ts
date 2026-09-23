@@ -37,10 +37,7 @@ export async function resolveConsoleContext(options: ConsoleOptions = {}) {
   // getDeployNetwork() require()s cmu.config.ts, which is arbitrary project
   // code, so gate it the same way `cmu compile` does. Only the config file is
   // listed: unlike deploy, the console never executes deploy/.
-  const configPath = findProjectConfig();
-  await confirmProjectTrust(configPath ? [configPath] : [], {
-    yes: options.yes,
-  });
+  await confirmProjectTrust([findProjectConfig()], { yes: options.yes });
 
   const { getDeployNetwork } = await import("../utils/network");
   // --no-signer skips the session password prompt entirely, so a read-only

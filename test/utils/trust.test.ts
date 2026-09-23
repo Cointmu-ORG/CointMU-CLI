@@ -139,6 +139,22 @@ describe("confirmProjectTrust", () => {
     await confirmProjectTrust([]);
     expect(prompt).not.toHaveBeenCalled();
   });
+
+  // console, explorer and deploy pass findProjectConfig() straight in.
+  it("skips a null target, the result of finding no config", async () => {
+    process.stdin.isTTY = true;
+    prompt.mockResolvedValue({ proceed: true });
+    const { confirmProjectTrust } = await loadTrust();
+
+    await confirmProjectTrust([null]);
+    expect(prompt).not.toHaveBeenCalled();
+
+    await confirmProjectTrust([null, SCRIPT]);
+    const output = (console.log as any).mock.calls.flat().join("\n");
+    expect(output).toContain(SCRIPT);
+    expect(output).not.toContain("null");
+    expect(prompt).toHaveBeenCalledOnce();
+  });
 });
 
 describe("findProjectConfig", () => {
