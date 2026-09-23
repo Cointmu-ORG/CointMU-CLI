@@ -91,6 +91,26 @@ export async function readSession(): Promise<SessionData | null> {
 }
 
 /**
+ * readSession() for the commands that cannot run without one: "no session"
+ * becomes an error saying how to get one, instead of a null every caller
+ * checked for itself.
+ *
+ * @param {string} [hint] - What to do about a missing session, for callers
+ *   where logging in is not the whole answer.
+ * @returns {Promise<SessionData>} The parsed session.
+ * @throws {Error} When the project has no session.
+ */
+export async function requireSession(
+  hint = "run `cmu wallet login` first.",
+): Promise<SessionData> {
+  const session = await readSession();
+  if (!session) {
+    throw new Error(`no active session.\n\x1b[2mhint:\x1b[0m ${hint}`);
+  }
+  return session;
+}
+
+/**
  * Proportional strength check for a local CLI session password. Not a
  * passphrase-manager replacement: it only rejects the obviously weak
  * choices (too short, single character class, known common passwords).

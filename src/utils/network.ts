@@ -2,7 +2,7 @@ import { existsSync } from "fs";
 import { loadNetworks, type NetworkEntry } from "./networkStorage";
 import { registerTsNode } from "./tsNode";
 import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
-import { readSession, resolvePrivateKey } from "./session";
+import { readSession, requireSession, resolvePrivateKey } from "./session";
 
 const TS_CONFIG_FILE = "cmu.config.ts";
 const JS_CONFIG_FILE = "cmu.config.js";
@@ -42,12 +42,7 @@ export async function activeNetworkName(): Promise<string> {
 export async function activeNetwork(
   noSessionHint = "run `cmu wallet login`, then `cmu network use <name>`.",
 ): Promise<NetworkEntry> {
-  const session = await readSession();
-  if (!session) {
-    throw new Error(
-      "no active session.\n" + `\x1b[2mhint:\x1b[0m ${noSessionHint}`,
-    );
-  }
+  const session = await requireSession(noSessionHint);
 
   if (!session.activeNetwork) {
     throw new Error(

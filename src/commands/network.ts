@@ -1,6 +1,10 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
-import { getSessionFilePath, readSession } from "../utils/session";
+import {
+  getSessionFilePath,
+  readSession,
+  requireSession,
+} from "../utils/session";
 
 /**
  * Validates that a value is a well-formed RPC endpoint.
@@ -125,13 +129,7 @@ async function runNetworkUse(name: string): Promise<void> {
 
   const network = await getDynamicNetwork(name);
 
-  const session = await readSession();
-  if (!session) {
-    throw new Error(
-      "no active session.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` first.",
-    );
-  }
+  const session = await requireSession();
 
   session.activeNetwork = network.name;
   await writeSessionFile(getSessionFilePath(), session);
