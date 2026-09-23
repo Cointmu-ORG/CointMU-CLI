@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  buildInstallCommand,
-  explainInstallFailure,
-} from "../../src/commands/update";
+import { explainInstallFailure } from "../../src/commands/update";
 
 /**
  * Loads a fresh copy of update.ts over a mocked child_process. The module
@@ -13,14 +10,6 @@ async function loadWithNpm(execFileSync: () => Buffer) {
   vi.doMock("child_process", () => ({ execFileSync, spawnSync: vi.fn() }));
   return (await import("../../src/commands/update")).resolveTargetVersion;
 }
-
-describe("buildInstallCommand", () => {
-  it("targets the pinned version on the npm registry, not git", () => {
-    expect(buildInstallCommand("1.3.1")).toBe(
-      "npm install -g cointmu-cli@1.3.1",
-    );
-  });
-});
 
 describe("resolveTargetVersion", () => {
   afterEach(() => {

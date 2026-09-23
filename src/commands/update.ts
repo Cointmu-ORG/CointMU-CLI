@@ -69,15 +69,6 @@ export async function resolveTargetVersion(
 }
 
 /**
- * Builds the human-readable global install command for a specific published version.
- * @param {string} version - The exact version to install.
- * @returns {string} The npm command string (for display only; execution is shell-free).
- */
-export function buildInstallCommand(version: string): string {
-  return `npm install -g ${PACKAGE_NAME}@${version}`;
-}
-
-/**
  * Turns a failed `npm install` stderr dump into an actionable message.
  * @param {string} stderr - Raw stderr captured from the npm child process.
  * @returns {string} A message explaining the failure and, where known, the fix.
@@ -122,14 +113,15 @@ async function runUpdate(options: UpdateOptions = {}): Promise<void> {
     return;
   }
 
-  console.log(`\nRunning: ${buildInstallCommand(target)}`);
+  const installArgs = ["install", "-g", `${PACKAGE_NAME}@${target}`];
+  console.log(`\nRunning: npm ${installArgs.join(" ")}`);
   // ponytail: spawnSync (no shell) blocks command injection; win32 needs
   // "npm.cmd". If Node ever refuses .cmd via spawn, switch to a resolved
   // npm-cli.js path invoked through process.execPath.
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   const install = spawnSync(
     npm,
-    ["install", "-g", `${PACKAGE_NAME}@${target}`],
+    installArgs,
     // stderr is piped (not inherited) so EALLOWGIT can be recognised; it is
     // written straight back out below so npm's own output is never swallowed.
     { stdio: ["inherit", "inherit", "pipe"] },
