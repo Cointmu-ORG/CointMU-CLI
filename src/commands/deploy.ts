@@ -116,13 +116,6 @@ export async function pingNetwork(
  * @throws {Error} When the deployment cannot proceed.
  */
 export async function runDeploy(options: DeployOptions): Promise<void> {
-  // See src/index.ts: a missing .env is not an error.
-  try {
-    process.loadEnvFile(path.resolve(process.cwd(), ".env"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-
   const deployDir = path.resolve(process.cwd(), "deploy");
 
   if (!existsSync(deployDir)) {
