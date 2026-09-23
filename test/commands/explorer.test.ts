@@ -227,7 +227,7 @@ describe("runExplorer", () => {
       }),
     });
 
-    expect(await run({ block: "1", yes: true })).toBe(0);
+    await expect(run({ block: "1", yes: true })).resolves.toBeUndefined();
     expect(vi.mocked(console.log).mock.calls.join("\n")).toContain(
       "Block 1 on 'local'",
     );
@@ -240,7 +240,9 @@ describe("runExplorer", () => {
       getBalance: async () => 0n,
     });
 
-    expect(await run({ contract: ADDRESS, yes: true })).toBe(0);
+    await expect(
+      run({ contract: ADDRESS, yes: true }),
+    ).resolves.toBeUndefined();
     expect(vi.mocked(console.log).mock.calls.join("\n")).toMatch(
       /not a contract/,
     );
@@ -270,7 +272,9 @@ describe("runExplorer", () => {
     }));
 
     // Resolving (instead of throwing from the mocked prompt) proves no prompt.
-    expect(await run({ contract: ADDRESS, yes: true })).toBe(0);
+    await expect(
+      run({ contract: ADDRESS, yes: true }),
+    ).resolves.toBeUndefined();
   });
 });
 

@@ -107,15 +107,15 @@ export async function pingNetwork(
 /**
  * Executes the deployment process.
  *
- * Returns the exit code rather than calling process.exit() itself, so the
- * --config and --ping paths can be exercised without stubbing process.exit.
- * The single exit lives in the command handler below.
+ * Never calls process.exit() itself, so the --config and --ping paths can be
+ * exercised without stubbing it. The single exit lives in the command handler
+ * below.
  *
  * @param {DeployOptions} options - CLI deployment options.
- * @returns {Promise<number>} The process exit code.
+ * @returns {Promise<void>} Resolves when the run is finished.
  * @throws {Error} When the deployment cannot proceed.
  */
-export async function runDeploy(options: DeployOptions): Promise<number> {
+export async function runDeploy(options: DeployOptions): Promise<void> {
   // See src/index.ts: a missing .env is not an error.
   try {
     process.loadEnvFile(path.resolve(process.cwd(), ".env"));
@@ -162,7 +162,7 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
 
   if (options.ping) {
     await pingNetwork(network.url, network.name);
-    return 0;
+    return;
   }
 
   const privateKey = network.privateKey;
@@ -209,12 +209,12 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   console.log(`----------------------------\n`);
 
   if (options.config) {
-    return 0;
+    return;
   }
 
   if (scripts.length === 0) {
     console.log("No deploy scripts found in deploy/.");
-    return 0;
+    return;
   }
 
   console.log(
@@ -234,7 +234,6 @@ export async function runDeploy(options: DeployOptions): Promise<number> {
   }
 
   console.log("\nAll deploy scripts completed.");
-  return 0;
 }
 
 export const deployCommand = new Command("deploy")
@@ -256,5 +255,5 @@ export const deployCommand = new Command("deploy")
     // runDeploy reports its own compile step, so it needs the inherited
     // --verbose too, not just the options declared on `deploy` itself.
     const opts = command.optsWithGlobals() as DeployOptions;
-    return runDeploy(opts).then(process.exit, fail("deploy", opts));
+    return runDeploy(opts).then(() => process.exit(0), fail("deploy", opts));
   });

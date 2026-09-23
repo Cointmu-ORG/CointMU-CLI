@@ -102,17 +102,17 @@ export function formatContract(
 /**
  * Runs one explorer query.
  *
- * Returns the exit code rather than calling process.exit() itself, following
- * runConsole(); the single exit lives in the command handler below.
+ * Never calls process.exit() itself, following runConsole(); the single exit
+ * lives in the command handler below.
  *
  * @param {ExplorerOptions} options - CLI options.
- * @returns {Promise<number>} The process exit code.
+ * @returns {Promise<void>} Resolves once the result is printed.
  * @throws {Error} When the flags are wrong, the project is not trusted, the
  *   network cannot be resolved or reached, or the block does not exist.
  */
 export async function runExplorer(
   options: ExplorerOptions = {},
-): Promise<number> {
+): Promise<void> {
   const { block, contract } = options;
   // Both or neither. Two unrelated lookups in one invocation would print two
   // stapled reports, and silently doing nothing when neither flag is given is
@@ -190,8 +190,6 @@ export async function runExplorer(
   } finally {
     provider.destroy();
   }
-
-  return 0;
 }
 
 export const explorerCommand = new Command("explorer")
@@ -214,5 +212,8 @@ export const explorerCommand = new Command("explorer")
     // No blanket hint: the explorer can fail on the flags, the config, the
     // endpoint or the query, and each of those errors carries its own.
     const opts = command.optsWithGlobals() as ExplorerOptions;
-    return runExplorer(opts).then(process.exit, fail("explorer", opts));
+    return runExplorer(opts).then(
+      () => process.exit(0),
+      fail("explorer", opts),
+    );
   });
