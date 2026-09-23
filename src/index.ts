@@ -7,6 +7,20 @@ import "./preflight";
 import * as path from "path";
 import { Command } from "commander";
 import { readPkg } from "./utils/pkg";
+import { ariesCommand } from "./commands/aries";
+import { auditCommand } from "./commands/audit";
+import { compileCommand } from "./commands/compile";
+import { consoleCommand } from "./commands/console";
+import { createCommand } from "./commands/create";
+import { deployCommand } from "./commands/deploy";
+import { explorerCommand } from "./commands/explorer";
+import { mineCommand } from "./commands/mine";
+import { networkCommand } from "./commands/network";
+import { nodeCommand } from "./commands/node";
+import { testCommand } from "./commands/test";
+import { updateCommand } from "./commands/update";
+import { runVersion, versionCommand } from "./commands/version";
+import { walletCommand } from "./commands/wallet";
 
 // A missing .env is normal - dotenv was silent about it too, and most
 // invocations are outside a project. Anything else (unreadable file, bad
@@ -29,71 +43,41 @@ program
     `${pkg.description}\nTip: Run cmu <command> -h to see detailed options for a specific command.`,
   );
 
-/**
- * Every command the CLI can register, keyed by the name typed on the command
- * line. The import specifiers stay literal: tsup bundles from a single entry
- * with code splitting off, and esbuild cannot follow a computed path.
- */
-const commandMap: Record<string, () => Promise<Record<string, any>>> = {
-  compile: () => import("./commands/compile"),
-  deploy: () => import("./commands/deploy"),
-  console: () => import("./commands/console"),
-  explorer: () => import("./commands/explorer"),
-  wallet: () => import("./commands/wallet"),
-  create: () => import("./commands/create"),
-  node: () => import("./commands/node"),
-  audit: () => import("./commands/audit"),
-  aries: () => import("./commands/aries"),
-  version: () => import("./commands/version"),
-  test: () => import("./commands/test"),
-  mine: () => import("./commands/mine"),
-  network: () => import("./commands/network"),
-  update: () => import("./commands/update"),
-};
-
 /** Commands that work but are deliberately left out of the help output. */
 const HIDDEN_COMMANDS = new Set(["aries"]);
 
-/**
- * Loads the named command modules and registers each one on the program.
- * Every module exports its command as `<name>Command`.
- *
- * @param {string[]} names - Keys of commandMap to register.
- * @returns {Promise<void>} Resolves once all of them are registered.
- */
-async function registerCommands(names: string[]): Promise<void> {
-  await Promise.all(
-    names.map(async (name) => {
-      const module: Record<string, any> =
-        await commandMap[name as keyof typeof commandMap]();
-      program.addCommand(module[`${name}Command`], {
-        hidden: HIDDEN_COMMANDS.has(name),
-      });
-    }),
-  );
+// Registration order is help order.
+for (const cmd of [
+  compileCommand,
+  deployCommand,
+  consoleCommand,
+  explorerCommand,
+  walletCommand,
+  createCommand,
+  nodeCommand,
+  auditCommand,
+  ariesCommand,
+  versionCommand,
+  testCommand,
+  mineCommand,
+  networkCommand,
+  updateCommand,
+]) {
+  program.addCommand(cmd, { hidden: HIDDEN_COMMANDS.has(cmd.name()) });
 }
 
 /**
- * Loads the requested command module, or all modules if help is requested.
- * Registers them on the program, then parses process arguments asynchronously.
- * @returns {Promise<void>} Resolves when all required commands are registered and arguments are parsed.
+ * Parses process arguments and runs the matching command.
+ * @returns {Promise<void>} Resolves when the command has finished.
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const cmdStr = args[0];
 
   if (args.length === 1 && (cmdStr === "-V" || cmdStr === "--version")) {
-    const { runVersion } = await import("./commands/version");
     await runVersion();
     return;
   }
-
-  // A known command loads on its own. Anything else - no command, an unknown
-  // one, -h/--help, a bare flag - loads everything, so commander can render
-  // full help or report the command as unknown.
-  await registerCommands(
-    commandMap[cmdStr] ? [cmdStr] : Object.keys(commandMap),
-  );
 
   if (args.length === 0) {
     program.help();

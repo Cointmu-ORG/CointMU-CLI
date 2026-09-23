@@ -4,7 +4,9 @@ import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
 import { run } from "../utils/exec";
+import { getDeployNetwork } from "../utils/network";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
+import { runCompile } from "./compile";
 
 const NETWORK_TIMEOUT_MS = 3000;
 
@@ -14,34 +16,6 @@ interface DeployOptions {
   network?: string;
   verbose?: boolean;
   yes?: boolean;
-}
-
-/**
- * Runs one deploy script as its own process.
- *
- * A .js script runs on the same Node that runs the CLI (process.execPath), not
- * on whichever "node" is first on PATH; a .ts one goes through ts-node.
- *
- * @param {string} scriptPath - The absolute path to the script to execute.
- * @param {NodeJS.ProcessEnv} env - Environment variables to inject.
- * @returns {Promise<void>} Resolves when the script exits 0.
- * @throws {Error} When the script exits non-zero, so the run stops there.
- */
-async function runDeployScript(
-  scriptPath: string,
-  env: NodeJS.ProcessEnv,
-): Promise<void> {
-  const isTypeScript = path.extname(scriptPath) === ".ts";
-
-  console.log(`\n========================================`);
-  console.log(`Running ${path.basename(scriptPath)}`);
-  console.log(`========================================\n`);
-
-  await run(
-    isTypeScript ? "npx" : process.execPath,
-    isTypeScript ? ["ts-node", scriptPath] : [scriptPath],
-    { env, label: path.basename(scriptPath) },
-  );
 }
 
 /** Stands in for the deployer address when `--config` finds no key. */
@@ -144,10 +118,8 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
   console.log("Compiling contracts...");
   // Compile failures keep reporting themselves as "compile failed" rather than
   // being relabelled by the command that triggered the compile.
-  const { runCompile } = await import("./compile");
   await runCompile({ yes: options.yes }).catch(fail("compile", options));
 
-  const { getDeployNetwork } = await import("../utils/network");
   const network = await getDeployNetwork(options.network, {
     noPrompt: options.config || options.ping,
   });
@@ -220,7 +192,20 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
 
   for (const script of scripts) {
     const fullPath = path.join(deployDir, script);
-    await runDeployScript(fullPath, injectedEnv);
+    const isTypeScript = path.extname(script) === ".ts";
+
+    console.log(`\n========================================`);
+    console.log(`Running ${script}`);
+    console.log(`========================================\n`);
+
+    // A .js script runs on the same Node that runs the CLI (process.execPath),
+    // not on whichever "node" is first on PATH; a .ts one goes through
+    // ts-node. A non-zero exit throws, so the run stops at that script.
+    await run(
+      isTypeScript ? "npx" : process.execPath,
+      isTypeScript ? ["ts-node", fullPath] : [fullPath],
+      { env: injectedEnv, label: script },
+    );
   }
 
   console.log("\nAll deploy scripts completed.");

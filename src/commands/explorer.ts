@@ -1,7 +1,9 @@
 import type { Block } from "ethers";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { getDeployNetwork } from "../utils/network";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
+import { pingNetwork } from "./deploy";
 
 interface ExplorerOptions {
   network?: string;
@@ -149,13 +151,11 @@ export async function runExplorer(
     readOnly: true,
   });
 
-  const { getDeployNetwork } = await import("../utils/network");
   // Read-only by nature - there is no signer here - so the encrypted session
   // is never touched and the password prompt never fires.
   const network = await getDeployNetwork(options.network, { noPrompt: true });
 
   // Fail here, with the endpoint named, rather than on a raw RPC error.
-  const { pingNetwork } = await import("./deploy");
   await pingNetwork(network.url, network.name);
 
   const provider = new ethers.JsonRpcProvider(network.url, undefined, {

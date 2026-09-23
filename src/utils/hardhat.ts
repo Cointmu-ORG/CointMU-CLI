@@ -11,14 +11,17 @@ export const ACCOUNT_COUNT = 10;
 export const ACCOUNT_BALANCE = "100000000000000000000";
 
 /**
- * Warnings emitted by Hardhat's transitive dependencies that say nothing a user
- * of this CLI can act on. Matched as substrings against the joined arguments.
+ * Warnings emitted by Hardhat and its transitive dependencies that say nothing
+ * a user of this CLI can act on. Matched as substrings against the joined
+ * arguments.
  */
 const NOISE_PATTERNS = [
   "uws_win32",
   "Falling back to a NodeJS implementation",
   "This version of",
   "uws-js-unofficial",
+  // Both commands drive Hardhat from outside a Hardhat project on purpose.
+  "You are not inside a Hardhat project",
 ];
 
 /**
@@ -42,45 +45,29 @@ function mentionsUws(message: string): boolean {
   return lower.includes("uws") || lower.includes("µws");
 }
 
-/** The console functions as they were before silenceHardhatNoise() patched them. */
-export interface ConsoleHandle {
-  log: typeof console.log;
-  warn: typeof console.warn;
-  error: typeof console.error;
-  /** Puts the original console functions back. */
-  restore(): void;
-}
-
 /**
  * Filters dependency noise out of console.error/warn/log for the rest of the
- * process, and hands back the unpatched functions so a caller can still print
+ * process, and hands back the unpatched console.log so a caller can still print
  * its own output.
  *
  * @param {object} [options]
  * @param {boolean} [options.verbose] - Let everything through.
- * @param {string[]} [options.extraPatterns] - Additional substrings to swallow.
  * @param {Function} [options.onLog] - Inspects each console.log line before the
  *   noise filter forwards it. Return true when the line has been handled and
  *   should not be printed again.
- * @returns {ConsoleHandle} The original console functions, plus restore().
+ * @returns {typeof console.log} The original console.log.
  */
 export function silenceHardhatNoise(
   options: {
     verbose?: boolean;
-    extraPatterns?: string[];
-    onLog?: (
-      message: string,
-      args: any[],
-      originalLog: typeof console.log,
-    ) => boolean;
+    onLog?: (message: string, originalLog: typeof console.log) => boolean;
   } = {},
-): ConsoleHandle {
-  const patterns = [...NOISE_PATTERNS, ...(options.extraPatterns ?? [])];
-
+): typeof console.log {
   const isNoise = (args: any[]) => {
     if (options.verbose) return false;
     const message = args.join(" ");
-    if (patterns.some((pattern) => message.includes(pattern))) return true;
+    if (NOISE_PATTERNS.some((pattern) => message.includes(pattern)))
+      return true;
     return (
       mentionsUws(message) &&
       UWS_ONLY_PATTERNS.some((pattern) => message.includes(pattern))
@@ -105,18 +92,11 @@ export function silenceHardhatNoise(
 
   console.log = (...args: any[]) => {
     if (isNoise(args)) return;
-    if (options.onLog?.(args.join(" "), args, original.log)) return;
+    if (options.onLog?.(args.join(" "), original.log)) return;
     original.log(...args);
   };
 
-  return {
-    ...original,
-    restore() {
-      console.log = original.log;
-      console.warn = original.warn;
-      console.error = original.error;
-    },
-  };
+  return original.log;
 }
 
 /**

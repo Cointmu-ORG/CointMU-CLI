@@ -1,10 +1,15 @@
 import { Command } from "commander";
 import { LOCAL_NETWORK_NAME } from "../utils/defaults";
 import { fail } from "../utils/errors";
+import { getDynamicNetwork } from "../utils/network";
+import { loadNetworks } from "../utils/networkStorage";
 import {
+  encryptSessionKey,
   getSessionFilePath,
   readSession,
   requireSession,
+  validatePasswordStrength,
+  writeSessionFile,
 } from "../utils/session";
 
 /**
@@ -25,7 +30,6 @@ async function carriedOverNetwork(): Promise<string> {
   }
   if (!previous) return LOCAL_NETWORK_NAME;
 
-  const { loadNetworks } = await import("../utils/networkStorage");
   if ((await loadNetworks()).some((n) => n.name === previous)) return previous;
 
   console.log(
@@ -51,8 +55,6 @@ async function createEncryptedSession(
 ): Promise<{ address: string; activeNetwork: string }> {
   const inquirer = (await import("inquirer")).default;
   const { ethers } = await import("ethers");
-  const { encryptSessionKey, validatePasswordStrength, writeSessionFile } =
-    await import("../utils/session");
 
   const { password } = await inquirer.prompt([
     {
@@ -185,7 +187,6 @@ export async function runWalletLogin(): Promise<void> {
 async function runWalletBalance(): Promise<void> {
   const session = await requireSession();
 
-  const { getDynamicNetwork } = await import("../utils/network");
   const { ethers } = await import("ethers");
 
   const network = await getDynamicNetwork(session.activeNetwork);
@@ -207,7 +208,6 @@ async function runWalletBalance(): Promise<void> {
 async function runWalletInfo(): Promise<void> {
   const session = await requireSession();
 
-  const { getDynamicNetwork } = await import("../utils/network");
   const network = await getDynamicNetwork(session.activeNetwork);
 
   console.log("--- Active session ---");
