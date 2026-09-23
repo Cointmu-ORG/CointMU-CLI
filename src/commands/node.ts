@@ -40,6 +40,32 @@ export function warnOnNonLoopbackHost(host: string): void {
 }
 
 /**
+ * Turns the --port argument into a port number.
+ *
+ * parseInt() used to do this, and it guesses: "abc" became the default 8585
+ * and "80abc" became 80, so the node bound somewhere the user never asked for
+ * (issue #160). An absent flag never reaches here as undefined - Commander
+ * supplies the default string - so every value seen here was typed.
+ *
+ * @param {string} raw - The value passed to --port.
+ * @returns {number} The port.
+ * @throws {Error} When the value is not a whole number from 1 to 65535.
+ */
+export function parsePort(raw: string): number {
+  const text = String(raw).trim();
+  const port = Number(text);
+  // Digits only: rejects "", "-1", "1.5", "0x50", "1e3" and "80abc" before
+  // Number() can coerce them into something else.
+  if (!/^\d+$/.test(text) || port < 1 || port > MAX_PORT) {
+    throw new Error(
+      `'${raw}' is not a valid port number.\n` +
+        `\x1b[2mhint:\x1b[0m use a number between 1 and ${MAX_PORT}, e.g. \`cmu node start -p ${LOCAL_PORT}\`.`,
+    );
+  }
+  return port;
+}
+
+/**
  * Pings the configured RPC endpoint to test connectivity.
  * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when connection succeeds.
@@ -84,15 +110,7 @@ async function runNodeStart(options: {
 
   const isVerbose = options.verbose;
   const allowCors = Boolean(options.allowCors);
-  const parsedPort = parseInt(options.port, 10);
-  const port = !isNaN(parsedPort) ? parsedPort : LOCAL_PORT;
-
-  if (isNaN(port) || port <= 0 || port > MAX_PORT) {
-    throw new Error(
-      `invalid port '${options.port}'.\n` +
-        `\x1b[2mhint:\x1b[0m pass a port between 1 and ${MAX_PORT}, e.g. \`cmu node start -p ${LOCAL_PORT}\`.`,
-    );
-  }
+  const port = parsePort(options.port);
 
   warnOnNonLoopbackHost(options.host);
 
