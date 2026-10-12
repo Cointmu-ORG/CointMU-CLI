@@ -4,6 +4,7 @@ import { fail } from "../utils/errors";
 import { getDynamicNetwork } from "../utils/network";
 import { loadNetworks } from "../utils/networkStorage";
 import {
+  type EncryptedKey,
   encryptSessionKey,
   getSessionFilePath,
   readSession,
@@ -40,6 +41,100 @@ async function carriedOverNetwork(): Promise<string> {
 }
 
 /**
+ * Refuses to prompt when stdin is not a terminal. inquirer cannot read a
+ * masked answer from a pipe: a closed stdin fails with an unhelpful "force
+ * closed the prompt", and a pipe that stays open hangs forever.
+ *
+ * @param {string} what - What the prompt would have asked for.
+ * @throws {Error} When stdin is not a TTY.
+ */
+function requireInteractive(what: string): void {
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      `cannot prompt for ${what} in a non-interactive session.\n` +
+        "\x1b[2mhint:\x1b[0m run this in a terminal; in CI, set PRIVATE_KEY instead.",
+    );
+  }
+}
+
+/**
+ * Prompts for a private key, masked, and rejects anything that is not one.
+ * The validation message never echoes the input.
+ *
+ * @returns {Promise<string>} The entered private key.
+ */
+async function promptPrivateKey(): Promise<string> {
+  requireInteractive("a private key");
+  const inquirer = (await import("inquirer")).default;
+  const { ethers } = await import("ethers");
+
+  const { privateKey } = await inquirer.prompt([
+    {
+      type: "password",
+      name: "privateKey",
+      message: "Private key:",
+      mask: "*",
+      validate: (input: string) => {
+        try {
+          new ethers.Wallet(input);
+          return true;
+        } catch {
+          return "invalid private key - expected a 32-byte hex key (0x-prefixed).";
+        }
+      },
+    },
+  ]);
+  return privateKey;
+}
+
+/**
+ * Prompts for a new password that passes validatePasswordStrength().
+ *
+ * @param {string} [message] - The prompt text.
+ * @returns {Promise<string>} The entered password.
+ */
+async function promptNewPassword(
+  message = "New session password:",
+): Promise<string> {
+  requireInteractive("a password");
+  const inquirer = (await import("inquirer")).default;
+
+  const { password } = await inquirer.prompt([
+    {
+      type: "password",
+      name: "password",
+      message,
+      mask: "*",
+      validate: validatePasswordStrength,
+    },
+  ]);
+  return password;
+}
+
+/**
+ * Writes an encrypted key to .cmu-session, carrying the active network over.
+ *
+ * The one writer of a key into the session, so every way of getting there
+ * (`login`, `create --login`, `use`) keeps the network #126 was about.
+ *
+ * @param {string} address - The address the key belongs to.
+ * @param {EncryptedKey} encrypted - The encrypted key.
+ * @returns {Promise<string>} The network the session ended up pointing at.
+ */
+async function storeSession(
+  address: string,
+  encrypted: EncryptedKey,
+): Promise<string> {
+  const activeNetwork = await carriedOverNetwork();
+  await writeSessionFile(getSessionFilePath(), {
+    address,
+    activeNetwork,
+    ...encrypted,
+  });
+  return activeNetwork;
+}
+
+/**
  * Prompts for a session password, encrypts the given private key with it and
  * writes the result to .cmu-session.
  *
@@ -53,29 +148,15 @@ async function carriedOverNetwork(): Promise<string> {
 async function createEncryptedSession(
   privateKey: string,
 ): Promise<{ address: string; activeNetwork: string }> {
-  const inquirer = (await import("inquirer")).default;
+  const password = await promptNewPassword();
   const { ethers } = await import("ethers");
 
-  const { password } = await inquirer.prompt([
-    {
-      type: "password",
-      name: "password",
-      message: "New session password:",
-      mask: "*",
-      validate: validatePasswordStrength,
-    },
-  ]);
-
-  const wallet = new ethers.Wallet(privateKey);
-  const activeNetwork = await carriedOverNetwork();
-
-  await writeSessionFile(getSessionFilePath(), {
-    address: wallet.address,
-    activeNetwork,
-    ...encryptSessionKey(password, privateKey),
-  });
-
-  return { address: wallet.address, activeNetwork };
+  const { address } = new ethers.Wallet(privateKey);
+  const activeNetwork = await storeSession(
+    address,
+    encryptSessionKey(password, privateKey),
+  );
+  return { address, activeNetwork };
 }
 
 /**
@@ -151,26 +232,7 @@ export async function runWalletCreate(
  * @returns {Promise<void>}
  */
 export async function runWalletLogin(): Promise<void> {
-  const inquirer = (await import("inquirer")).default;
-  const { ethers } = await import("ethers");
-
-  const { privateKey } = await inquirer.prompt([
-    {
-      type: "password",
-      name: "privateKey",
-      message: "Private key:",
-      mask: "*",
-      validate: (input: string) => {
-        try {
-          new ethers.Wallet(input);
-          return true;
-        } catch {
-          return "invalid private key - expected a 32-byte hex key (0x-prefixed).";
-        }
-      },
-    },
-  ]);
-
+  const privateKey = await promptPrivateKey();
   const { address, activeNetwork } = await createEncryptedSession(privateKey);
   console.log("Session encrypted and saved.");
   console.log(`Logged in as ${address}`);

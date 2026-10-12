@@ -15,6 +15,7 @@ const KEY =
 
 let tmpDir: string;
 let logged: string[];
+const realIsTTY = process.stdin.isTTY;
 
 /** Everything the command wrote to stdout and stderr, as one string. */
 function output(): string {
@@ -22,6 +23,11 @@ function output(): string {
 }
 
 beforeEach(() => {
+  // The SUT is imported after mockPrompt(), so it must not come from a cache
+  // a previous test filled with the real inquirer.
+  vi.resetModules();
+  // Prompts refuse to run without a TTY, and vitest's stdin usually is not one.
+  process.stdin.isTTY = true;
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-wallet-"));
   vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
   logged = [];
@@ -37,6 +43,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  process.stdin.isTTY = realIsTTY;
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
   vi.resetModules();
@@ -237,5 +244,32 @@ describe("active network across a login", () => {
     expect(session.address).toBe("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
     expect(decryptSessionKey(PASSWORD, session)).toBe(KEY);
     expect(output()).toContain(`Logged in as ${session.address}`);
+  });
+});
+
+// inquirer cannot read a masked answer from a pipe: a closed stdin fails with
+// "force closed the prompt", and a pipe that stays open hangs forever.
+describe("without a terminal", () => {
+  it.each([
+    [
+      "wallet login",
+      async () => {
+        const { runWalletLogin } = await import("../../src/commands/wallet");
+        await runWalletLogin();
+      },
+    ],
+    [
+      "wallet create --login",
+      async () => {
+        const { runWalletCreate } = await import("../../src/commands/wallet");
+        await runWalletCreate({ login: true });
+      },
+    ],
+  ])("%s fails instead of prompting", async (_, run) => {
+    process.stdin.isTTY = false;
+    mockPrompt();
+
+    await expect(run()).rejects.toThrow("non-interactive session");
+    expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(false);
   });
 });
