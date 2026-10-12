@@ -345,9 +345,12 @@ function expectNoKeyLeak(): void {
     everything.join("\n"),
     ...files.map((file) => fs.readFileSync(file, "utf8")),
   ].map((text) => text.toLowerCase());
-  for (const key of [KEY, KEY_B]) {
+  // With and without 0x, lowercased like the haystacks; and the password.
+  const secrets = [KEY, KEY_B].flatMap((key) => [key, key.slice(2)]);
+  secrets.push(PASSWORD.toLowerCase());
+  for (const secret of secrets) {
     for (const text of haystacks) {
-      expect(text).not.toContain(key.slice(2));
+      expect(text).not.toContain(secret);
     }
   }
   expect(files.filter((file) => file.endsWith(".tmp"))).toEqual([]);
@@ -795,5 +798,581 @@ describe("transfer amount parsing", () => {
   ])("accepts %j as %s wei", async (amount, wei) => {
     const { parseTransferAmount } = await walletCommands();
     await expect(parseTransferAmount(amount)).resolves.toBe(wei);
+  });
+});
+
+describe("wallet transfer", () => {
+  const TO = ADDRESS_B;
+  const TX_HASH = `0x${"ab".repeat(32)}`;
+  const GWEI = 1_000_000_000n;
+  const ETH = 10n ** 18n;
+  const AMOUNT_WEI = 1_500_000_000_000_000_000n; // "1.5"
+  const MAX_FEE_1559 = 21_000n * 3n * GWEI;
+
+  let sendTransaction: ReturnType<typeof vi.fn>;
+  let wait: ReturnType<typeof vi.fn>;
+  let asked: string[];
+
+  type Chain = {
+    balance: bigint;
+    feeData: [bigint | null, bigint | null, bigint | null];
+    code: string;
+    gas: bigint;
+    networkError?: Error;
+    estimateError?: Error;
+    sendError?: Error;
+    refuse?: boolean;
+    wait?: () => Promise<unknown>;
+  };
+
+  /**
+   * Stubs the provider and the signer. With `refuse`, signing throws: the
+   * refusal tests also assert it was never reached, which is the only proof
+   * that nothing was signed.
+   */
+  async function mockChain(over: Partial<Chain> = {}): Promise<void> {
+    const { ethers } = await import("ethers");
+    const chain: Chain = {
+      balance: 10n * ETH,
+      // gasPrice, maxFeePerGas, maxPriorityFeePerGas
+      feeData: [2n * GWEI, 3n * GWEI, 1n * GWEI],
+      code: "0x",
+      gas: 21_000n,
+      ...over,
+    };
+    const P = ethers.JsonRpcProvider.prototype;
+    vi.spyOn(P, "getNetwork").mockImplementation(async () => {
+      if (chain.networkError) throw chain.networkError;
+      return new ethers.Network("local", 1912n);
+    });
+    vi.spyOn(P, "getBalance").mockImplementation(async () => chain.balance);
+    vi.spyOn(P, "getFeeData").mockImplementation(
+      async () => new ethers.FeeData(...chain.feeData),
+    );
+    vi.spyOn(P, "getCode").mockImplementation(async () => chain.code);
+    vi.spyOn(P, "estimateGas").mockImplementation(async () => {
+      if (chain.estimateError) throw chain.estimateError;
+      return chain.gas;
+    });
+    wait = vi.fn(chain.wait ?? (async () => ({ blockNumber: 42 })));
+    sendTransaction = vi.fn(async () => {
+      if (chain.refuse) throw new Error("must not sign");
+      if (chain.sendError) throw chain.sendError;
+      return { hash: TX_HASH, wait };
+    });
+    vi.spyOn(ethers.Wallet.prototype, "sendTransaction").mockImplementation(
+      sendTransaction as never,
+    );
+  }
+
+  /**
+   * A fresh SUT whose prompts answer by question name. A question with no
+   * answer fails the test, and every question asked is recorded, so a test
+   * can prove which prompts ran - or that none did.
+   */
+  async function transferCommands(answers: Record<string, unknown> = {}) {
+    vi.resetModules();
+    asked = [];
+    vi.doMock("inquirer", () => ({
+      default: {
+        prompt: async (questions: { name: string }[]) => {
+          const result: Record<string, unknown> = {};
+          for (const { name } of questions) {
+            asked.push(name);
+            if (!(name in answers))
+              throw new Error(`unexpected prompt '${name}'`);
+            if (answers[name] instanceof Error) throw answers[name];
+            result[name] = answers[name];
+          }
+          return result;
+        },
+      },
+    }));
+    return import("../../src/commands/wallet");
+  }
+
+  const YES_ANSWERS = { password: PASSWORD, proceed: true };
+
+  async function transfer(
+    { to = TO, amount = "1.5", yes = false } = {},
+    answers: Record<string, unknown> = YES_ANSWERS,
+  ) {
+    const { runWalletTransfer } = await transferCommands(answers);
+    return runWalletTransfer(to, amount, { yes });
+  }
+
+  /** Runs the real commander action, with process.exit spied. */
+  async function transferCli(
+    argv: string[],
+    answers: Record<string, unknown> = YES_ANSWERS,
+  ) {
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+    const { walletCommand } = await transferCommands(answers);
+    await walletCommand.parseAsync(["transfer", ...argv], { from: "user" });
+    return exit;
+  }
+
+  function ctrlC(): Error {
+    return Object.assign(
+      new Error("User force closed the prompt with 0 null"),
+      {
+        name: "ExitPromptError",
+      },
+    );
+  }
+
+  function sentRequest(): Record<string, unknown> {
+    return sendTransaction.mock.calls[0][0] as Record<string, unknown>;
+  }
+
+  beforeEach(async () => {
+    // A port nothing listens on: every provider call is stubbed, and one
+    // that slipped through must not reach a real devnet.
+    writeNetworks(["local"]);
+    await save("deployer");
+    await use("deployer");
+    logged = [];
+  });
+
+  describe("input routes", () => {
+    it("TTY, confirmed: sends exactly what the summary showed", async () => {
+      await mockChain();
+
+      await expect(transfer()).resolves.toBe(0);
+
+      expect(asked).toEqual(["password", "proceed"]);
+      expect(sendTransaction).toHaveBeenCalledTimes(1);
+      expect(sentRequest()).toEqual({
+        to: TO,
+        value: AMOUNT_WEI,
+        gasLimit: 21_000n,
+        type: 2,
+        maxFeePerGas: 3n * GWEI,
+        maxPriorityFeePerGas: 1n * GWEI,
+      });
+      expect(sendTransaction.mock.contexts[0]).toMatchObject({
+        address: ADDRESS_A,
+      });
+      expect(output()).toContain("Network : local (chain ID 1912)");
+      expect(output()).toContain(
+        `From    : ${ADDRESS_A} (.cmu-session, saved as 'deployer')`,
+      );
+      expect(output()).toContain(`To      : ${TO}`);
+      expect(output()).toContain(`Amount  : 1.5 ETH (${AMOUNT_WEI} wei)`);
+      expect(output()).toContain("Max fee : 0.000063 ETH");
+      expectNoKeyLeak();
+    });
+
+    it("TTY, declined: aborts and sends nothing", async () => {
+      await mockChain({ refuse: true });
+
+      await expect(
+        transfer({}, { password: PASSWORD, proceed: false }),
+      ).rejects.toThrow("aborted: nothing was sent");
+
+      expect(asked).toEqual(["password", "proceed"]);
+      expect(sendTransaction).not.toHaveBeenCalled();
+    });
+
+    it("TTY, Ctrl-C at the confirmation: sends nothing", async () => {
+      await mockChain({ refuse: true });
+
+      await expect(
+        transfer({}, { password: PASSWORD, proceed: ctrlC() }),
+      ).rejects.toThrow("aborted: nothing was sent");
+      expect(sendTransaction).not.toHaveBeenCalled();
+    });
+
+    it("TTY, Ctrl-C at the password: sends nothing", async () => {
+      await mockChain({ refuse: true });
+
+      await expect(transfer({}, { password: ctrlC() })).rejects.toThrow(
+        "aborted: nothing was sent",
+      );
+      expect(asked).toEqual(["password"]);
+      expect(sendTransaction).not.toHaveBeenCalled();
+    });
+
+    it("TTY with --yes: asks for the password only, then sends", async () => {
+      await mockChain();
+
+      await expect(
+        transfer({ yes: true }, { password: PASSWORD }),
+      ).resolves.toBe(0);
+      expect(asked).toEqual(["password"]);
+      expect(sendTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["with --yes", true],
+      ["without --yes", false],
+    ])(
+      "non-TTY %s: refuses at the password, prompts nothing, sends nothing",
+      async (_, yes) => {
+        await mockChain({ refuse: true });
+        process.stdin.isTTY = false;
+
+        await expect(transfer({ yes })).rejects.toThrow(
+          "non-interactive session",
+        );
+        expect(asked).toEqual([]);
+        expect(sendTransaction).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  // --yes skips the one confirmation question and nothing else.
+  describe("--yes does not bypass validation", () => {
+    async function expectRefused(
+      args: { to?: string; amount?: string },
+      message: string | RegExp,
+    ) {
+      await mockChain({ refuse: true });
+      await expect(transfer({ ...args, yes: true })).rejects.toThrow(message);
+      expect(asked).toEqual([]);
+      expect(sendTransaction).not.toHaveBeenCalled();
+    }
+
+    it.each([
+      "0x123",
+      ADDRESS_B.slice(2),
+      `0X${ADDRESS_B.slice(2)}`,
+      "XE7338O073KYGTWWZN0F2WZ0R8PX5ZPPZS",
+      "vitalik.eth",
+      ` ${ADDRESS_B}`,
+    ])("invalid recipient %j", (to) =>
+      expectRefused({ to }, "invalid recipient"),
+    );
+
+    it("recipient with a wrong checksum", () =>
+      expectRefused(
+        { to: ADDRESS_B.replace("C44", "c44") },
+        "bad address checksum",
+      ));
+
+    it.each([
+      "0",
+      "0.0",
+      "-1",
+      "+1",
+      "1e3",
+      "0x10",
+      "1_000",
+      " 1",
+      "1,5",
+      "",
+      ".",
+      "1.",
+      ".5",
+      "Infinity",
+      "１",
+      "1x5",
+      "1.5\n",
+    ])("invalid amount %j", (amount) =>
+      expectRefused({ amount }, /invalid amount|greater than 0/),
+    );
+
+    it("amount with 19 decimals", () =>
+      expectRefused(
+        { amount: "1.0000000000000000001" },
+        "more than 18 decimals",
+      ));
+
+    it("balance below the amount", async () => {
+      await mockChain({ refuse: true, balance: AMOUNT_WEI - 1n });
+      await expect(transfer({ yes: true })).rejects.toThrow(
+        "insufficient balance",
+      );
+      expect(asked).toEqual([]);
+      expect(sendTransaction).not.toHaveBeenCalled();
+    });
+
+    it("balance that covers the amount but not the max fee", async () => {
+      await mockChain({
+        refuse: true,
+        balance: AMOUNT_WEI + MAX_FEE_1559 - 1n,
+      });
+      await expect(transfer({ yes: true })).rejects.toThrow(
+        "covers the amount but not the max fee",
+      );
+      expect(asked).toEqual([]);
+      expect(sendTransaction).not.toHaveBeenCalled();
+    });
+
+    it("the zero address", async () => {
+      await mockChain({ refuse: true });
+      await expect(
+        transfer({
+          to: "0x0000000000000000000000000000000000000000",
+          yes: true,
+        }),
+      ).rejects.toThrow("--yes does not cover sending to the zero address");
+      expect(asked).toEqual([]);
+      expect(sendTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("recipients", () => {
+    it.each([
+      ["all lowercase", ADDRESS_B.toLowerCase()],
+      ["all uppercase", `0x${ADDRESS_B.slice(2).toUpperCase()}`],
+    ])("accepts %s and sends to the checksummed form", async (_, to) => {
+      await mockChain();
+      await transfer({ to });
+      expect(sentRequest().to).toBe(ADDRESS_B);
+    });
+
+    it("warns that the zero address burns, then asks", async () => {
+      await mockChain();
+      await transfer({ to: "0x0000000000000000000000000000000000000000" });
+      expect(output()).toContain("burned and cannot be recovered");
+      expect(asked).toEqual(["password", "proceed"]);
+      expect(sendTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("warns when sending to itself", async () => {
+      await mockChain();
+      await transfer({ to: ADDRESS_A, yes: true }, { password: PASSWORD });
+      expect(output()).toContain("is the sending wallet");
+      expect(sendTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("warns when the recipient is a contract", async () => {
+      await mockChain({ code: "0x6080604052" });
+      await transfer({ yes: true }, { password: PASSWORD });
+      expect(output()).toContain("is a contract");
+      expect(sendTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses a contract that rejects the transfer, before any prompt", async () => {
+      await mockChain({
+        refuse: true,
+        code: "0x6080604052",
+        estimateError: new Error("execution reverted"),
+      });
+      await expect(transfer()).rejects.toThrow("would reject this transfer");
+      expect(asked).toEqual([]);
+      expect(sendTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("amount and balance", () => {
+    it("sends the smallest amount, 1 wei", async () => {
+      await mockChain();
+      await transfer({ amount: "0.000000000000000001" });
+      expect(sentRequest().value).toBe(1n);
+    });
+
+    it("accepts a balance of exactly amount + max fee", async () => {
+      await mockChain({ balance: AMOUNT_WEI + MAX_FEE_1559 });
+      await expect(transfer()).resolves.toBe(0);
+    });
+  });
+
+  describe("fees", () => {
+    it("legacy fee data: sends type 0 with gasPrice", async () => {
+      await mockChain({ feeData: [2n * GWEI, null, null] });
+      await transfer();
+      expect(sentRequest()).toEqual({
+        to: TO,
+        value: AMOUNT_WEI,
+        gasLimit: 21_000n,
+        type: 0,
+        gasPrice: 2n * GWEI,
+      });
+      expect(output()).toContain("Max fee : 0.000042 ETH");
+    });
+
+    it("refuses when the node returns no fee data", async () => {
+      await mockChain({ refuse: true, feeData: [null, null, null] });
+      await expect(transfer()).rejects.toThrow("no fee data");
+      expect(asked).toEqual([]);
+      expect(sendTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("after sending", () => {
+    it("prints the block and the new balance in the balance format", async () => {
+      await mockChain();
+      await transfer();
+      expect(output()).toContain(`Tx hash : ${TX_HASH}`);
+      expect(output()).toContain("Block   : 42");
+      expect(output()).toMatch(/Balance : 10\.0 ETH/);
+    });
+
+    it("waits for 1 confirmation with the named timeout", async () => {
+      await mockChain();
+      const { TRANSFER_CONFIRM_TIMEOUT_MS } = await transferCommands();
+      await transfer();
+      expect(wait).toHaveBeenCalledWith(1, TRANSFER_CONFIRM_TIMEOUT_MS);
+    });
+
+    it("prints the hash before waiting, and reports a timeout", async () => {
+      const { ethers } = await import("ethers");
+      let printedBeforeWait = "";
+      await mockChain({
+        wait: async () => {
+          printedBeforeWait = output();
+          throw ethers.makeError("wait for transaction timeout", "TIMEOUT");
+        },
+      });
+
+      await expect(transfer()).resolves.toBe(2);
+
+      expect(printedBeforeWait).toContain(TX_HASH);
+      expect(output()).toContain("was sent but is not in a block after 120s");
+      expect(output()).toContain("cmu mine start");
+      expectNoKeyLeak();
+    });
+  });
+
+  // The only proof of exit code 2: the devnet automines, so a smoke test
+  // cannot make a confirmation time out.
+  describe("exit codes through the commander action", () => {
+    it("0 when sent and confirmed", async () => {
+      await mockChain();
+      const exit = await transferCli([TO, "1.5"]);
+      expect(exit).toHaveBeenCalledWith(0);
+      expect(exit).toHaveBeenCalledTimes(1);
+    });
+
+    it("2 when sent but not confirmed in time", async () => {
+      const { ethers } = await import("ethers");
+      await mockChain({
+        wait: async () => {
+          throw ethers.makeError("wait for transaction timeout", "TIMEOUT");
+        },
+      });
+      const exit = await transferCli([TO, "1.5"]);
+      expect(exit).toHaveBeenCalledWith(2);
+      expect(exit).not.toHaveBeenCalledWith(0);
+    });
+
+    it("2 when sent but the confirmation cannot be checked", async () => {
+      await mockChain({
+        wait: async () => {
+          throw new Error("socket hang up");
+        },
+      });
+      const exit = await transferCli([TO, "1.5"]);
+      expect(exit).toHaveBeenCalledWith(2);
+    });
+
+    it("1 when the transaction reverts", async () => {
+      const { ethers } = await import("ethers");
+      await mockChain({
+        wait: async () => {
+          throw ethers.makeError(
+            "transaction execution reverted",
+            "CALL_EXCEPTION",
+          );
+        },
+      });
+      const exit = await transferCli([TO, "1.5"]);
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(output()).toContain("was mined but reverted");
+    });
+
+    it("1 when refused, via the tf alias and -y", async () => {
+      await mockChain({ refuse: true });
+      const exit = await transferCli(["-y", TO, "1."], {});
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(output()).toContain("wallet transfer failed");
+      expect(sendTransaction).not.toHaveBeenCalled();
+
+      logged = [];
+      vi.resetModules();
+      const { walletCommand } = await transferCommands({});
+      await walletCommand.parseAsync(["tf", "-y", TO, "1."], { from: "user" });
+      expect(output()).toContain("invalid amount");
+    });
+
+    it("1 when sending throws, with the may-have-been-broadcast hint", async () => {
+      await mockChain({ sendError: new Error("socket hang up") });
+      const exit = await transferCli([TO, "1.5"]);
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(output()).toContain("may still have been broadcast");
+    });
+  });
+
+  describe("environment", () => {
+    it("fails clearly when the node is down, without prompting", async () => {
+      await mockChain({
+        refuse: true,
+        networkError: new Error("connect ECONNREFUSED"),
+      });
+      await expect(transfer()).rejects.toThrow("unreachable");
+      expect(asked).toEqual([]);
+      expect(sendTransaction).not.toHaveBeenCalled();
+    });
+
+    it("fails without a session", async () => {
+      fs.rmSync(path.join(tmpDir, ".cmu-session"));
+      await mockChain({ refuse: true });
+      await expect(transfer()).rejects.toThrow("no active session");
+      expect(asked).toEqual([]);
+    });
+
+    it("fails on a session without an encrypted key", async () => {
+      writeSession("local");
+      await mockChain({ refuse: true });
+      await expect(transfer()).rejects.toThrow("holds no encrypted key");
+      expect(asked).toEqual([]);
+    });
+
+    it("ignores PRIVATE_KEY, says so, and never prints its value", async () => {
+      vi.stubEnv("PRIVATE_KEY", KEY_B);
+      await mockChain();
+
+      await transfer();
+
+      expect(output()).toContain("PRIVATE_KEY is set");
+      expect(sendTransaction.mock.contexts[0]).toMatchObject({
+        address: ADDRESS_A,
+      });
+      expect(output()).toContain(`From    : ${ADDRESS_A}`);
+      expectNoKeyLeak();
+    });
+
+    it("refuses a session whose address does not match its key", async () => {
+      const session = readSession();
+      session.address = ADDRESS_B;
+      fs.writeFileSync(
+        path.join(tmpDir, ".cmu-session"),
+        JSON.stringify(session),
+      );
+      await mockChain({ refuse: true });
+
+      await expect(transfer()).rejects.toThrow("has been modified");
+      expect(sendTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("no key or password leaks", () => {
+    beforeEach(() => {
+      vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    });
+
+    it.each([
+      ["a wrong password", {}, { password: "wrong password 1", proceed: true }],
+      [
+        "a failed send",
+        { sendError: new Error("socket hang up") },
+        YES_ANSWERS,
+      ],
+    ])("through --verbose after %s", async (_, chain, answers) => {
+      await mockChain(chain as Partial<Chain>);
+      const { fail } = await import("../../src/utils/errors");
+      const { runWalletTransfer } = await transferCommands(answers);
+
+      await runWalletTransfer(TO, "1.5").catch(
+        fail("wallet transfer", { verbose: true }),
+      );
+
+      expect(output()).toContain("wallet transfer failed");
+      expectNoKeyLeak();
+    });
   });
 });
