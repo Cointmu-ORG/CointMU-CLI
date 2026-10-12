@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { LOCAL_NETWORK_NAME } from "../utils/defaults";
 import { fail } from "../utils/errors";
+import { pingNetwork } from "./deploy";
 import { getDynamicNetwork } from "../utils/network";
 import { loadNetworks } from "../utils/networkStorage";
 import {
@@ -516,6 +517,348 @@ export async function runWalletDelete(
   );
 }
 
+/** Exactly 0x and 40 hex digits: no ENS name, ICAP, missing prefix or padding. */
+const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+
+/** A plain decimal ETH amount, at most 18 decimals (1 wei). */
+const AMOUNT_PATTERN = /^[0-9]+(\.[0-9]{1,18})?$/;
+
+/**
+ * Turns the transfer recipient into a checksummed hex address.
+ *
+ * Stricter than ethers.isAddress(), which also takes a bare 40-digit hex
+ * string and an ICAP "XE..." one. Only the getAddress() result is ever handed
+ * to the provider, so nothing that looks like a name can reach ENS resolution.
+ *
+ * @param {string} to - The recipient as typed.
+ * @returns {Promise<string>} The checksummed address.
+ * @throws {Error} When it is not a 0x-prefixed address, or its mixed-case
+ *   checksum is wrong.
+ */
+export async function parseTransferAddress(to: string): Promise<string> {
+  if (!ADDRESS_PATTERN.test(to)) {
+    throw new Error(
+      `invalid recipient ${JSON.stringify(to)} - expected a 0x-prefixed 40-digit hex address.\n` +
+        "\x1b[2mhint:\x1b[0m ENS names are not resolved; paste the address itself.",
+    );
+  }
+  const { ethers } = await import("ethers");
+  try {
+    return ethers.getAddress(to);
+  } catch {
+    throw new Error(
+      `bad address checksum for '${to}'.\n` +
+        "\x1b[2mhint:\x1b[0m a mixed-case address encodes a checksum - check for a typo, or paste it all lowercase.",
+    );
+  }
+}
+
+/**
+ * Turns the transfer amount, in ETH, into wei.
+ *
+ * Stricter than parseEther(), which on its own takes "-1", "0", "1." and
+ * ".5". Only plain positive decimals pass.
+ *
+ * @param {string} amount - The amount as typed, in ETH.
+ * @returns {Promise<bigint>} The amount in wei.
+ * @throws {Error} When it is not a positive decimal with at most 18 decimals.
+ */
+export async function parseTransferAmount(amount: string): Promise<bigint> {
+  if (/^[0-9]+\.[0-9]{19,}$/.test(amount)) {
+    throw new Error(
+      `amount '${amount}' has more than 18 decimals - 1 wei is 0.000000000000000001 ETH.`,
+    );
+  }
+  if (!AMOUNT_PATTERN.test(amount)) {
+    throw new Error(
+      `invalid amount ${JSON.stringify(amount)} - expected a positive decimal ETH value like 0.5.\n` +
+        "\x1b[2mhint:\x1b[0m no sign, exponent, separators or bare leading/trailing dot: write 1 or 0.5.",
+    );
+  }
+  const { ethers } = await import("ethers");
+  const wei = ethers.parseEther(amount);
+  if (wei === 0n) {
+    throw new Error("amount must be greater than 0.");
+  }
+  return wei;
+}
+
+/**
+ * How long `wallet transfer` waits for its transaction to land in a block.
+ *
+ * ponytail: picked for the local devnet, which mines on demand. Not yet
+ * validated against the server node's block time - mining there has never
+ * been tested. Raise it if confirmations routinely take longer.
+ */
+export const TRANSFER_CONFIRM_TIMEOUT_MS = 120_000;
+
+/** Exit code: the transfer was sent and is in a block. */
+export const TRANSFER_SENT = 0;
+
+/**
+ * Exit code: the transfer WAS sent but is not confirmed yet. Distinct from 1
+ * ("nothing was sent") so a script does not retry it into a double send.
+ */
+export const TRANSFER_UNCONFIRMED = 2;
+
+/**
+ * Runs a prompt, turning Ctrl-C (inquirer's ExitPromptError) into the same
+ * "aborted" a No answer gives, so either way it is plain that nothing left.
+ *
+ * @param {() => Promise<T>} prompt - The prompt to run.
+ * @returns {Promise<T>} Its answers.
+ */
+async function promptOrAbort<T>(prompt: () => Promise<T>): Promise<T> {
+  try {
+    return await prompt();
+  } catch (error) {
+    if (error instanceof Error && error.name === "ExitPromptError") {
+      throw new Error("aborted: nothing was sent.", { cause: error });
+    }
+    throw error;
+  }
+}
+
+/**
+ * The short message of an ethers error, without the request payloads its full
+ * message carries.
+ *
+ * @param {unknown} error - The caught value.
+ * @returns {string} Something printable.
+ */
+function shortError(error: unknown): string {
+  const short = (error as { shortMessage?: string })?.shortMessage;
+  return short ?? (error instanceof Error ? error.message : String(error));
+}
+
+/**
+ * Sends ETH from the session wallet on the session's active network.
+ *
+ * Everything that can be checked is checked before the first prompt: the
+ * recipient and amount, the session, the node, the balance against
+ * amount + max fee, and the zero address under --yes. Only then is the
+ * session password asked for, the summary shown and - unless --yes - a No-by-
+ * default confirmation asked. --yes skips that one question and nothing else.
+ *
+ * The key always comes from .cmu-session, never from PRIVATE_KEY: the network
+ * and balance shown are the session's, and index.ts loads the project's .env
+ * on every run, so an env key would sign from an account the user never saw.
+ *
+ * Never exits by itself; the handler exits with the code this resolves to.
+ *
+ * @param {string} toArg - The recipient, as typed.
+ * @param {string} amountArg - The amount in ETH, as typed.
+ * @param {object} [options]
+ * @param {boolean} [options.yes] - Skip the confirmation (`--yes`).
+ * @returns {Promise<0 | 2>} TRANSFER_SENT, or TRANSFER_UNCONFIRMED when the
+ *   transaction went out but did not land in a block in time.
+ * @throws {Error} For anything that stopped it before or at sending, and for a
+ *   transaction that was mined but reverted.
+ */
+export async function runWalletTransfer(
+  toArg: string,
+  amountArg: string,
+  options: { yes?: boolean } = {},
+): Promise<0 | 2> {
+  const to = await parseTransferAddress(toArg);
+  const value = await parseTransferAmount(amountArg);
+
+  const session = await requireSession();
+  if (!session.encryptedKey) {
+    throw new Error(
+      "the session holds no encrypted key.\n" +
+        "\x1b[2mhint:\x1b[0m run `cmu wallet login` or `cmu wallet use <name>`.",
+    );
+  }
+  const from = session.address;
+
+  const network = await getDynamicNetwork(session.activeNetwork);
+  // Fails within its timeout when the node is down; a bare provider would
+  // retry network detection forever.
+  await pingNetwork(network.rpcUrl, network.name);
+  const { ethers } = await import("ethers");
+  const provider = new ethers.JsonRpcProvider(network.rpcUrl, undefined, {
+    staticNetwork: true,
+  });
+  const { chainId } = await provider.getNetwork();
+
+  const [balance, feeData, code] = await Promise.all([
+    provider.getBalance(from),
+    provider.getFeeData(),
+    provider.getCode(to),
+  ]);
+  // Before estimateGas: a node refuses to estimate a transfer the balance
+  // cannot cover, which would read as "the recipient rejects it".
+  if (balance < value) {
+    throw new Error(
+      `insufficient balance: ${ethers.formatEther(balance)} ETH, the transfer needs ${ethers.formatEther(value)} ETH plus fee.`,
+    );
+  }
+  let gasLimit: bigint;
+  try {
+    gasLimit = await provider.estimateGas({ from, to, value });
+  } catch (error) {
+    throw new Error(
+      `${to} would reject this transfer - the node could not estimate it (${shortError(error)}).\n` +
+        "\x1b[2mhint:\x1b[0m a contract without a payable receive() or fallback() cannot take plain ETH.",
+      { cause: error },
+    );
+  }
+
+  // Fee fields are sent explicitly, so maxFee is a real ceiling rather than a
+  // guess ethers might re-price while populating the transaction.
+  const price = feeData.maxFeePerGas ?? feeData.gasPrice;
+  if (price == null) {
+    throw new Error("the node returned no fee data - cannot bound the fee.");
+  }
+  const feeFields =
+    feeData.maxFeePerGas != null
+      ? {
+          type: 2,
+          maxFeePerGas: feeData.maxFeePerGas,
+          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ?? undefined,
+        }
+      : { type: 0, gasPrice: price };
+  const maxFee = gasLimit * price;
+  if (balance < value + maxFee) {
+    throw new Error(
+      `balance ${ethers.formatEther(balance)} ETH covers the amount but not the max fee (${ethers.formatEther(maxFee)} ETH).`,
+    );
+  }
+
+  const toZero = to === ethers.ZeroAddress;
+  if (toZero && options.yes) {
+    throw new Error(
+      "--yes does not cover sending to the zero address.\n" +
+        "\x1b[2mhint:\x1b[0m run without --yes to confirm interactively.",
+    );
+  }
+
+  const warn = (text: string) => console.log(`\x1b[33mwarning:\x1b[0m ${text}`);
+  if (process.env.PRIVATE_KEY) {
+    warn(
+      "PRIVATE_KEY is set (environment or .env) - transfer ignores it and signs with the session wallet.",
+    );
+  }
+  if (toZero) {
+    warn("funds sent to the zero address are burned and cannot be recovered.");
+  }
+  if (sameAddress(to, from)) {
+    warn(`${to} is the sending wallet - this only spends the fee.`);
+  }
+  if (code !== "0x") {
+    warn(`${to} is a contract - plain ETH can be rejected or locked by it.`);
+  }
+
+  requireInteractive(
+    "the session password",
+    "transfer signs with the .cmu-session key and needs its password; run it in a terminal.",
+  );
+  const inquirer = (await import("inquirer")).default;
+  const { password } = await promptOrAbort(() =>
+    inquirer.prompt([
+      {
+        type: "password",
+        name: "password",
+        message: `Session password for ${from}:`,
+        mask: "*",
+      },
+    ]),
+  );
+  const signer = new ethers.Wallet(
+    decryptSessionKey(password, session),
+    provider,
+  );
+  // The balance above was checked for the plaintext session address; make
+  // sure that is really who signs.
+  if (!sameAddress(signer.address, from)) {
+    throw new Error(
+      `.cmu-session names ${from}, but its key belongs to another address - the file has been modified.\n` +
+        "\x1b[2mhint:\x1b[0m run `cmu wallet login` or `cmu wallet use <name>` again.",
+    );
+  }
+
+  let savedAs: string | undefined;
+  try {
+    savedAs = (await loadWallets()).find((w) =>
+      sameAddress(w.address, from),
+    )?.name;
+  } catch {
+    // An unreadable wallets file only costs the summary its wallet name.
+  }
+
+  console.log("\n--- Transfer ---");
+  console.log(`Network : ${network.name} (chain ID ${chainId})`);
+  console.log(
+    `From    : ${signer.address} (.cmu-session${savedAs ? `, saved as '${savedAs}'` : ""})`,
+  );
+  console.log(`To      : ${to}`);
+  console.log(`Amount  : ${ethers.formatEther(value)} ETH (${value} wei)`);
+  console.log(`Max fee : ${ethers.formatEther(maxFee)} ETH`);
+  console.log("----------------");
+
+  if (!options.yes) {
+    const { proceed } = await promptOrAbort(() =>
+      inquirer.prompt([
+        {
+          type: "confirm",
+          name: "proceed",
+          message: "Send this transaction?",
+          default: false,
+        },
+      ]),
+    );
+    if (!proceed) {
+      throw new Error("aborted: nothing was sent.");
+    }
+  }
+
+  let tx;
+  try {
+    tx = await signer.sendTransaction({ to, value, gasLimit, ...feeFields });
+  } catch (error) {
+    throw new Error(
+      `could not send the transaction: ${shortError(error)}\n` +
+        "\x1b[2mhint:\x1b[0m if this was a network error the transaction may still have been broadcast - check `cmu wallet balance` before retrying.",
+      { cause: error },
+    );
+  }
+  // Printed before waiting, so a Ctrl-C during the wait still leaves the hash.
+  console.log(`Tx hash : ${tx.hash}`);
+  console.log(
+    `Waiting for 1 confirmation (up to ${TRANSFER_CONFIRM_TIMEOUT_MS / 1000}s)...`,
+  );
+
+  let receipt;
+  try {
+    receipt = await tx.wait(1, TRANSFER_CONFIRM_TIMEOUT_MS);
+  } catch (error) {
+    if (ethers.isError(error, "CALL_EXCEPTION")) {
+      throw new Error(
+        `transaction ${tx.hash} was mined but reverted - the fee was paid, the amount was not transferred.`,
+        { cause: error },
+      );
+    }
+    // Sent either way, so never the "nothing was sent" exit code.
+    warn(
+      ethers.isError(error, "TIMEOUT")
+        ? `transaction ${tx.hash} was sent but is not in a block after ${TRANSFER_CONFIRM_TIMEOUT_MS / 1000}s.`
+        : `transaction ${tx.hash} was sent, but its confirmation could not be checked (${shortError(error)}).`,
+    );
+    console.log(
+      "\x1b[2mhint:\x1b[0m blocks only appear while something mines - `cmu mine start`, then check `cmu wallet balance` before sending again.",
+    );
+    return TRANSFER_UNCONFIRMED;
+  }
+
+  const newBalance = await provider.getBalance(from);
+  console.log("---------------------------");
+  console.log(`Block   : ${receipt?.blockNumber}`);
+  console.log(`Balance : ${ethers.formatEther(newBalance)} ETH`);
+  console.log("---------------------------");
+  return TRANSFER_SENT;
+}
+
 /**
  * Fetch and display the native token balance of the logged-in wallet.
  * @returns {Promise<void>}
@@ -620,5 +963,19 @@ walletCommand
   .action((name, options, command) =>
     runWalletDelete(name, options).catch(
       fail("wallet delete", command.optsWithGlobals()),
+    ),
+  );
+
+walletCommand
+  .command("transfer <to> <amount>")
+  .alias("tf")
+  .description("Send ETH from the session wallet")
+  .option("-y, --yes", "Send without asking for confirmation")
+  // The exit code comes from the return value: exit 2 (sent, unconfirmed)
+  // must not be flattened into the 0 other provider-holding commands force.
+  .action((to, amount, options, command) =>
+    runWalletTransfer(to, amount, options).then(
+      (code) => process.exit(code),
+      fail("wallet transfer", command.optsWithGlobals()),
     ),
   );
