@@ -196,12 +196,13 @@ export function encryptSessionKey(
  * exception.
  *
  * @param {string} password - The session password.
- * @param {SessionData} session - The parsed .cmu-session contents.
+ * @param {Partial<EncryptedKey>} session - The parsed .cmu-session contents,
+ *   or a saved wallet, which stores its key in the same shape.
  * @returns {string} The decrypted private key.
  */
 export function decryptSessionKey(
   password: string,
-  session: SessionData,
+  session: Partial<EncryptedKey>,
 ): string {
   if (
     !session.encryptedKey ||

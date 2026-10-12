@@ -105,6 +105,10 @@ Commands:
     login                     Securely log into your wallet and create an encrypted session
     balance                   Fetch and display the native token balance of the logged-in wallet
     info                      Display the current active wallet session information
+    save|add <name>           Save a private key as a named, encrypted wallet
+    use <name>                Make a saved wallet the active session in this project
+    list                      List saved wallets
+    delete <name>             Delete a saved wallet
   create [options] [project]  Initializes a new CointMU workspace with pre-configured templates
   node [options]              Manages the local EVM node for development and testing
     connect                   Pings the configured RPC endpoint to test connectivity
@@ -198,6 +202,9 @@ cmu wallet create --login
 The key is never printed on that path — it exists only inside `.cmu-session`, so
 there is no printed backup to fall back on if you lose that file or its password.
 
+Juggling several keys? Save each one once as a named wallet and switch with
+`cmu wallet use` - see [Named Wallets](#-named-wallets).
+
 2. **Scaffold a new CointMU project**: ✨
 
 ```bash
@@ -277,6 +284,52 @@ Balance      : 0.0 (0 wei)
 _(Exactly one of `--block` or `--contract` per run: they answer unrelated questions, and passing neither would otherwise do nothing at all. An address with no bytecode is reported as such and still exits `0` - "not a contract" is an answer, not a failure.)_
 
 The explorer is read-only: there is no signer, so it never asks for your session password even when `.cmu-session` is locked. Like `cmu console` and `cmu deploy`, the network follows `defaultNetwork` in `cmu.config.ts` unless `-n/--network` overrides it.
+
+## 👛 Named Wallets
+
+`cmu wallet login` holds one key per project. To switch between several keys
+without pasting them again, save each one once under a name:
+
+```bash
+cmu wallet save deployer     # prompts for the private key and a password (twice)
+cmu wallet save admin        # every wallet has its own password
+cmu wallet list              # names and addresses; no password needed
+cmu wallet use deployer      # prompts for deployer's password
+cmu wallet delete admin      # asks first; --yes skips the question
+```
+
+- **Saved wallets are global, the active wallet is per project.** Wallets live
+  in `~/.cmu-wallets.json`. `cmu wallet use` writes `.cmu-session` in the
+  current directory, so two projects can use different wallets at the same
+  time. `cmu wallet list` marks the one this project uses.
+- **Same encryption as the session.** Each key is stored with AES-256-GCM and a
+  PBKDF2-derived key, exactly like `.cmu-session`; only the name and address
+  are stored in plaintext. `use` copies the encrypted key into `.cmu-session`,
+  so `cmu deploy` asks for that wallet's password.
+- **`use` keeps your network.** The active network picked with
+  `cmu network use` carries over, as it does for `cmu wallet login`.
+- **Deleting is local to the store.** A project that already ran
+  `cmu wallet use <name>` keeps its own encrypted copy in `.cmu-session` and
+  keeps working. cmu keeps no other copy of a deleted wallet's key.
+- **Names** are 1-32 lowercase letters, digits, `-` or `_`. Saving under a name
+  that is taken is refused - delete the old wallet first.
+- `cmu wallet login` and `cmu wallet create --login` still work for one-off keys.
+  When `use` replaces a session whose key is not saved, it warns you.
+
+**Prompts need a terminal.** `save`, `use`, `login` and `delete` without `--yes`
+fail with an error when stdin is not a TTY instead of hanging. In CI, set
+`PRIVATE_KEY` instead - `cmu deploy` uses it before any session.
+
+**File permissions.** On Linux and macOS, `~/.cmu-wallets.json` and
+`.cmu-session` are written with mode `0600` (owner only), and an existing file
+with a looser mode is tightened on the next write. On Windows, `chmod` only
+toggles the read-only attribute: the file is protected by the ACL it inherits
+from your user profile folder (by default you, SYSTEM and Administrators), and
+the keys inside still need their password.
+
+**Windows terminals.** Git Bash (mintty) does not present itself as a TTY, so
+the prompts above refuse to run there. Use Windows Terminal, PowerShell or
+`cmd`, or prefix the command with `winpty` (`winpty cmu wallet save dev`).
 
 ---
 
