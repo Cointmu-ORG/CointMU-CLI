@@ -56,6 +56,7 @@ coverage/
 # CointMU local session & network state (encrypted key / local-only config)
 .cmu-session
 .cmu-networks.json
+.cmu-wallets.json
 
 # Compiled artifacts
 artifacts/
