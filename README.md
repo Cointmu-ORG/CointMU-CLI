@@ -109,6 +109,7 @@ Commands:
     use <name>                Make a saved wallet the active session in this project
     list                      List saved wallets
     delete <name>             Delete a saved wallet
+    transfer|tf <to> <amount> Send ETH from the session wallet (-y skips the confirmation)
   create [options] [project]  Initializes a new CointMU workspace with pre-configured templates
   node [options]              Manages the local EVM node for development and testing
     connect                   Pings the configured RPC endpoint to test connectivity
@@ -330,6 +331,55 @@ the keys inside still need their password.
 **Windows terminals.** Git Bash (mintty) does not present itself as a TTY, so
 the prompts above refuse to run there. Use Windows Terminal, PowerShell or
 `cmd`, or prefix the command with `winpty` (`winpty cmu wallet save dev`).
+
+## 💸 Sending ETH
+
+```bash
+cmu wallet transfer 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC 1.5
+cmu wallet tf 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC 0.25 --yes
+```
+
+`transfer` sends from the wallet in this project's `.cmu-session`, on its
+active network (the same ones `cmu wallet balance` uses). It checks
+everything it can before asking for anything:
+
+- `<to>` must be a `0x`-prefixed 40-digit hex address. ENS names are not
+  resolved, and a mixed-case address with a wrong checksum is rejected.
+- `<amount>` is in ETH: a plain positive decimal such as `1`, `0.5` or
+  `0.000000000000000001`, at most 18 decimals. No sign, exponent,
+  separators, `1.` or `.5`.
+- The balance must cover the amount **plus the maximum fee**. The fee is
+  capped up front (EIP-1559 `maxFeePerGas`, or `gasPrice` on a chain
+  without it), so the actual fee is never higher than the one shown.
+- The recipient must accept plain ETH. If a contract would reject the
+  transfer, it stops here.
+
+Only then does it ask for the session password, show a summary (network,
+chain ID, from, to, amount and max fee) and ask `Send this transaction?`,
+which defaults to **No**.
+
+- `-y, --yes` skips that one question and **nothing else**. Every check
+  above still applies, and sending to the zero address (which burns the
+  funds) is refused under `--yes`, so a burn always needs an interactive
+  confirmation.
+- Warnings are printed for the zero address, for sending to yourself, and
+  for a recipient that is a contract.
+- The key always comes from `.cmu-session`. `PRIVATE_KEY` (including one
+  loaded from `.env`) is **ignored** here, with a warning, so that the
+  account that pays is always the one shown.
+- The session password has to be typed, so `transfer` needs a terminal.
+  Without one it fails, with or without `--yes`.
+
+After sending, the transaction hash is printed straight away. `transfer`
+then waits up to 120 seconds for one confirmation and prints the block
+and the new balance. Blocks only appear while something mines, so on a
+chain that is not mining run `cmu mine start`.
+
+| Exit code | Meaning                                                                                                                                                                                                                                                  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`       | Sent and confirmed in a block.                                                                                                                                                                                                                           |
+| `1`       | **Nothing was sent**: refused, aborted, or failed before sending. There are two exceptions, and the error says which: a transaction that was mined but reverted (the fee was paid), and a network error while broadcasting (it may still have gone out). |
+| `2`       | The transaction **was sent but is not confirmed yet**. Do **not** retry before checking `cmu wallet balance`: a retry can send the funds twice.                                                                                                          |
 
 ---
 
