@@ -7,8 +7,12 @@ import { getDeployNetwork } from "../utils/network";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 import { pingNetwork } from "./deploy";
 
-/** Shown in place of an address when the console starts without a signer. */
-const NO_SIGNER_LABEL = "none (read-only) - run `cmu wallet use <name>`";
+/** Shown in place of an address when --no-signer left the signer out. */
+const NO_SIGNER_LABEL = "none (--no-signer)";
+
+/** Shown in place of an address when no key was found anywhere. */
+const NO_KEY_LABEL =
+  "none (no key) - run `cmu wallet use <name>`, or set PRIVATE_KEY in .env or cmu.config.ts";
 
 interface ConsoleOptions {
   network?: string;
@@ -39,8 +43,12 @@ interface ConsoleOptions {
 export async function resolveConsoleContext(options: ConsoleOptions = {}) {
   // getDeployNetwork() require()s cmu.config.ts, which is arbitrary project
   // code, so gate it the same way `cmu compile` does. Only the config file is
-  // listed: unlike deploy, the console never executes deploy/.
-  await confirmProjectTrust([findProjectConfig()], { yes: options.yes });
+  // listed: unlike deploy, the console never executes deploy/. --no-signer
+  // decrypts nothing, so it gets compile's wording rather than the key warning.
+  await confirmProjectTrust([findProjectConfig()], {
+    yes: options.yes,
+    variant: options.signer === false ? "readOnly" : "default",
+  });
 
   // --no-signer skips the session password prompt entirely, so a read-only
   // console can open in a project whose .cmu-session is locked.
@@ -175,6 +183,23 @@ export function makeGetDeployed(ctx: {
 }
 
 /**
+ * What the configuration block prints for the signer. Without one, the label
+ * says why: --no-signer was passed on purpose, so it gets no "how to add a key"
+ * hint; only a console that found no key at all does.
+ *
+ * @param {object | undefined} signer - The resolved signer, if any.
+ * @param {ConsoleOptions} options - CLI options.
+ * @returns {string} The signer's address, or the matching "none" label.
+ */
+export function signerLabel(
+  signer: { address: string } | undefined,
+  options: ConsoleOptions,
+): string {
+  if (signer) return signer.address;
+  return options.signer === false ? NO_SIGNER_LABEL : NO_KEY_LABEL;
+}
+
+/**
  * Opens the interactive console.
  *
  * Never calls process.exit() itself, following runDeploy(); the single exit
@@ -194,7 +219,7 @@ export async function runConsole(options: ConsoleOptions = {}): Promise<void> {
   console.log(`Network      : ${network.name}`);
   console.log(`RPC endpoint : ${network.url}`);
   console.log(`Chain ID     : ${network.chainId}`);
-  console.log(`Signer       : ${signer ? signer.address : NO_SIGNER_LABEL}`);
+  console.log(`Signer       : ${signerLabel(signer, options)}`);
   console.log(
     `Preloaded    : provider, signer, ethers, getContract(name, address), getDeployed(name)`,
   );

@@ -56,7 +56,8 @@ export async function loadProjectConfig(configPath: string): Promise<any> {
  *
  * - "default" - `deploy`, `console`: a key decrypted from the session, injected
  *   for deploy scripts.
- * - "readOnly" - `compile`, `explorer`: the config is read, nothing is signed.
+ * - "readOnly" - `compile`, `explorer`, `console --no-signer`: the config is
+ *   read, nothing is signed.
  * - "test" - `test`: the suite gets the full environment and a devnet key.
  */
 export type TrustVariant = "default" | "readOnly" | "test";
@@ -106,9 +107,9 @@ let confirmed = false;
  * as Hardhat/Foundry/Truffle), but it should never happen silently.
  *
  * Each caller gets the consequence sentence that is true for it. `deploy` and
- * `console` decrypt a key from the session; `compile` and `explorer` only read
- * the config and sign nothing; `test` hands its suite the full environment and
- * a devnet key. A gate that overstates its stakes on the quiet commands is a
+ * `console` decrypt a key from the session; `compile`, `explorer` and
+ * `console --no-signer` only read the config and sign nothing; `test` hands its
+ * suite the full environment and a devnet key. A gate that overstates its stakes on the quiet commands is a
  * gate people learn to dismiss on `cmu deploy`, where the warning is literally
  * true, and one that understates them on `cmu test` is worse (issue #183).
  *
