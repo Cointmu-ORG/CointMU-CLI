@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import type { JsonRpcProvider } from "ethers";
 import { LOCAL_NETWORK_NAME } from "../utils/defaults";
 import { fail } from "../utils/errors";
@@ -28,7 +28,7 @@ import {
 /**
  * The activeNetwork a new session should carry: the one the existing session
  * selected, as long as it is still saved. Falls back to the local devnet for a
- * first login, an unreadable session file, or a pick that has since been
+ * first session, an unreadable session file, or a pick that has since been
  * deleted - and says so in that last case, since the user did choose it.
  *
  * @returns {Promise<string>} The network name the new session should record.
@@ -38,7 +38,7 @@ async function carriedOverNetwork(): Promise<string> {
   try {
     previous = (await readSession())?.activeNetwork;
   } catch {
-    // A corrupt session file must not block login - login is the way out of it.
+    // A corrupt session file must not block `use` - it is the way out of it.
     return LOCAL_NETWORK_NAME;
   }
   if (!previous) return LOCAL_NETWORK_NAME;
@@ -77,12 +77,10 @@ function requireInteractive(
  * Prompts for a private key, masked, and rejects anything that is not one.
  * The validation message never echoes the input.
  *
- * @param {string} [hint] - What to do without a terminal, for a caller that
- *   has a better answer than running it in one.
  * @returns {Promise<string>} The entered private key.
  */
-async function promptPrivateKey(hint?: string): Promise<string> {
-  requireInteractive("a private key", hint);
+async function promptPrivateKey(): Promise<string> {
+  requireInteractive("a private key");
   const inquirer = (await import("inquirer")).default;
   const { ethers } = await import("ethers");
 
@@ -210,11 +208,10 @@ async function confirmSessionReplace(): Promise<void> {
 /**
  * Writes an encrypted key to .cmu-session, carrying the active network over.
  *
- * The one writer of a key into the session, so every way of getting there
- * (`login`, `create --login`, `use`) keeps the network #126 was about, and
- * passes the #182 check. The check runs first; `unlock` - where every prompt
- * for a key or password lives - only after it, so no caller can ask for a
- * secret before the user agreed to lose the old key.
+ * The one writer of a key into the session, so `use` keeps the network #126
+ * was about, and passes the #182 check. The check runs first; `unlock` -
+ * where every prompt for a key or password lives - only after it, so no
+ * caller can ask for a secret before the user agreed to lose the old key.
  *
  * @param {() => Promise<{address: string, encrypted: EncryptedKey}>} unlock -
  *   Prompts for whatever is needed and returns the key to store.
@@ -236,81 +233,27 @@ async function storeSession(
 }
 
 /**
- * Prompts for a new session password and encrypts the given private key with
- * it. Shared by `wallet login` and `wallet create --login`. The key is never
- * printed.
- *
- * @param {string} privateKey - The private key to encrypt.
- * @returns {Promise<{address: string, encrypted: EncryptedKey}>} The address
- *   the key belongs to, and the key encrypted.
+ * What scripts still calling the session-only key paths #194 removed in 1.6.0
+ * get, instead of commander's "unknown command" / "unknown option".
  */
-async function encryptNewKey(
-  privateKey: string,
-): Promise<{ address: string; encrypted: EncryptedKey }> {
-  const password = await promptNewPassword();
-  const { ethers } = await import("ethers");
-  const { address } = new ethers.Wallet(privateKey);
-  return { address, encrypted: encryptSessionKey(password, privateKey) };
-}
+const REMOVED_LOGIN =
+  "removed; use wallet save + wallet use (or wallet create --save)";
 
 /**
  * Generates a new, secure EVM-compatible wallet.
  * @param {object} [options]
- * @param {boolean} [options.login] - Encrypt it into .cmu-session (deprecated).
+ * @param {boolean} [options.login] - Removed; rejected before anything else.
  * @param {string} [options.save] - Encrypt it into the store under this name.
  * @returns {Promise<void>}
  */
 export async function runWalletCreate(
   options: { verbose?: boolean; login?: boolean; save?: string } = {},
 ): Promise<void> {
-  if (options.save !== undefined) {
-    if (options.login) {
-      throw new Error(
-        "--save and --login cannot be combined.\n" +
-          "\x1b[2mhint:\x1b[0m use --save <name>; --login is deprecated.",
-      );
-    }
-    return runWalletCreateSaved(options.save);
-  }
+  if (options.login) throw new Error(REMOVED_LOGIN);
+  if (options.save !== undefined) return runWalletCreateSaved(options.save);
 
   const { ethers } = await import("ethers");
   const wallet = ethers.Wallet.createRandom();
-
-  if (options.login) {
-    // Deprecated by #194. stderr, so the stdout below stays as it was.
-    console.warn(
-      "\n\x1b[33mwarning:\x1b[0m `cmu wallet create --login` is deprecated and will be removed in a later 1.x release.",
-    );
-    console.warn(
-      "\x1b[2mhint:\x1b[0m run `cmu wallet create --save <name>`, then `cmu wallet use <name>` - the key is stored encrypted and a mnemonic backup is printed.\n",
-    );
-    // The generated key goes straight into the encrypted session. Neither it
-    // nor the mnemonic is passed to console.log anywhere on this path, so
-    // nothing recoverable reaches scrollback or a CI log.
-    const { address, activeNetwork } = await storeSession(() =>
-      encryptNewKey(wallet.privateKey),
-    );
-    console.log("New CointMU wallet");
-    console.log("===========================");
-    console.log(`Address : ${address}`);
-    console.log("===========================");
-    console.log("Session encrypted and saved.");
-    console.log(`Active network: ${activeNetwork}`);
-    console.log(
-      "\n\x1b[33mwarning:\x1b[0m the private key and mnemonic were not printed - this wallet",
-    );
-    console.log(
-      "exists only inside .cmu-session. Lose that file or its password and the funds",
-    );
-    console.log("in it cannot be recovered.");
-    console.log(
-      "\x1b[2mhint:\x1b[0m run `cmu wallet create` without --login for a printed backup.\n",
-    );
-    console.log(
-      "`cmu deploy` will use this key automatically when PRIVATE_KEY is not set.",
-    );
-    return;
-  }
 
   console.log("New CointMU wallet");
   console.log("===========================");
@@ -342,35 +285,6 @@ export async function runWalletCreate(
   console.log("To keep this wallet encrypted and use it in a project, run:");
   console.log("  cmu wallet save <name>");
   console.log("  cmu wallet use <name>");
-}
-
-/**
- * Securely log into a wallet and create an encrypted session.
- * @returns {Promise<void>}
- */
-export async function runWalletLogin(): Promise<void> {
-  // Deprecated by #194. stderr, so the stdout below stays as it was.
-  console.warn(
-    "\n\x1b[33mwarning:\x1b[0m `cmu wallet login` is deprecated and will be removed in a later 1.x release.",
-  );
-  console.warn(
-    "\x1b[2mhint:\x1b[0m save the key once with `cmu wallet save <name>`, then run `cmu wallet use <name>` in the project.\n",
-  );
-  // Only login gets the PRIVATE_KEY hint: the env var stands in for a session
-  // key, but it cannot save, select or delete a wallet (#188).
-  const { address, activeNetwork } = await storeSession(async () =>
-    encryptNewKey(
-      await promptPrivateKey(
-        "run this in a terminal; in CI, set PRIVATE_KEY instead.",
-      ),
-    ),
-  );
-  console.log("Session encrypted and saved.");
-  console.log(`Logged in as ${address}`);
-  console.log(`Active network: ${activeNetwork}`);
-  console.log(
-    "`cmu deploy` will use this key automatically when PRIVATE_KEY is not set.",
-  );
 }
 
 /** 1-32 lowercase letters, digits, '-' or '_'; never starts like a flag. */
@@ -1170,10 +1084,7 @@ export const walletCommand = new Command("wallet").description(
 walletCommand
   .command("create")
   .description("Generate a new EVM-compatible wallet")
-  .option(
-    "--login",
-    "Deprecated: use --save <name> (encrypts the new key into a session)",
-  )
+  .addOption(new Option("--login").hideHelp())
   .option(
     "--save <name>",
     "Encrypt the new key into ~/.cmu-wallets.json under <name> and print only the address and mnemonic",
@@ -1184,13 +1095,16 @@ walletCommand
     ),
   );
 
+// Hidden, and takes anything, so every old invocation reaches REMOVED_LOGIN.
 walletCommand
-  .command("login")
+  .command("login", { hidden: true })
   .description(
-    "Deprecated: use `cmu wallet save` + `cmu wallet use` (stores a key in an encrypted session)",
+    "Removed: use `wallet save` + `wallet use` (or `wallet create --save`)",
   )
+  .allowUnknownOption()
+  .allowExcessArguments()
   .action((options, command) =>
-    runWalletLogin().catch(fail("wallet login", command.optsWithGlobals())),
+    fail("wallet login", command.optsWithGlobals())(new Error(REMOVED_LOGIN)),
   );
 
 walletCommand
