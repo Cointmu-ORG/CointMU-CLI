@@ -147,51 +147,106 @@ async function promptNewPassword(
 }
 
 /**
+ * Stops before a session write that would throw away a key cmu has no other
+ * copy of: the session holds a key it can open, and its address is not a
+ * saved wallet. Asks, defaulting to no. Replacing a session with the wallet
+ * it already holds needs no case of its own: that wallet is saved.
+ *
+ * Runs before any prompt for a key or password, so nobody types a secret
+ * only to be told no. An unreadable session passes: nothing can be read from
+ * it to name, and writing a session is the way out of one. An unreadable
+ * store throws: whether the key is safe cannot be told.
+ *
+ * @returns {Promise<void>} Resolves when the session may be replaced.
+ * @throws {Error} When the user declines, or cannot be asked.
+ */
+async function confirmSessionReplace(): Promise<void> {
+  let session: SessionData | null;
+  try {
+    session = await readSession();
+  } catch {
+    // Unreadable: no address to name, and replacing it is the way out of it.
+    return;
+  }
+  if (!session || !sessionHoldsOpenableKey(session)) return;
+  const previous = session.address;
+  if ((await loadWallets()).some((w) => sameAddress(w.address, previous))) {
+    return;
+  }
+
+  console.log(
+    `\x1b[33mwarning:\x1b[0m .cmu-session holds the key for ${previous}, which is not a saved wallet.`,
+  );
+  console.log(
+    "Replacing the session deletes that key for good - cmu keeps no other copy and cannot recover it.",
+  );
+  console.log(
+    "\x1b[2mhint:\x1b[0m keep it first with `cmu wallet save <name> --session`, then run this command again.",
+  );
+  requireInteractive(
+    "confirmation",
+    "keep the key first with `cmu wallet save <name> --session`, or run this in a terminal to confirm.",
+  );
+  const inquirer = (await import("inquirer")).default;
+  const { replace } = await inquirer.prompt([
+    {
+      type: "confirm",
+      name: "replace",
+      message: "Replace it anyway?",
+      default: false,
+    },
+  ]);
+  if (!replace) {
+    throw new Error(
+      `aborted: .cmu-session was not changed; it still holds ${previous}.`,
+    );
+  }
+}
+
+/**
  * Writes an encrypted key to .cmu-session, carrying the active network over.
  *
  * The one writer of a key into the session, so every way of getting there
- * (`login`, `create --login`, `use`) keeps the network #126 was about.
+ * (`login`, `create --login`, `use`) keeps the network #126 was about, and
+ * passes the #182 check. The check runs first; `unlock` - where every prompt
+ * for a key or password lives - only after it, so no caller can ask for a
+ * secret before the user agreed to lose the old key.
  *
- * @param {string} address - The address the key belongs to.
- * @param {EncryptedKey} encrypted - The encrypted key.
- * @returns {Promise<string>} The network the session ended up pointing at.
+ * @param {() => Promise<{address: string, encrypted: EncryptedKey}>} unlock -
+ *   Prompts for whatever is needed and returns the key to store.
+ * @returns {Promise<{address: string, activeNetwork: string}>} The address the
+ *   session belongs to, and the network it ended up pointing at.
  */
 async function storeSession(
-  address: string,
-  encrypted: EncryptedKey,
-): Promise<string> {
+  unlock: () => Promise<{ address: string; encrypted: EncryptedKey }>,
+): Promise<{ address: string; activeNetwork: string }> {
+  await confirmSessionReplace();
+  const { address, encrypted } = await unlock();
   const activeNetwork = await carriedOverNetwork();
   await writeSessionFile(getSessionFilePath(), {
     address,
     activeNetwork,
     ...encrypted,
   });
-  return activeNetwork;
+  return { address, activeNetwork };
 }
 
 /**
- * Prompts for a session password, encrypts the given private key with it and
- * writes the result to .cmu-session.
- *
- * Shared by `wallet login` and `wallet create --login` so both go through one
- * implementation of the encrypt-and-store path. The key is never printed.
+ * Prompts for a new session password and encrypts the given private key with
+ * it. Shared by `wallet login` and `wallet create --login`. The key is never
+ * printed.
  *
  * @param {string} privateKey - The private key to encrypt.
- * @returns {Promise<{address: string, activeNetwork: string}>} The address the
- *   session belongs to, and the network it ended up pointing at.
+ * @returns {Promise<{address: string, encrypted: EncryptedKey}>} The address
+ *   the key belongs to, and the key encrypted.
  */
-async function createEncryptedSession(
+async function encryptNewKey(
   privateKey: string,
-): Promise<{ address: string; activeNetwork: string }> {
+): Promise<{ address: string; encrypted: EncryptedKey }> {
   const password = await promptNewPassword();
   const { ethers } = await import("ethers");
-
   const { address } = new ethers.Wallet(privateKey);
-  const activeNetwork = await storeSession(
-    address,
-    encryptSessionKey(password, privateKey),
-  );
-  return { address, activeNetwork };
+  return { address, encrypted: encryptSessionKey(password, privateKey) };
 }
 
 /**
@@ -228,8 +283,8 @@ export async function runWalletCreate(
     // The generated key goes straight into the encrypted session. Neither it
     // nor the mnemonic is passed to console.log anywhere on this path, so
     // nothing recoverable reaches scrollback or a CI log.
-    const { address, activeNetwork } = await createEncryptedSession(
-      wallet.privateKey,
+    const { address, activeNetwork } = await storeSession(() =>
+      encryptNewKey(wallet.privateKey),
     );
     console.log("New CointMU wallet");
     console.log("===========================");
@@ -297,8 +352,9 @@ export async function runWalletLogin(): Promise<void> {
   console.warn(
     "\x1b[2mhint:\x1b[0m save the key once with `cmu wallet save <name>`, then run `cmu wallet use <name>` in the project.\n",
   );
-  const privateKey = await promptPrivateKey();
-  const { address, activeNetwork } = await createEncryptedSession(privateKey);
+  const { address, activeNetwork } = await storeSession(async () =>
+    encryptNewKey(await promptPrivateKey()),
+  );
   console.log("Session encrypted and saved.");
   console.log(`Logged in as ${address}`);
   console.log(`Active network: ${activeNetwork}`);
@@ -556,60 +612,44 @@ export async function runWalletSave(
  * @returns {Promise<void>}
  */
 export async function runWalletUse(name: string): Promise<void> {
-  const wallets = await loadWallets();
-  const wallet = findWallet(wallets, name);
+  const wallet = findWallet(await loadWallets(), name);
 
-  requireInteractive("a password");
-  const inquirer = (await import("inquirer")).default;
-  const { password } = await inquirer.prompt([
-    {
-      type: "password",
-      name: "password",
-      message: `Password for wallet '${name}':`,
-      mask: "*",
-    },
-  ]);
+  // The stored address is plaintext and not covered by the GCM tag, so unlock
+  // re-derives it from the key and refuses a mismatch before anything is written.
+  const { address, activeNetwork } = await storeSession(async () => {
+    requireInteractive("a password");
+    const inquirer = (await import("inquirer")).default;
+    const { password } = await inquirer.prompt([
+      {
+        type: "password",
+        name: "password",
+        message: `Password for wallet '${name}':`,
+        mask: "*",
+      },
+    ]);
 
-  let privateKey: string;
-  try {
-    privateKey = decryptSessionKey(password, wallet);
-  } catch {
-    throw new Error(
-      `wrong password for wallet '${name}', or ~/.cmu-wallets.json has been tampered with.`,
-    );
-  }
-  const { ethers } = await import("ethers");
-  const { address } = new ethers.Wallet(privateKey);
-  if (!sameAddress(address, wallet.address)) {
-    throw new Error(
-      `wallet '${name}' does not hold the key for ${wallet.address} - ~/.cmu-wallets.json has been modified.\n` +
-        `\x1b[2mhint:\x1b[0m run \`cmu wallet delete ${name}\` and save the key again.`,
-    );
-  }
+    let privateKey: string;
+    try {
+      privateKey = decryptSessionKey(password, wallet);
+    } catch {
+      throw new Error(
+        `wrong password for wallet '${name}', or ~/.cmu-wallets.json has been tampered with.`,
+      );
+    }
+    const { ethers } = await import("ethers");
+    const { address } = new ethers.Wallet(privateKey);
+    if (!sameAddress(address, wallet.address)) {
+      throw new Error(
+        `wallet '${name}' does not hold the key for ${wallet.address} - ~/.cmu-wallets.json has been modified.\n` +
+          `\x1b[2mhint:\x1b[0m run \`cmu wallet delete ${name}\` and save the key again.`,
+      );
+    }
 
-  // The one way `use` can lose a key for good: a session made by `login`
-  // whose key was never saved.
-  const previous = await sessionAddress();
-  if (
-    previous &&
-    !sameAddress(previous, address) &&
-    !wallets.some((w) => sameAddress(w.address, previous))
-  ) {
-    console.log(
-      `\x1b[33mwarning:\x1b[0m replacing the session for ${previous} - that key is not a saved wallet.`,
-    );
-    console.log(
-      "\x1b[2mhint:\x1b[0m enter it again with `cmu wallet save <name>` if you still need it.",
-    );
-  }
-
-  const { encryptedKey, salt, iv, authTag, iterations } = wallet;
-  const activeNetwork = await storeSession(address, {
-    encryptedKey,
-    salt,
-    iv,
-    authTag,
-    iterations,
+    const { encryptedKey, salt, iv, authTag, iterations } = wallet;
+    return {
+      address,
+      encrypted: { encryptedKey, salt, iv, authTag, iterations },
+    };
   });
   console.log(`Active wallet is now '${name}' (${address})`);
   console.log(`Active network: ${activeNetwork}`);
