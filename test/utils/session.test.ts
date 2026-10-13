@@ -48,10 +48,20 @@ describe("decryptSessionKey", () => {
     );
   });
 
-  it("points the user at re-login when a session cannot be unlocked", () => {
-    expect(() => decryptSessionKey("wrong password", makeSession())).toThrow(
-      /cmu wallet login/,
+  // #188: `wallet login` needs the raw key and is deprecated; a session from
+  // `wallet use <name>` is recreated with `use`.
+  it("points the user at the password, then `wallet use`, never `login`", () => {
+    const error = (() => {
+      try {
+        decryptSessionKey("wrong password", makeSession());
+      } catch (e) {
+        return e as Error;
+      }
+    })();
+    expect(error?.message.split("\n").at(-1)).toBe(
+      "\x1b[2mhint:\x1b[0m check the password. To start a fresh session, run `cmu wallet use <name>`.",
     );
+    expect(error?.message).not.toContain("wallet login");
   });
 
   it("stamps new sessions with the current PBKDF2 work factor", () => {

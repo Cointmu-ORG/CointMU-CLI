@@ -368,6 +368,22 @@ describe("resolveConsoleContext", () => {
     expect(ctx.signer?.address).toBe(new ethers.Wallet(PRIVATE_KEY).address);
     expect(spies.createDecipheriv).toHaveBeenCalledTimes(1);
   });
+
+  // #188: the session prompt is reached through resolvePrivateKey(), so a
+  // wrong password here gets the session hint, not `wallet login`.
+  it("hints at the password, then `wallet use`, on a wrong session password", async () => {
+    writeConfig();
+    writeSessionFile();
+    mockPassword(async () => ({ password: "wrong horse 1" }));
+
+    const error = await resolve({ yes: true }).catch((e: Error) => e);
+
+    expect((error as Error).message.split("\n").at(-1)).toBe(
+      "\x1b[2mhint:\x1b[0m check the password. To start a fresh session, run `cmu wallet use <name>`.",
+    );
+    expect((error as Error).message).not.toContain("wallet login");
+    expectNoKeyLeak([...out, (error as Error).message], tmpDir);
+  });
 });
 
 describe("signerLabel", () => {

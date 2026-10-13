@@ -205,7 +205,8 @@ export function encryptSessionKey(
  * Re-derives the AES key and decrypts the private key stored in a session.
  * Any crypto failure (wrong password or tampered file, caught by the GCM
  * auth tag) is surfaced as a single clear error rather than a raw crypto
- * exception.
+ * exception. Its message and hint speak about .cmu-session; a caller
+ * decrypting a saved wallet replaces them with its own (see `wallet use`).
  *
  * @param {string} password - The session password.
  * @param {Partial<EncryptedKey>} session - The parsed .cmu-session contents,
@@ -248,7 +249,7 @@ export function decryptSessionKey(
   } catch {
     throw new Error(
       "Invalid session password, or .cmu-session is from an older version or has been tampered with.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` again to recreate the session.",
+        "\x1b[2mhint:\x1b[0m check the password. To start a fresh session, run `cmu wallet use <name>`.",
     );
   }
 }
