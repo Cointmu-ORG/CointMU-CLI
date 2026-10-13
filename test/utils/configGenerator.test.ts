@@ -44,5 +44,16 @@ describe("generateConfigFiles", () => {
         fs.readFileSync(path.join(tmpDir, ".gitignore"), "utf8"),
       ).toContain(".cmu-session");
     });
+
+    it(`ignores only the local devnet's deployment records for ${language}`, async () => {
+      await generateConfigFiles(tmpDir, language);
+
+      const lines = fs
+        .readFileSync(path.join(tmpDir, ".gitignore"), "utf8")
+        .split("\n");
+      expect(lines).toContain("deployments/local/");
+      expect(lines).not.toContain("deployments/");
+      expect(lines).not.toContain("deployments");
+    });
   }
 });

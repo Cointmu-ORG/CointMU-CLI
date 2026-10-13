@@ -15,7 +15,7 @@ const TYPESCRIPT_LANG = "typescript";
 const DEPLOY_IMPORTS = [
   ["{ ethers }", "ethers"],
   ["{ existsSync }", "fs"],
-  ["{ mkdir, readFile, writeFile }", "fs/promises"],
+  ["{ readFile }", "fs/promises"],
   ["path", "path"],
 ] as const;
 
@@ -61,19 +61,8 @@ async function main() {
   await contract.waitForDeployment();
   
   const address = await contract.getAddress();
+  // \`cmu deploy\` reads the address off the chain and records it itself.
   console.log(\`${contractName} deployed at \${address}\`);
-
-  // Save artifact
-  const deploymentDir = path.resolve(__dirname, '../deployments');
-  await mkdir(deploymentDir, { recursive: true });
-  const deploymentPath = path.join(deploymentDir, '${contractName}.json');
-  
-  await writeFile(deploymentPath, JSON.stringify({
-    address,
-    abi,
-    network: await provider.getNetwork().then(n => ({ chainId: Number(n.chainId), name: n.name }))
-  }, null, 2) + '\\n');
-  console.log(\`Deployment saved to \${deploymentPath}\`);
 }
 
 main().catch((error) => {
