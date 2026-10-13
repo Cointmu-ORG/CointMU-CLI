@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Block } from "ethers";
+import { keccak256, type Block } from "ethers";
 import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
@@ -85,6 +85,51 @@ describe("formatContract", () => {
     expect(out).toContain("4 bytes");
     expect(out).toContain("1.0 (1000000000000000000 wei)");
   });
+
+  const record = (code: string) => ({
+    record: {
+      format: 1,
+      contract: "Token",
+      network: "local",
+      chainId: 1912,
+      address: ADDRESS,
+      deployer: ADDRESS,
+      txHash: `0x${"11".repeat(32)}`,
+      blockNumber: 3,
+      timestamp: "2026-10-13T08:00:00.000Z",
+      codeHash: keccak256(code),
+    },
+    file: "deployments/local/Token.json",
+  });
+
+  it("names an address a record matches, with the code check", () => {
+    const out = formatContract(ADDRESS, "0x60806040", 0n, "local", [
+      record("0x60806040"),
+    ]);
+
+    expect(out).toContain(
+      "Recorded as  : Token (deployments/local/Token.json, recorded 2026-10-13T08:00:00.000Z)\n" +
+        "Record check : code matches the record\n",
+    );
+  });
+
+  it("adds nothing for an address no record names", () => {
+    expect(formatContract(ADDRESS, "0x60806040", 0n, "local", [])).not.toMatch(
+      /Recorded as|Record check/,
+    );
+  });
+
+  // Read-only: a stale record is labelled, not refused.
+  it("marks a stale record instead of refusing", () => {
+    expect(
+      formatContract(ADDRESS, "0x6001", 0n, "local", [record("0x60806040")]),
+    ).toContain(
+      "Record check : code differs from the record - the record is stale",
+    );
+    expect(
+      formatContract(ADDRESS, "0x", 0n, "local", [record("0x60806040")]),
+    ).toContain("Record check : no code at the address - the record is stale");
+  });
 });
 
 describe("runExplorer", () => {
@@ -146,6 +191,7 @@ describe("runExplorer", () => {
         },
       },
       formatEther: actual.formatEther,
+      keccak256: actual.keccak256,
     }));
   }
 
@@ -246,6 +292,49 @@ describe("runExplorer", () => {
     expect(vi.mocked(console.log).mock.calls.join("\n")).toMatch(
       /not a contract/,
     );
+  });
+
+  it("labels an address from this network's records only", async () => {
+    writeConfig();
+    for (const network of ["local", "kampus"]) {
+      const dir = path.join(tmpDir, "deployments", network);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, `${network === "local" ? "Token" : "Other"}.json`),
+        JSON.stringify({
+          format: 1,
+          contract: network === "local" ? "Token" : "Other",
+          network,
+          chainId: 1912,
+          address: ADDRESS.toLowerCase(),
+          deployer: ADDRESS,
+          txHash: `0x${"11".repeat(32)}`,
+          blockNumber: 3,
+          timestamp: "2026-10-13T08:00:00.000Z",
+          codeHash: keccak256("0x60806040"),
+        }),
+      );
+    }
+    // Garbage next to it is skipped, not fatal.
+    fs.writeFileSync(
+      path.join(tmpDir, "deployments", "local", "Junk.json"),
+      "{",
+    );
+    mockEthers({
+      getCode: async () => "0x60806040",
+      getBalance: async () => 0n,
+    });
+
+    await expect(
+      run({ contract: ADDRESS, yes: true }),
+    ).resolves.toBeUndefined();
+
+    const printed = vi.mocked(console.log).mock.calls.join("\n");
+    expect(printed).toContain(
+      `Recorded as  : Token (${path.join("deployments", "local", "Token.json")}, recorded 2026-10-13T08:00:00.000Z)`,
+    );
+    expect(printed).toContain("Record check : code matches the record");
+    expect(printed).not.toContain("Other");
   });
 
   it("surfaces an unreachable endpoint instead of a raw RPC error", async () => {
