@@ -419,8 +419,12 @@ which defaults to **No**.
 
 After sending, the transaction hash is printed straight away. `transfer`
 then waits up to 120 seconds for one confirmation and prints the block
-and the new balance. Blocks only appear while something mines, so on a
-chain that is not mining run `cmu mine start`.
+and the new balance. If no confirmation comes, the hint depends on the
+node: the local DevNet mines each transaction at once, so a timeout there
+means the node stopped or dropped it; a geth node only makes blocks while it
+mines, so check `cmu mine status` first (`cmu mine start` moves that node's
+etherbase for everyone). Either way, check `cmu wallet balance` before sending
+again.
 
 | Exit code | Meaning                                                                                                                                                                                                                                                  |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
