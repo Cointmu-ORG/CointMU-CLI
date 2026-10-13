@@ -15,8 +15,10 @@ import {
   type EncryptedKey,
   encryptSessionKey,
   getSessionFilePath,
+  LEGACY_PBKDF2_ITERATIONS,
   readSession,
   requireSession,
+  type SessionData,
   validatePasswordStrength,
   writeSessionFile,
 } from "../utils/session";
@@ -432,14 +434,89 @@ async function runWalletCreateSaved(name: string): Promise<void> {
 }
 
 /**
+ * Whether a session holds a key this cmu can open: every AES-GCM field is
+ * there. A session without one - network only, or from before GCM - has no
+ * key to save here, and none to lose.
+ *
+ * @param {SessionData} session - The parsed .cmu-session.
+ * @returns {boolean} True when the session carries a complete encrypted key.
+ */
+function sessionHoldsOpenableKey(
+  session: SessionData,
+): session is SessionData & Omit<EncryptedKey, "iterations"> {
+  return !!(
+    session.encryptedKey &&
+    session.salt &&
+    session.iv &&
+    session.authTag
+  );
+}
+
+/**
+ * `wallet save <name> --session`: copies this project's session key into the
+ * store as is, the reverse of `use`. The ciphertext is never decrypted, so
+ * nothing is prompted and no key is in memory; the entry opens with the
+ * session's password.
+ *
+ * The session address is plaintext and not covered by the GCM tag. An edited
+ * one gives an entry `use` refuses, since `use` checks the decrypted address.
+ *
+ * @param {string} name - The name to save the wallet under.
+ * @param {WalletEntry[]} wallets - The wallets already saved.
+ * @returns {Promise<void>}
+ */
+async function saveSessionKey(
+  name: string,
+  wallets: WalletEntry[],
+): Promise<void> {
+  const session = await readSession();
+  if (!session || !sessionHoldsOpenableKey(session)) {
+    throw new Error(
+      "this project's .cmu-session holds no key to save.\n" +
+        "\x1b[2mhint:\x1b[0m run it in the project directory whose session you want to keep.",
+    );
+  }
+  const twin = wallets.find((w) => sameAddress(w.address, session.address));
+  if (twin) {
+    throw new Error(
+      `this session's key is already saved as '${twin.name}'.\n` +
+        `\x1b[2mhint:\x1b[0m nothing to do; \`cmu wallet use ${twin.name}\` brings it back.`,
+    );
+  }
+
+  const { address, encryptedKey, salt, iv, authTag } = session;
+  await saveWallet({
+    name,
+    address,
+    encryptedKey,
+    salt,
+    iv,
+    authTag,
+    iterations: session.iterations ?? LEGACY_PBKDF2_ITERATIONS,
+  });
+  console.log(`Saved wallet '${name}' (${address}) from .cmu-session.`);
+  console.log("It opens with this session's password.");
+  console.log(
+    `\x1b[2mhint:\x1b[0m run \`cmu wallet use ${name}\` in a project to make it active there.`,
+  );
+}
+
+/**
  * Saves a private key as a named wallet in ~/.cmu-wallets.json, encrypted
  * with its own password. The name is checked before anything is prompted.
  *
  * @param {string} name - The name to save the wallet under.
+ * @param {object} [options]
+ * @param {boolean} [options.session] - Save this project's session key
+ *   instead of prompting for one.
  * @returns {Promise<void>}
  */
-export async function runWalletSave(name: string): Promise<void> {
+export async function runWalletSave(
+  name: string,
+  options: { session?: boolean } = {},
+): Promise<void> {
   const wallets = await checkNewWalletName(name);
+  if (options.session) return saveSessionKey(name, wallets);
 
   const privateKey = await promptPrivateKey();
   const { ethers } = await import("ethers");
@@ -1042,8 +1119,14 @@ walletCommand
   .command("save <name>")
   .alias("add")
   .description("Save a private key as a named, encrypted wallet")
+  .option(
+    "--session",
+    "Save the key in this project's .cmu-session instead of prompting for one",
+  )
   .action((name, options, command) =>
-    runWalletSave(name).catch(fail("wallet save", command.optsWithGlobals())),
+    runWalletSave(name, options).catch(
+      fail("wallet save", command.optsWithGlobals()),
+    ),
   );
 
 walletCommand
