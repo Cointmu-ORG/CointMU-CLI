@@ -668,6 +668,106 @@ describe("wallet create --save", () => {
   });
 });
 
+// Issue #194: `login` and `create --login` keep working behind a deprecation
+// notice on stderr. stdout and the exit code stay exactly as they were, so a
+// script that reads them keeps working through the deprecation window.
+
+describe("deprecated login paths", () => {
+  const LOGIN_ANSWERS = { privateKey: KEY, password: PASSWORD };
+  const DEPLOY_LINE =
+    "`cmu deploy` will use this key automatically when PRIVATE_KEY is not set.";
+
+  function stdout(): string[] {
+    return vi.mocked(console.log).mock.calls.map((args) => args.join(" "));
+  }
+
+  function stderr(): string {
+    return [
+      ...vi.mocked(console.warn).mock.calls,
+      ...vi.mocked(console.error).mock.calls,
+    ]
+      .map((args) => args.join(" "))
+      .join("\n");
+  }
+
+  it("wallet login warns once on stderr, with stdout unchanged", async () => {
+    const { runWalletLogin } = await walletCommands(LOGIN_ANSWERS);
+    await runWalletLogin();
+
+    expect(stderr().match(/is deprecated/g)).toHaveLength(1);
+    expect(stderr()).toContain("`cmu wallet login` is deprecated");
+    expect(stderr()).toContain(
+      "`cmu wallet save <name>`, then run `cmu wallet use <name>`",
+    );
+    expect(stdout()).toEqual([
+      "Session encrypted and saved.",
+      `Logged in as ${ADDRESS_A}`,
+      "Active network: local",
+      DEPLOY_LINE,
+    ]);
+    expectNoKeyLeak();
+  });
+
+  it("wallet create --login warns once on stderr, with stdout unchanged", async () => {
+    const { runWalletCreate } = await walletCommands(LOGIN_ANSWERS);
+    await runWalletCreate({ login: true });
+
+    expect(stderr().match(/is deprecated/g)).toHaveLength(1);
+    expect(stderr()).toContain("`cmu wallet create --login` is deprecated");
+    expect(stderr()).toContain(
+      "`cmu wallet create --save <name>`, then `cmu wallet use <name>`",
+    );
+    const session = readSession();
+    expect(stdout()).toEqual([
+      "New CointMU wallet",
+      "===========================",
+      `Address : ${session.address}`,
+      "===========================",
+      "Session encrypted and saved.",
+      "Active network: local",
+      "\n\x1b[33mwarning:\x1b[0m the private key and mnemonic were not printed - this wallet",
+      "exists only inside .cmu-session. Lose that file or its password and the funds",
+      "in it cannot be recovered.",
+      "\x1b[2mhint:\x1b[0m run `cmu wallet create` without --login for a printed backup.\n",
+      DEPLOY_LINE,
+    ]);
+    expectNoKeyLeak([decryptSessionKey(PASSWORD, session)]);
+  });
+
+  describe.each([[["login"]], [["create", "--login"]]])(
+    "through the commander action: %j",
+    (argv) => {
+      let exit: ReturnType<typeof vi.spyOn>;
+      beforeEach(() => {
+        exit = vi
+          .spyOn(process, "exit")
+          .mockImplementation((() => undefined) as never);
+      });
+
+      it("exits as before on success", async () => {
+        const { walletCommand } = await walletCommands(LOGIN_ANSWERS);
+        await walletCommand.parseAsync(argv, { from: "user" });
+
+        expect(exit).not.toHaveBeenCalled();
+        expect(stderr()).toContain("is deprecated");
+        expect(stdout().join("\n")).not.toContain("deprecated");
+        expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(true);
+      });
+
+      it("exits 1 without a terminal, still warning on stderr", async () => {
+        process.stdin.isTTY = false;
+        const { walletCommand } = await walletCommands();
+        await walletCommand.parseAsync(argv, { from: "user" });
+
+        expect(exit).toHaveBeenCalledWith(1);
+        expect(stderr()).toContain("is deprecated");
+        expect(stderr()).toContain("non-interactive session");
+        expect(stdout().join("\n")).not.toContain("deprecated");
+      });
+    },
+  );
+});
+
 describe("wallet use", () => {
   it("writes a session for the wallet that opens with its password", async () => {
     await save("deployer");

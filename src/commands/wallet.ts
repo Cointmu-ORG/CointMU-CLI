@@ -195,7 +195,7 @@ async function createEncryptedSession(
 /**
  * Generates a new, secure EVM-compatible wallet.
  * @param {object} [options]
- * @param {boolean} [options.login] - Encrypt it into .cmu-session.
+ * @param {boolean} [options.login] - Encrypt it into .cmu-session (deprecated).
  * @param {string} [options.save] - Encrypt it into the store under this name.
  * @returns {Promise<void>}
  */
@@ -216,6 +216,13 @@ export async function runWalletCreate(
   const wallet = ethers.Wallet.createRandom();
 
   if (options.login) {
+    // Deprecated by #194. stderr, so the stdout below stays as it was.
+    console.warn(
+      "\n\x1b[33mwarning:\x1b[0m `cmu wallet create --login` is deprecated and will be removed in a later 1.x release.",
+    );
+    console.warn(
+      "\x1b[2mhint:\x1b[0m run `cmu wallet create --save <name>`, then `cmu wallet use <name>` - the key is stored encrypted and a mnemonic backup is printed.\n",
+    );
     // The generated key goes straight into the encrypted session. Neither it
     // nor the mnemonic is passed to console.log anywhere on this path, so
     // nothing recoverable reaches scrollback or a CI log.
@@ -278,6 +285,13 @@ export async function runWalletCreate(
  * @returns {Promise<void>}
  */
 export async function runWalletLogin(): Promise<void> {
+  // Deprecated by #194. stderr, so the stdout below stays as it was.
+  console.warn(
+    "\n\x1b[33mwarning:\x1b[0m `cmu wallet login` is deprecated and will be removed in a later 1.x release.",
+  );
+  console.warn(
+    "\x1b[2mhint:\x1b[0m save the key once with `cmu wallet save <name>`, then run `cmu wallet use <name>` in the project.\n",
+  );
   const privateKey = await promptPrivateKey();
   const { address, activeNetwork } = await createEncryptedSession(privateKey);
   console.log("Session encrypted and saved.");
@@ -986,7 +1000,7 @@ walletCommand
   .description("Generate a new EVM-compatible wallet")
   .option(
     "--login",
-    "Encrypt the new key straight into a session instead of printing it",
+    "Deprecated: use --save <name> (encrypts the new key into a session)",
   )
   .option(
     "--save <name>",
@@ -1000,7 +1014,9 @@ walletCommand
 
 walletCommand
   .command("login")
-  .description("Log in and store the key in an encrypted session")
+  .description(
+    "Deprecated: use `cmu wallet save` + `cmu wallet use` (stores a key in an encrypted session)",
+  )
   .action((options, command) =>
     runWalletLogin().catch(fail("wallet login", command.optsWithGlobals())),
   );
