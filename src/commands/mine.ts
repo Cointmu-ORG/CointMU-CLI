@@ -135,6 +135,7 @@ export async function readStatus(
  */
 async function sendMiner(
   provider: JsonRpcProvider,
+  networkName: string,
   method: string,
   params: unknown[],
 ): Promise<void> {
@@ -143,7 +144,7 @@ async function sendMiner(
   } catch (error) {
     if (!isUnsupported(error)) throw error;
     throw new Error(
-      `this network has no ${method} RPC, so mining cannot be controlled here.\n` +
+      `network '${networkName}' has no ${method} RPC, so mining cannot be controlled here.\n` +
         `${HINT} the local DevNet mines a block for each transaction by itself; \`cmu mine\` is for a geth node with the miner API enabled.`,
       { cause: error },
     );
@@ -403,13 +404,15 @@ async function runMiner(
   if (starting) {
     await warnIfForeignEtherbase(provider, session.address);
     console.log(`Setting etherbase to ${session.address}...`);
-    await sendMiner(provider, "miner_setEtherbase", [session.address]);
+    await sendMiner(provider, network.name, "miner_setEtherbase", [
+      session.address,
+    ]);
   }
 
   console.log(
     `${starting ? "Starting" : "Stopping"} miner on ${network.name}...`,
   );
-  await sendMiner(provider, method, params);
+  await sendMiner(provider, network.name, method, params);
 
   if (!starting) {
     console.log("Mining stopped.");

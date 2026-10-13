@@ -230,7 +230,7 @@ describe("mineCommand", () => {
 
       const errors = await runFailing("start");
 
-      expect(errors).toContain("this network has no miner_setEtherbase RPC");
+      expect(errors).toContain("network 'local' has no miner_setEtherbase RPC");
       expect(errors).toContain(
         "the local DevNet mines a block for each transaction",
       );
@@ -242,7 +242,7 @@ describe("mineCommand", () => {
       node.rpc.miner_stop = unsupported.edr;
 
       expect(await runFailing("stop")).toContain(
-        "this network has no miner_stop RPC",
+        "network 'local' has no miner_stop RPC",
       );
     });
 
