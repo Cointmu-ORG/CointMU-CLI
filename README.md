@@ -118,8 +118,9 @@ Commands:
   version [options]           Displays detailed CLI, runtime, and dependency versions
   test [options]              Executes the automated smart contract test suite
   mine                        Mining control commands
-    start                     Starts mining blocks on the active network using the logged-in wallet
+    start [--watch]           Starts mining blocks on the active network using the logged-in wallet
     stop                      Stops mining blocks on the active network
+    status                    Shows mining state, hashrate, etherbase and your balance
   network [options]           Manage active RPC networks locally
     save <url> -n <name>      Save a new network or update an existing one
     use <name>                Switch the active network to the specified name
@@ -380,6 +381,35 @@ chain that is not mining run `cmu mine start`.
 | `0`       | Sent and confirmed in a block.                                                                                                                                                                                                                           |
 | `1`       | **Nothing was sent**: refused, aborted, or failed before sending. There are two exceptions, and the error says which: a transaction that was mined but reverted (the fee was paid), and a network error while broadcasting (it may still have gone out). |
 | `2`       | The transaction **was sent but is not confirmed yet**. Do **not** retry before checking `cmu wallet balance`: a retry can send the funds twice.                                                                                                          |
+
+## ⛏️ Mining
+
+```bash
+cmu mine start            # point the etherbase at the session wallet and start
+cmu mine start --watch    # same, then keep watching progress
+cmu mine status           # one-shot, read-only, no password
+cmu mine stop
+```
+
+`cmu mine` needs a geth node with the `miner` API enabled. The local DevNet
+mines a block for each transaction by itself and has no miner API, so
+`start` and `stop` say so there. `status` still works on the DevNet and
+shows `n/a` for what it cannot report.
+
+The etherbase and the miner are **node-wide**: `mine start` moves the
+rewards to your wallet for everyone, and `mine stop` stops mining for
+everyone. When the node is already mining to another address, `mine start`
+warns before taking it over.
+
+`--watch` polls every few seconds and shows the height, the hashrate, the
+blocks mined by your wallet since the watch started, and your balance. It
+also prints a line when the etherbase moves to someone else or comes back,
+when mining stops, after a reorg, and when the connection drops and comes
+back. The **balance change** counts block rewards, uncle rewards and fees,
+plus any transfer in or out, so it is not the same thing as the reward.
+Ctrl-C leaves the watch only: **mining keeps running** until
+`cmu mine stop`. Without a terminal, `--watch` prints one line per event
+instead of redrawing.
 
 ---
 
