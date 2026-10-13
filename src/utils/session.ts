@@ -1,7 +1,7 @@
 import * as crypto from "crypto";
 import * as path from "path";
 import { existsSync } from "fs";
-import { chmod, readFile, writeFile } from "fs/promises";
+import { chmod, readFile, rename, rm, writeFile } from "fs/promises";
 
 const ALGORITHM = "aes-256-gcm";
 const SESSION_FILE_NAME = ".cmu-session";
@@ -133,20 +133,32 @@ export function validatePasswordStrength(password: string): true | string {
 }
 
 /**
- * Persists session data with owner-only permissions (0600). chmod is applied
- * unconditionally so a file that already existed with looser permissions is
- * tightened on rewrite, not just on first creation.
+ * Replaces the session file atomically with owner-only permissions (0600).
+ *
+ * Written to a temp file next to it and renamed over it, like the wallets
+ * file: a process killed mid-write leaves the old session - and the key in it -
+ * intact rather than a truncated file. rename() replaces the inode, so a file
+ * that already existed with looser permissions ends up 0600 too.
  */
 export async function writeSessionFile(
   filePath: string,
   data: SessionData,
 ): Promise<void> {
-  // Trailing newline: what fs-extra's writeJson wrote, and what every other
-  // tool expects of a text file.
-  await writeFile(filePath, `${JSON.stringify(data, null, JSON_SPACES)}\n`, {
-    mode: SESSION_FILE_MODE,
-  });
-  await chmod(filePath, SESSION_FILE_MODE);
+  const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`;
+  try {
+    // Trailing newline: what fs-extra's writeJson wrote, and what every other
+    // tool expects of a text file.
+    await writeFile(tmpPath, `${JSON.stringify(data, null, JSON_SPACES)}\n`, {
+      mode: SESSION_FILE_MODE,
+      flag: "wx",
+    });
+    // The mode above is filtered through the umask; this is not.
+    await chmod(tmpPath, SESSION_FILE_MODE);
+    await rename(tmpPath, filePath);
+  } catch (error) {
+    await rm(tmpPath, { force: true });
+    throw error;
+  }
 }
 
 /** In-memory cache of the decrypted key for the lifetime of one CLI process. */
