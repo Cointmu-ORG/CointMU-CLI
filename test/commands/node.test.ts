@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import {
   nodeCommand,
   parsePort,
@@ -69,5 +72,111 @@ describe("parsePort", () => {
     const start = nodeCommand.commands.find((c) => c.name() === "start")!;
     const port = start.options.find((o) => o.long === "--port")!;
     expect(parsePort(port.defaultValue)).toBe(LOCAL_PORT);
+  });
+});
+
+// Issue #187: `node connect` printed ethers' name for the chain, which is
+// 'unknown' for every CointMU node, instead of the saved network it resolved.
+describe("node connect", () => {
+  const RPC_URL = "http://127.0.0.1:8585";
+  let tmpDir: string;
+  let dialed: string[];
+
+  /** Answers like ethers does for a chain it has no name registered for. */
+  class FakeProvider {
+    constructor(url: string) {
+      dialed.push(url);
+    }
+    async getNetwork() {
+      return { name: "unknown", chainId: 1912n };
+    }
+    async getBlockNumber() {
+      return 0;
+    }
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    dialed = [];
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-node-connect-"));
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    vi.stubEnv("HOME", tmpDir);
+    vi.stubEnv("USERPROFILE", tmpDir);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    // local and kampus share an endpoint, and so a chain ID: only the saved
+    // name tells them apart.
+    fs.writeFileSync(
+      path.join(tmpDir, ".cmu-networks.json"),
+      JSON.stringify([
+        { name: "local", rpcUrl: RPC_URL },
+        { name: "kampus", rpcUrl: RPC_URL },
+      ]),
+    );
+    vi.doMock("ethers", async (importOriginal) => {
+      const real = await importOriginal<typeof import("ethers")>();
+      return {
+        ...real,
+        ethers: { ...real.ethers, JsonRpcProvider: FakeProvider },
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    vi.resetModules();
+    vi.doUnmock("ethers");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  /** Runs `node connect` with the given arguments, returning what it printed. */
+  async function connect(...args: string[]): Promise<string[]> {
+    (console.log as any).mockClear();
+    const { nodeCommand: command } = await import("../../src/commands/node");
+    await command.parseAsync(["connect", ...args], { from: "user" });
+    return (console.log as any).mock.calls.map((call: unknown[]) =>
+      call.join(" "),
+    );
+  }
+
+  it("names the network given with -n, not ethers' 'unknown'", async () => {
+    const out = await connect("-n", "kampus");
+
+    expect(out).toContain("Network      : kampus");
+    expect(out.join("\n")).not.toContain("unknown");
+    expect(dialed).toEqual([RPC_URL]);
+  });
+
+  it("names the session's active network when -n is not given", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, ".cmu-session"),
+      JSON.stringify({ activeNetwork: "kampus" }),
+    );
+
+    expect(await connect()).toContain("Network      : kampus");
+  });
+
+  it("names the local network when there is no session", async () => {
+    expect(await connect()).toContain("Network      : local");
+  });
+
+  it("tells apart two saved networks that share a chain ID", async () => {
+    const local = await connect("-n", "local");
+    const kampus = await connect("-n", "kampus");
+
+    expect(local).toContain("Network      : local");
+    expect(kampus).toContain("Network      : kampus");
+    expect(local).toContain("Chain ID     : 1912");
+    expect(kampus).toContain("Chain ID     : 1912");
+  });
+
+  it("keeps the rest of the output as it was", async () => {
+    expect(await connect("-n", "local")).toEqual([
+      `Pinging ${RPC_URL}...`,
+      "Connected to the CointMU node.",
+      "Network      : local",
+      "Chain ID     : 1912",
+      "Block number : 0",
+    ]);
   });
 });

@@ -86,7 +86,9 @@ async function runNodeConnect(options: {
   const blockNumber = await provider.getBlockNumber();
 
   console.log("Connected to the CointMU node.");
-  console.log(`Network      : ${network.name}`);
+  // The saved name, not ethers': it has none registered for the CointMU chain
+  // and reports 'unknown', and two saved networks can share a chain ID.
+  console.log(`Network      : ${networkConfig.name}`);
   console.log(`Chain ID     : ${network.chainId}`);
   console.log(`Block number : ${blockNumber}`);
 }
