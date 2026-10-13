@@ -28,6 +28,30 @@ const ABI = [
   },
 ];
 
+/** Every file under dir, recursively. */
+function allFiles(dir: string): string[] {
+  return fs
+    .readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(entry.parentPath, entry.name));
+}
+
+/**
+ * The signer's key, with or without 0x, is nowhere in texts (what was printed,
+ * errors thrown) or in any file under dir (HOME and the project).
+ */
+function expectNoKeyLeak(texts: string[], dir: string): void {
+  const haystacks = [
+    texts.join("\n"),
+    ...allFiles(dir).map((f) => fs.readFileSync(f, "utf8")),
+  ].map((t) => t.toLowerCase());
+  for (const secret of [PRIVATE_KEY, PRIVATE_KEY.slice(2)]) {
+    for (const text of haystacks) {
+      expect(text).not.toContain(secret.toLowerCase());
+    }
+  }
+}
+
 describe("getContract", () => {
   let tmpDir: string;
   // A dead endpoint: building a provider, a wallet or a contract dials
@@ -120,19 +144,30 @@ describe("getContract", () => {
 
 describe("resolveConsoleContext", () => {
   let tmpDir: string;
+  let out: string[];
   const prevKey = process.env.PRIVATE_KEY;
   const realIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
+    // trust.ts remembers a confirmation per process; a fresh module per test
+    // keeps one test's --yes from skipping the next test's prompt.
+    vi.resetModules();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-console-ctx-"));
+    vi.stubEnv("HOME", tmpDir);
+    vi.stubEnv("USERPROFILE", tmpDir);
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
-    vi.spyOn(console, "log").mockImplementation(() => {});
+    out = [];
+    vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => {
+      out.push(a.map(String).join(" "));
+    });
     delete process.env.PRIVATE_KEY;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     vi.doUnmock("inquirer");
+    vi.doUnmock("crypto");
     vi.resetModules();
     fs.rmSync(tmpDir, { recursive: true, force: true });
     process.stdin.isTTY = realIsTTY;
@@ -252,6 +287,108 @@ describe("resolveConsoleContext", () => {
 
     await expect(resolve({ network: "mars", yes: true })).rejects.toThrow(
       /is not defined/,
+    );
+  });
+
+  // Issue #185: --no-signer decrypts nothing, so its trust prompt must not
+  // claim a key decrypted from the session; without the flag it still must.
+  it("prints the read-only trust wording with --no-signer", async () => {
+    writeConfig();
+    process.env.PRIVATE_KEY = PRIVATE_KEY;
+
+    const ctx = await resolve({ signer: false, yes: true });
+    ctx.provider.destroy();
+
+    const prompt = out.join("\n");
+    expect(prompt).toContain("does not unlock your session");
+    expect(prompt).not.toContain("decrypted from");
+    expectNoKeyLeak(out, tmpDir);
+  });
+
+  it("keeps the key-decryption trust wording without --no-signer", async () => {
+    writeConfig();
+    process.env.PRIVATE_KEY = PRIVATE_KEY;
+
+    const ctx = await resolve({ yes: true });
+    ctx.provider.destroy();
+
+    expect(out.join("\n")).toContain("decrypted from\n    your session");
+    expectNoKeyLeak(out, tmpDir);
+  });
+
+  /** Passes node's crypto through, counting the calls a decryption makes. */
+  function spyOnDecryption() {
+    const spies = { pbkdf2Sync: vi.fn(), createDecipheriv: vi.fn() };
+    vi.doMock("crypto", async (importOriginal) => {
+      const real = await importOriginal<typeof import("crypto")>();
+      const wrapped = {
+        ...real,
+        pbkdf2Sync: spies.pbkdf2Sync.mockImplementation(real.pbkdf2Sync),
+        createDecipheriv: spies.createDecipheriv.mockImplementation(
+          real.createDecipheriv,
+        ),
+      };
+      return { ...wrapped, default: wrapped };
+    });
+    return spies;
+  }
+
+  function mockPassword(answer: () => Promise<{ password: string }>): void {
+    vi.doMock("inquirer", () => ({ default: { prompt: answer } }));
+  }
+
+  it("never decrypts a locked session with --no-signer", async () => {
+    writeConfig();
+    writeSessionFile();
+    const spies = spyOnDecryption();
+    mockPassword(async () => {
+      throw new Error("inquirer.prompt should not be called");
+    });
+
+    const ctx = await resolve({ signer: false, yes: true });
+    ctx.provider.destroy();
+
+    expect(ctx.signer).toBeUndefined();
+    expect(spies.pbkdf2Sync).not.toHaveBeenCalled();
+    expect(spies.createDecipheriv).not.toHaveBeenCalled();
+    expectNoKeyLeak(out, tmpDir);
+  });
+
+  // The control for the test above: the same spies do see a decryption when
+  // the flag is absent, so their silence there means something.
+  it("decrypts the session, seen by the same spies, without --no-signer", async () => {
+    writeConfig();
+    writeSessionFile();
+    const spies = spyOnDecryption();
+    mockPassword(async () => ({ password: SESSION_PASSWORD }));
+
+    const ctx = await resolve({ yes: true });
+    ctx.provider.destroy();
+
+    expect(ctx.signer?.address).toBe(new ethers.Wallet(PRIVATE_KEY).address);
+    expect(spies.createDecipheriv).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("signerLabel", () => {
+  async function label(signer: { address: string } | undefined, options = {}) {
+    const { signerLabel } = await import("../../src/commands/console");
+    return signerLabel(signer, options);
+  }
+
+  it("prints the signer's address when there is one", async () => {
+    expect(await label({ address: ADDRESS })).toBe(ADDRESS);
+  });
+
+  it("names the flag, with no key hint, when --no-signer left it out", async () => {
+    expect(await label(undefined, { signer: false })).toBe(
+      "none (--no-signer)",
+    );
+  });
+
+  it("says how to add a key when none was found", async () => {
+    expect(await label(undefined)).toBe(
+      "none (no key) - run `cmu wallet use <name>`, or set PRIVATE_KEY in .env or cmu.config.ts",
     );
   });
 });
@@ -539,31 +676,6 @@ describe("getDeployed", () => {
     expect(provider.getCode).not.toHaveBeenCalled();
   });
 
-  /** Every file under dir, recursively. */
-  function allFiles(dir: string): string[] {
-    return fs
-      .readdirSync(dir, { recursive: true, withFileTypes: true })
-      .filter((entry) => entry.isFile())
-      .map((entry) => path.join(entry.parentPath, entry.name));
-  }
-
-  /**
-   * The signer's key, with or without 0x, is nowhere in what was printed, in
-   * the errors thrown, or in any file under tmpDir (HOME and the project).
-   */
-  function expectNoKeyLeak(errors: string[]): void {
-    const haystacks = [
-      out.join("\n"),
-      errors.join("\n"),
-      ...allFiles(tmpDir).map((f) => fs.readFileSync(f, "utf8")),
-    ].map((t) => t.toLowerCase());
-    for (const secret of [PRIVATE_KEY, PRIVATE_KEY.slice(2)]) {
-      for (const text of haystacks) {
-        expect(text).not.toContain(secret.toLowerCase());
-      }
-    }
-  }
-
   it("leaks the signer's key nowhere, resolving or refusing", async () => {
     const getDeployed = await load();
     const errors: string[] = [];
@@ -581,12 +693,14 @@ describe("getDeployed", () => {
 
     expect(out.some((l) => l.startsWith("getDeployed: Token"))).toBe(true);
     expect(errors).toHaveLength(3);
-    expectNoKeyLeak(errors);
+    expectNoKeyLeak([...out, ...errors], tmpDir);
   });
 
   it("expectNoKeyLeak catches a planted key", () => {
-    expect(() => expectNoKeyLeak([`x ${PRIVATE_KEY.slice(2)}`])).toThrow();
+    expect(() =>
+      expectNoKeyLeak([`x ${PRIVATE_KEY.slice(2)}`], tmpDir),
+    ).toThrow();
     fs.writeFileSync(path.join(tmpDir, "leak.txt"), PRIVATE_KEY);
-    expect(() => expectNoKeyLeak([])).toThrow();
+    expect(() => expectNoKeyLeak(out, tmpDir)).toThrow();
   });
 });

@@ -170,7 +170,7 @@ warning: the following project files will be executed as code:
 ? Execute these files? (y/N)
 ```
 
-`cmu compile` and `cmu explorer` load `cmu.config.ts` but never resolve a key, so they print the same file list with wording that claims no more than they do — no `PRIVATE_KEY` sentence, and an explicit note that the command does not sign anything and does not unlock your session.
+`cmu compile` and `cmu explorer` load `cmu.config.ts` but never resolve a key, and `cmu console --no-signer` never unlocks one, so they print the same file list with wording that claims no more than they do — no `PRIVATE_KEY` sentence, and an explicit note that the command does not sign anything and does not unlock your session.
 
 `cmu test` lists `cmu.config.ts` plus every test file mocha will run, including those in subdirectories, and says that they get your full environment (`.env` and shell) and a devnet `PRIVATE_KEY`. It asks before compiling, so declining runs nothing. A long list is cut after 20 files with a count of the rest.
 
