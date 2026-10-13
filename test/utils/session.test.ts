@@ -48,8 +48,8 @@ describe("decryptSessionKey", () => {
     );
   });
 
-  // #188: `wallet login` needs the raw key and is deprecated; a session from
-  // `wallet use <name>` is recreated with `use`.
+  // #188: `wallet login` needed the raw key and is removed (#194); a session
+  // from `wallet use <name>` is recreated with `use`.
   it("points the user at the password, then `wallet use`, never `login`", () => {
     const error = (() => {
       try {
@@ -175,7 +175,7 @@ describe("readSession", () => {
   });
 
   it("throws on a corrupt session rather than passing it off as absent", async () => {
-    // The distinction every caller but `wallet login` depends on: "no session"
+    // The distinction every caller but `wallet use` depends on: "no session"
     // is a state with a hint, an unreadable one is a fault worth surfacing.
     fs.writeFileSync(path.join(tmpDir, ".cmu-session"), "{ not json");
 

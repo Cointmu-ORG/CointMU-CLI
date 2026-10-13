@@ -79,7 +79,7 @@ export interface EncryptedKey {
  * The one read every caller shares: existsSync + readFile + JSON.parse used to
  * be copied into each command that needed the session. Malformed JSON still
  * throws rather than coming back as null - a session file that exists but
- * cannot be read is not the same thing as no session, and only `wallet login`
+ * cannot be read is not the same thing as no session, and only `wallet use`
  * treats it as recoverable.
  *
  * @returns {Promise<SessionData | null>} The session, or null if absent.

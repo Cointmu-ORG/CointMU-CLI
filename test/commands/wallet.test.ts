@@ -11,8 +11,8 @@ import {
 } from "../../src/utils/session";
 
 // Issue #87 (c): `wallet create` printed a private key and mnemonic to stdout,
-// where they survive in scrollback, tmux logs and CI output. --login encrypts
-// the generated key into a session without printing anything recoverable.
+// where they survive in scrollback, tmux logs and CI output. --save encrypts
+// the generated key into the store and prints only the mnemonic backup.
 
 const PASSWORD = "correct horse 9";
 // Hardhat account #1, so the address in the assertions is a known value.
@@ -111,182 +111,11 @@ describe("wallet create", () => {
     expect(output()).toContain("shown once");
     expect(output()).toContain("warning:");
     expect(output()).toContain("scrollback");
-    // #194: points at named wallets, and never at the deprecated login.
+    // #194: points at named wallets, and never at the removed login.
     expect(output()).toContain("`cmu wallet create --save <name>`");
     expect(output()).toContain("`cmu wallet use <name>`");
     expect(output()).toContain("cmu wallet save <name>");
     expect(output()).not.toContain("login");
-    expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(false);
-  });
-});
-
-describe("wallet create --login", () => {
-  it("encrypts the generated key into a session without printing it", async () => {
-    mockPrompt({ password: PASSWORD });
-    const { ethers } = await import("ethers");
-
-    // Capture the wallet the command generates, so the assertions below can
-    // name the exact key and mnemonic that must not appear in the output.
-    const createRandom = ethers.Wallet.createRandom.bind(ethers.Wallet);
-    let generated: ReturnType<typeof createRandom> | undefined;
-    vi.spyOn(ethers.Wallet, "createRandom").mockImplementation(((
-      ...args: Parameters<typeof createRandom>
-    ) => {
-      generated = createRandom(...args);
-      return generated;
-    }) as typeof createRandom);
-
-    const { runWalletCreate } = await import("../../src/commands/wallet");
-    await runWalletCreate({ login: true });
-
-    expect(generated).toBeDefined();
-    const sessionFile = path.join(tmpDir, ".cmu-session");
-    expect(fs.existsSync(sessionFile)).toBe(true);
-    const session: SessionData = JSON.parse(
-      fs.readFileSync(sessionFile, "utf8"),
-    );
-
-    // The session really holds the wallet that was generated and printed.
-    expect(decryptSessionKey(PASSWORD, session)).toBe(generated!.privateKey);
-    expect(session.address).toBe(generated!.address);
-    expect(output()).toContain(generated!.address);
-
-    // Nothing recoverable reached stdout: not the key (with or without its 0x
-    // prefix), not a single mnemonic word, not even the labels the default
-    // path prints them under.
-    expect(output()).not.toContain(generated!.privateKey);
-    expect(output()).not.toContain(generated!.privateKey.slice(2));
-    expect(output()).not.toContain("Private key");
-    expect(output()).not.toContain("Mnemonic");
-
-    // Word pairs, not single words: BIP-39 is plain English, so a lone "when"
-    // or "key" collides with the command's own prose. Any real leak prints the
-    // phrase, and every leaked phrase contains its consecutive pairs.
-    const phrase = generated!.mnemonic?.phrase;
-    expect(phrase).toBeTruthy();
-    expect(output()).not.toContain(phrase);
-    const words = phrase!.split(" ");
-    for (let i = 0; i < words.length - 1; i++) {
-      expect(output()).not.toContain(`${words[i]} ${words[i + 1]}`);
-    }
-
-    expect(output()).toContain("Session encrypted and saved.");
-    expect(output()).toContain("warning:");
-    expect(output()).toContain("were not printed");
-  });
-
-  it("writes the session with owner-only permissions", async () => {
-    mockPrompt({ password: PASSWORD });
-    const { runWalletCreate } = await import("../../src/commands/wallet");
-
-    await runWalletCreate({ login: true });
-
-    const mode = fs.statSync(path.join(tmpDir, ".cmu-session")).mode & 0o777;
-    expect(mode).toBe(0o600);
-  });
-});
-
-// Issue #126: createEncryptedSession() hardcoded activeNetwork: "local", so a
-// login threw away whatever `cmu network use <name>` had selected - silently,
-// since no line of the login output mentioned the network at all. Both callers
-// route through that one helper, so both are pinned here.
-
-describe("active network across a login", () => {
-  const run = {
-    "wallet login": async () => {
-      const { runWalletLogin } = await import("../../src/commands/wallet");
-      await runWalletLogin();
-    },
-    "wallet create --login": async () => {
-      const { runWalletCreate } = await import("../../src/commands/wallet");
-      await runWalletCreate({ login: true });
-    },
-  };
-
-  describe.each(Object.keys(run) as (keyof typeof run)[])("%s", (command) => {
-    beforeEach(() => {
-      mockPrompt({ privateKey: KEY, password: PASSWORD });
-    });
-
-    it("keeps an active network that is still saved", async () => {
-      writeSession("testnet");
-      writeNetworks(["local", "testnet"]);
-
-      await run[command]();
-
-      expect(readSession().activeNetwork).toBe("testnet");
-      expect(output()).toContain("Active network: testnet");
-    });
-
-    it("falls back to local when the picked network is gone, and says so", async () => {
-      writeSession("testnet");
-      writeNetworks(["local"]);
-
-      await run[command]();
-
-      expect(readSession().activeNetwork).toBe("local");
-      expect(output()).toContain("warning:");
-      expect(output()).toContain("'testnet' is no longer saved");
-      expect(output()).toContain("Active network: local");
-    });
-
-    it("defaults to local on a first login, with no session to carry over", async () => {
-      await run[command]();
-
-      expect(readSession().activeNetwork).toBe("local");
-      expect(output()).not.toContain("warning: network");
-    });
-
-    it("does not lose the key while carrying the network over", async () => {
-      writeSession("testnet");
-      writeNetworks(["local", "testnet"]);
-
-      await run[command]();
-
-      const session = readSession();
-      expect(session.address).not.toBe("0xTest");
-      expect(decryptSessionKey(PASSWORD, session)).toMatch(/^0x[0-9a-f]{64}$/);
-    });
-  });
-
-  it("logs in as the address the entered key belongs to", async () => {
-    mockPrompt({ privateKey: KEY, password: PASSWORD });
-    writeSession("testnet");
-    writeNetworks(["local", "testnet"]);
-
-    const { runWalletLogin } = await import("../../src/commands/wallet");
-    await runWalletLogin();
-
-    const session = readSession();
-    expect(session.address).toBe("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
-    expect(decryptSessionKey(PASSWORD, session)).toBe(KEY);
-    expect(output()).toContain(`Logged in as ${session.address}`);
-  });
-});
-
-// inquirer cannot read a masked answer from a pipe: a closed stdin fails with
-// "force closed the prompt", and a pipe that stays open hangs forever.
-describe("without a terminal", () => {
-  it.each([
-    [
-      "wallet login",
-      async () => {
-        const { runWalletLogin } = await import("../../src/commands/wallet");
-        await runWalletLogin();
-      },
-    ],
-    [
-      "wallet create --login",
-      async () => {
-        const { runWalletCreate } = await import("../../src/commands/wallet");
-        await runWalletCreate({ login: true });
-      },
-    ],
-  ])("%s fails instead of prompting", async (_, run) => {
-    process.stdin.isTTY = false;
-    mockPrompt();
-
-    await expect(run()).rejects.toThrow("non-interactive session");
     expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(false);
   });
 });
@@ -385,7 +214,7 @@ function sessionFile(): string {
 }
 
 /**
- * Writes a session holding `key`, as `login` or `create --login` leaves it:
+ * Writes a session holding `key`, as 1.5.x `login` or `create --login` left it:
  * encrypted with PASSWORD, and saved nowhere else unless a test does so.
  *
  * @param {string} address - The address the session names.
@@ -446,7 +275,7 @@ function expectNoKeyLeak(keys: string[] = []): void {
 }
 
 // #188: the hint that follows a wrong password depends on where the key came
-// from. Neither may send the user to the deprecated `wallet login`.
+// from. Neither may send the user to the removed `wallet login`.
 const SESSION_HINT =
   "hint: check the password. To start a fresh session, run `cmu wallet use <name>`.";
 const storeHint = (name: string) =>
@@ -820,129 +649,85 @@ describe("wallet create --save", () => {
     expect(generated).toEqual([]);
     expect(fs.existsSync(walletsFile())).toBe(false);
   });
-
-  it("refuses --save together with --login, through the CLI too", async () => {
-    const generated = await spyCreateRandom();
-    const { runWalletCreate } = await walletCommands();
-    await expect(
-      runWalletCreate({ save: "alice", login: true }),
-    ).rejects.toThrow("--save and --login cannot be combined");
-
-    const exit = vi
-      .spyOn(process, "exit")
-      .mockImplementation((() => undefined) as never);
-    const { walletCommand } = await walletCommands();
-    await walletCommand.parseAsync(["create", "--save", "alice", "--login"], {
-      from: "user",
-    });
-    expect(exit).toHaveBeenCalledWith(1);
-    expect(output()).toContain("wallet create failed");
-    expect(output()).toContain("cannot be combined");
-
-    expect(generated).toEqual([]);
-    expect(fs.existsSync(walletsFile())).toBe(false);
-    expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(false);
-  });
 });
 
-// Issue #194: `login` and `create --login` keep working behind a deprecation
-// notice on stderr. stdout and the exit code stay exactly as they were, so a
-// script that reads them keeps working through the deprecation window.
+// Issue #194: `login` and `create --login` were deprecated in 1.5.0 and removed
+// in 1.6.0. A script still calling them gets one line naming the replacement,
+// and nothing else happens first: no prompt, no session read, no new key.
 
-describe("deprecated login paths", () => {
-  const LOGIN_ANSWERS = { privateKey: KEY, password: PASSWORD };
-  const DEPLOY_LINE =
-    "`cmu deploy` will use this key automatically when PRIVATE_KEY is not set.";
+const REMOVED =
+  "removed; use wallet save + wallet use (or wallet create --save)";
 
-  function stdout(): string[] {
-    return vi.mocked(console.log).mock.calls.map((args) => args.join(" "));
-  }
-
-  function stderr(): string {
-    return [
-      ...vi.mocked(console.warn).mock.calls,
-      ...vi.mocked(console.error).mock.calls,
-    ]
-      .map((args) => args.join(" "))
-      .join("\n");
-  }
-
-  it("wallet login warns once on stderr, with stdout unchanged", async () => {
-    const { runWalletLogin } = await walletCommands(LOGIN_ANSWERS);
-    await runWalletLogin();
-
-    expect(stderr().match(/is deprecated/g)).toHaveLength(1);
-    expect(stderr()).toContain("`cmu wallet login` is deprecated");
-    expect(stderr()).toContain(
-      "`cmu wallet save <name>`, then run `cmu wallet use <name>`",
-    );
-    expect(stdout()).toEqual([
-      "Session encrypted and saved.",
-      `Logged in as ${ADDRESS_A}`,
-      "Active network: local",
-      DEPLOY_LINE,
-    ]);
-    expectNoKeyLeak();
-  });
-
-  it("wallet create --login warns once on stderr, with stdout unchanged", async () => {
-    const { runWalletCreate } = await walletCommands(LOGIN_ANSWERS);
-    await runWalletCreate({ login: true });
-
-    expect(stderr().match(/is deprecated/g)).toHaveLength(1);
-    expect(stderr()).toContain("`cmu wallet create --login` is deprecated");
-    expect(stderr()).toContain(
-      "`cmu wallet create --save <name>`, then `cmu wallet use <name>`",
-    );
-    const session = readSession();
-    expect(stdout()).toEqual([
-      "New CointMU wallet",
-      "===========================",
-      `Address : ${session.address}`,
-      "===========================",
-      "Session encrypted and saved.",
-      "Active network: local",
-      "\n\x1b[33mwarning:\x1b[0m the private key and mnemonic were not printed - this wallet",
-      "exists only inside .cmu-session. Lose that file or its password and the funds",
-      "in it cannot be recovered.",
-      "\x1b[2mhint:\x1b[0m run `cmu wallet create` without --login for a printed backup.\n",
-      DEPLOY_LINE,
-    ]);
-    expectNoKeyLeak([decryptSessionKey(PASSWORD, session)]);
-  });
-
-  describe.each([[["login"]], [["create", "--login"]]])(
-    "through the commander action: %j",
-    (argv) => {
-      let exit: ReturnType<typeof vi.spyOn>;
-      beforeEach(() => {
-        exit = vi
+describe("removed login paths", () => {
+  describe.each([
+    [["login"]],
+    [["login", "extra", "--foo"]],
+    [["create", "--login"]],
+    [["create", "--login", "--save", "alice"]],
+  ])("%j", (argv) => {
+    it.each([true, false])(
+      "exits 1 with the removal message before anything else (TTY: %s)",
+      async (isTTY) => {
+        const before = writeKeySession(ADDRESS_B);
+        process.stdin.isTTY = isTTY;
+        const { ethers } = await import("ethers");
+        const createRandom = vi.spyOn(ethers.Wallet, "createRandom");
+        const exit = vi
           .spyOn(process, "exit")
           .mockImplementation((() => undefined) as never);
-      });
+        const { walletCommand } = await askingCommands();
 
-      it("exits as before on success", async () => {
-        const { walletCommand } = await walletCommands(LOGIN_ANSWERS);
         await walletCommand.parseAsync(argv, { from: "user" });
 
-        expect(exit).not.toHaveBeenCalled();
-        expect(stderr()).toContain("is deprecated");
-        expect(stdout().join("\n")).not.toContain("deprecated");
-        expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(true);
-      });
+        expect(exit.mock.calls).toEqual([[1]]);
+        expect(vi.mocked(console.error).mock.calls.flat()).toContain(REMOVED);
+        expect(console.log).not.toHaveBeenCalled();
+        expect(asked).toEqual([]);
+        expect(output()).not.toContain("not a saved wallet");
+        expect(createRandom).not.toHaveBeenCalled();
+        expect(fs.readFileSync(sessionFile(), "utf8")).toBe(before);
+        expect(fs.existsSync(walletsFile())).toBe(false);
+        expectNoKeyLeak();
+      },
+    );
+  });
 
-      it("exits 1 without a terminal, still warning on stderr", async () => {
-        process.stdin.isTTY = false;
-        const { walletCommand } = await walletCommands();
-        await walletCommand.parseAsync(argv, { from: "user" });
+  it("leaves both out of the help", async () => {
+    const { walletCommand } = await walletCommands();
+    const create = walletCommand.commands.find((c) => c.name() === "create");
 
-        expect(exit).toHaveBeenCalledWith(1);
-        expect(stderr()).toContain("is deprecated");
-        expect(stderr()).toContain("non-interactive session");
-        expect(stdout().join("\n")).not.toContain("deprecated");
-      });
-    },
-  );
+    expect(walletCommand.helpInformation()).not.toMatch(/login/i);
+    expect(create?.helpInformation()).toContain("--save <name>");
+    expect(create?.helpInformation()).not.toMatch(/login/i);
+  });
+
+  // One check for every hint, present and future: the only code (not comment)
+  // lines in src/ that may say "login" are the stub's own.
+  it("no hint in src/ names login", () => {
+    const STUB = [
+      /^const REMOVED_LOGIN =$/,
+      /\.command\("login", \{ hidden: true \}\)/,
+      /new Option\("--login"\)/,
+      /fail\("wallet login"/,
+      /options\.login/,
+      /login\?: boolean/,
+    ];
+    const src = path.resolve(__dirname, "../../src");
+    const offenders = fs
+      .readdirSync(src, { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".ts"))
+      .flatMap((file) =>
+        fs
+          .readFileSync(path.join(src, file), "utf8")
+          .split("\n")
+          .map((line, i) => ({ at: `${file}:${i + 1}`, line: line.trim() }))
+          .filter(({ line }) => /login/i.test(line))
+          .filter(({ line }) => !/^(\/\/|\/?\*)/.test(line))
+          .filter(({ line }) => !STUB.some((re) => re.test(line))),
+      );
+
+    expect(offenders).toEqual([]);
+  });
 });
 
 describe("wallet use", () => {
@@ -953,6 +738,7 @@ describe("wallet use", () => {
 
     const session = readSession();
     expect(session.address).toBe(ADDRESS_A);
+    expect(session.activeNetwork).toBe("local");
     expect(decryptSessionKey(PASSWORD, session)).toBe(KEY);
     expect(output()).toContain(
       `Active wallet is now 'deployer' (${ADDRESS_A})`,
@@ -1090,20 +876,11 @@ describe("wallet use", () => {
 });
 
 // #182: login, create --login and use replaced a session whose key was saved
-// nowhere else without asking. All three must now ask first - before any
-// prompt for a key or password - and leave the file alone unless told yes.
+// nowhere else without asking. `use`, the one writer left since #194, must ask
+// first - before any prompt for a password - and leave the file alone unless
+// told yes. A session from 1.5.x `login` is exactly such a key.
 describe("replacing an unsaved session", () => {
   const paths = {
-    login: {
-      answers: { privateKey: KEY, password: PASSWORD },
-      run: async (answers: Record<string, unknown>) =>
-        (await askingCommands(answers)).runWalletLogin(),
-    },
-    "create --login": {
-      answers: { password: PASSWORD },
-      run: async (answers: Record<string, unknown>) =>
-        (await askingCommands(answers)).runWalletCreate({ login: true }),
-    },
     use: {
       answers: { password: PASSWORD },
       run: async (answers: Record<string, unknown>) =>
@@ -1137,7 +914,7 @@ describe("replacing an unsaved session", () => {
   }
 
   beforeEach(async () => {
-    await save("deployer"); // KEY, the key login and use write
+    await save("deployer"); // KEY, the key use writes
     logged = [];
   });
 
@@ -1256,78 +1033,6 @@ describe("replacing an unsaved session", () => {
       });
     },
   );
-
-  describe.each([
-    ["login", ["login"], () => paths.login.run],
-    [
-      "create --login",
-      ["create", "--login"],
-      () => paths["create --login"].run,
-    ],
-  ] as const)("%s (deprecated)", (pathName, argv) => {
-    it("prints the deprecation notice before the question", async () => {
-      writeKeySession(ADDRESS_B);
-
-      await paths[pathName].run({ ...paths[pathName].answers, replace: true });
-
-      const notice = everything.findIndex((l) => l.includes("is deprecated"));
-      const warning = everything.findIndex((l) =>
-        l.includes("not a saved wallet"),
-      );
-      expect(notice).toBeGreaterThanOrEqual(0);
-      expect(warning).toBeGreaterThan(notice);
-    });
-
-    it("leaves the session untouched when the password prompt is aborted after yes", async () => {
-      const before = writeKeySession(ADDRESS_B);
-      const write = blockSessionWrites();
-
-      await expect(
-        paths[pathName].run({
-          ...paths[pathName].answers,
-          replace: true,
-          password: ctrlC(),
-        }),
-      ).rejects.toThrow("force closed the prompt");
-
-      expect(asked[0]).toBe("replace");
-      expect(asked.at(-1)).toBe("password");
-      expectUntouched(before, write);
-    });
-
-    it("exits 1 through the commander action on no", async () => {
-      const before = writeKeySession(ADDRESS_B);
-      const exit = vi
-        .spyOn(process, "exit")
-        .mockImplementation((() => undefined) as never);
-      const { walletCommand } = await askingCommands({
-        ...paths[pathName].answers,
-        replace: false,
-      });
-
-      await walletCommand.parseAsync([...argv], { from: "user" });
-
-      expect(exit).toHaveBeenCalledWith(1);
-      expect(output()).toContain("aborted: .cmu-session was not changed");
-      expect(fs.readFileSync(sessionFile(), "utf8")).toBe(before);
-    });
-  });
-
-  // The address is not known before the key is typed, so login asks even
-  // when it is about to write the very key the session already holds.
-  it("login asks even when the entered key is the session's own", async () => {
-    writeKeySession(ADDRESS_B);
-
-    await paths.login.run({
-      privateKey: KEY_B,
-      password: PASSWORD,
-      replace: true,
-    });
-
-    expect(asked[0]).toBe("replace");
-    expect(readSession().address).toBe(ADDRESS_B);
-    expect(decryptSessionKey(PASSWORD, readSession())).toBe(KEY_B);
-  });
 
   describe("use, after yes", () => {
     it("leaves the session untouched on a wrong password", async () => {
@@ -1458,20 +1163,11 @@ describe("named wallets without a terminal", () => {
   });
 
   // #188: one case per requireInteractive() call site. PRIVATE_KEY stands in
-  // for a session key, so only login may suggest it; the rest either have a
-  // flag of their own or no way around a terminal. (transfer: see its suite.)
+  // for a session key but cannot save, select or delete a wallet, so none may
+  // suggest it; they either have a flag of their own or no way around a
+  // terminal. (transfer: see its suite.)
   const TERMINAL = "hint: run this in a terminal.";
   it.each([
-    [
-      "login",
-      "hint: run this in a terminal; in CI, set PRIVATE_KEY instead.",
-      (m: Commands) => m.runWalletLogin(),
-    ],
-    [
-      "create --login",
-      TERMINAL,
-      (m: Commands) => m.runWalletCreate({ login: true }),
-    ],
     [
       "create --save",
       TERMINAL,
@@ -1484,13 +1180,11 @@ describe("named wallets without a terminal", () => {
       "hint: re-run with --yes to delete without asking.",
       (m: Commands) => m.runWalletDelete("deployer"),
     ],
-  ])("%s names the right way out", async (route, hint, run) => {
+  ])("%s names the right way out", async (_, hint, run) => {
     const error = await run(await walletCommands()).catch((e: Error) => e);
 
     expect(hintOf(error)).toBe(hint);
-    if (route !== "login") {
-      expect((error as Error).message).not.toContain("PRIVATE_KEY");
-    }
+    expect((error as Error).message).not.toContain("PRIVATE_KEY");
     expectNoKeyLeak();
   });
 
@@ -1785,6 +1479,22 @@ describe("wallet transfer", () => {
       expect(output()).toContain(`To      : ${TO}`);
       expect(output()).toContain(`Amount  : 1.5 ETH (${AMOUNT_WEI} wei)`);
       expect(output()).toContain("Max fee : 0.000063 ETH");
+      expectNoKeyLeak();
+    });
+
+    // #194: a session left by 1.5.x `login` - a key saved nowhere else -
+    // keeps signing with the session's password after the removal.
+    it("TTY: signs from a session left by 1.5.x login", async () => {
+      writeKeySession(ADDRESS_B, KEY_B);
+      await mockChain();
+
+      await expect(transfer({ to: ADDRESS_A })).resolves.toBe(0);
+
+      expect(asked).toEqual(["password", "proceed"]);
+      expect(sendTransaction.mock.contexts[0]).toMatchObject({
+        address: ADDRESS_B,
+      });
+      expect(output()).toContain(`From    : ${ADDRESS_B} (.cmu-session)`);
       expectNoKeyLeak();
     });
 
