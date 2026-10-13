@@ -139,7 +139,7 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
   if (!privateKey && !options.config) {
     throw new Error(
       "no private key available for signing.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login`, or set PRIVATE_KEY in .env or cmu.config.ts.",
+        "\x1b[2mhint:\x1b[0m run `cmu wallet use <name>`, or set PRIVATE_KEY in .env or cmu.config.ts.",
     );
   }
 
@@ -151,7 +151,7 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
     } catch {
       throw new Error(
         "invalid private key.\n" +
-          "\x1b[2mhint:\x1b[0m expected a 32-byte hex key (0x-prefixed); run `cmu wallet login` to store one.",
+          "\x1b[2mhint:\x1b[0m expected a 32-byte hex key (0x-prefixed); check PRIVATE_KEY in .env or cmu.config.ts, or remove it so the session wallet is used (`cmu wallet use <name>`).",
       );
     }
   }

@@ -101,7 +101,7 @@ export async function readSession(): Promise<SessionData | null> {
  * @throws {Error} When the project has no session.
  */
 export async function requireSession(
-  hint = "run `cmu wallet login` first.",
+  hint = "run `cmu wallet use <name>` first, or `cmu wallet create --save <name>` and then `cmu wallet use <name>`.",
 ): Promise<SessionData> {
   const session = await readSession();
   if (!session) {
@@ -212,7 +212,7 @@ export function decryptSessionKey(
   ) {
     throw new Error(
       "the session file does not contain an encrypted key.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` to create one.",
+        "\x1b[2mhint:\x1b[0m run `cmu wallet use <name>` to create one.",
     );
   }
 

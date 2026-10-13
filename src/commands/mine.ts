@@ -477,7 +477,7 @@ export const mineCommand = new Command("mine").description(
 
 mineCommand
   .command("start")
-  .description("Start mining with the logged-in wallet")
+  .description("Start mining with the active wallet")
   .option(
     "--watch",
     "Keep watching mining progress (Ctrl-C leaves; mining keeps running)",

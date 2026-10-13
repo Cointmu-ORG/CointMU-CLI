@@ -104,7 +104,11 @@ describe("wallet create", () => {
     expect(output()).toContain("shown once");
     expect(output()).toContain("warning:");
     expect(output()).toContain("scrollback");
-    expect(output()).toContain("--login");
+    // #194: points at named wallets, and never at the deprecated login.
+    expect(output()).toContain("`cmu wallet create --save <name>`");
+    expect(output()).toContain("`cmu wallet use <name>`");
+    expect(output()).toContain("cmu wallet save <name>");
+    expect(output()).not.toContain("login");
     expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(false);
   });
 });

@@ -273,11 +273,14 @@ export async function runWalletCreate(
   );
   console.log("shared.");
   console.log(
-    "\x1b[2mhint:\x1b[0m `cmu wallet create --login` encrypts the key into a session",
+    "\x1b[2mhint:\x1b[0m `cmu wallet create --save <name>` stores the key encrypted and prints only",
   );
-  console.log("instead of printing it.\n");
-  console.log("To start an encrypted local session with this wallet, run:");
-  console.log("  cmu wallet login");
+  console.log(
+    "the address and a mnemonic backup; activate it with `cmu wallet use <name>`.\n",
+  );
+  console.log("To keep this wallet encrypted and use it in a project, run:");
+  console.log("  cmu wallet save <name>");
+  console.log("  cmu wallet use <name>");
 }
 
 /**
@@ -519,7 +522,7 @@ export async function runWalletUse(name: string): Promise<void> {
       `\x1b[33mwarning:\x1b[0m replacing the session for ${previous} - that key is not a saved wallet.`,
     );
     console.log(
-      "\x1b[2mhint:\x1b[0m enter it again with `cmu wallet login` or `cmu wallet save` if you still need it.",
+      "\x1b[2mhint:\x1b[0m enter it again with `cmu wallet save <name>` if you still need it.",
     );
   }
 
@@ -762,7 +765,7 @@ export async function runWalletTransfer(
   if (!session.encryptedKey) {
     throw new Error(
       "the session holds no encrypted key.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` or `cmu wallet use <name>`.",
+        "\x1b[2mhint:\x1b[0m run `cmu wallet use <name>`.",
     );
   }
   const from = session.address;
@@ -869,7 +872,7 @@ export async function runWalletTransfer(
   if (!sameAddress(signer.address, from)) {
     throw new Error(
       `.cmu-session names ${from}, but its key belongs to another address - the file has been modified.\n` +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` or `cmu wallet use <name>` again.",
+        "\x1b[2mhint:\x1b[0m run `cmu wallet use <name>` again.",
     );
   }
 
@@ -1023,7 +1026,7 @@ walletCommand
 
 walletCommand
   .command("balance")
-  .description("Show the native token balance of the logged-in wallet")
+  .description("Show the native token balance of the active wallet")
   .action((options, command) =>
     runWalletBalance().catch(fail("wallet balance", command.optsWithGlobals())),
   );

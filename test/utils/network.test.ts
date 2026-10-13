@@ -181,11 +181,13 @@ describe("activeNetwork", () => {
     });
   });
 
-  it("reports a missing session, and points at login by default", async () => {
+  it("reports a missing session, and points at wallet use by default", async () => {
     const { activeNetwork } = await import("../../src/utils/network");
 
     await expect(activeNetwork()).rejects.toThrow(/no active session/);
-    await expect(activeNetwork()).rejects.toThrow(/cmu wallet login/);
+    await expect(activeNetwork()).rejects.toThrow(
+      "run `cmu wallet use <wallet>`, then `cmu network use <network>`.",
+    );
   });
 
   it("lets the caller supply the hint for a missing session", async () => {
