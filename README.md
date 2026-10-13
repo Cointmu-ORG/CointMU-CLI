@@ -147,6 +147,7 @@ Commands:
 `cmu deploy` and `cmu compile` **execute arbitrary code from the project directory**:
 
 - every `.ts`/`.js` file in `deploy/` is run as a program, and receives your decrypted `PRIVATE_KEY` through the environment so it can sign transactions;
+- every test file `cmu test` hands to mocha (`test/**/*.ts`, or `test/**/*.js` for a JavaScript suite) is run as a program, with your full environment — including anything in `.env` — and a `PRIVATE_KEY` for a devnet account;
 - `cmu.config.ts` / `cmu.config.js` is `require()`d from the current working directory, by `cmu compile`, `cmu test`, `cmu deploy`, `cmu console` and `cmu explorer` alike;
 - `cmu console` then runs whatever you type at the prompt, with your full environment and the key it decrypted for `signer`.
 
@@ -170,6 +171,8 @@ warning: the following project files will be executed as code:
 ```
 
 `cmu compile` and `cmu explorer` load `cmu.config.ts` but never resolve a key, so they print the same file list with wording that claims no more than they do — no `PRIVATE_KEY` sentence, and an explicit note that the command does not sign anything and does not unlock your session.
+
+`cmu test` lists `cmu.config.ts` plus every test file mocha will run, including those in subdirectories, and says that they get your full environment (`.env` and shell) and a devnet `PRIVATE_KEY`. It asks before compiling, so declining runs nothing. A long list is cut after 20 files with a count of the rest.
 
 Pass `-y` / `--yes` to skip the prompt in CI or other non-interactive use:
 
