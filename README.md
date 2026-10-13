@@ -104,7 +104,6 @@ Commands:
   explorer [options]          Queries block and contract information over RPC
   wallet                      Wallet management commands
     create [--save <name>]    Generates a new wallet; --save stores it encrypted under <name>
-    login                     Deprecated: use `wallet save` + `wallet use`
     balance                   Fetch and display the native token balance of the active wallet
     info                      Display the current active wallet session information
     save|add <name>           Save a private key as a named, encrypted wallet
@@ -341,16 +340,18 @@ cmu wallet delete admin      # asks first; --yes skips the question
   keeps working. cmu keeps no other copy of a deleted wallet's key.
 - **Names** are 1-32 lowercase letters, digits, `-` or `_`. Saving under a name
   that is taken is refused - delete the old wallet first.
-- **`cmu wallet login` and `cmu wallet create --login` are deprecated.** They
-  still work and print a warning to stderr naming the replacement
-  (`wallet save` + `wallet use`, or `wallet create --save <name>` then
-  `wallet use <name>`); they will be removed in a later 1.x release. A
-  `.cmu-session` written by `login` stays valid - the file format does not
-  change.
-- **A key that is not saved is never replaced without asking.** `use`,
-  `login` and `create --login` check `.cmu-session` before any prompt. If it
-  holds a key whose address is not a saved wallet - such as one from
-  `create --login`, which was never printed - they name that address and ask
+- **`cmu wallet login` and `cmu wallet create --login` were removed in
+  1.6.0** (deprecated since 1.5.0). They exit 1 and print
+  `removed; use wallet save + wallet use (or wallet create --save)` to stderr,
+  before any prompt. Use `cmu wallet save <name>` + `cmu wallet use <name>`,
+  or `cmu wallet create --save <name>` then `cmu wallet use <name>`. A
+  `.cmu-session` written by `login` stays valid - the file format did not
+  change - so `deploy`, `console`, `transfer` and the rest keep using it with
+  its password.
+- **A key that is not saved is never replaced without asking.** `use` checks
+  `.cmu-session` before any prompt. If it holds a key whose address is not a
+  saved wallet - such as one written by `login` or `create --login` before
+  1.6.0 - it names that address and asks
   `Replace it anyway? (y/N)`. Answering no (or Ctrl-C) leaves the file as it
   was and exits 1; replacing it deletes that key for good. Keep it first with
   `cmu wallet save <name> --session`: it copies the encrypted key into
@@ -359,7 +360,7 @@ cmu wallet delete admin      # asks first; --yes skips the question
   readable key (missing, corrupt, or from before AES-GCM) is replaced without
   a question.
 
-**Prompts need a terminal.** `save`, `create --save`, `use`, `login` and `delete` without `--yes`
+**Prompts need a terminal.** `save`, `create --save`, `use` and `delete` without `--yes`
 fail with an error when stdin is not a TTY instead of hanging. So does the
 replace question above; there is no flag to skip it. `save --session` asks
 nothing and works anywhere. In CI, set
