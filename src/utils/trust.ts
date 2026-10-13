@@ -52,9 +52,47 @@ export async function loadProjectConfig(configPath: string): Promise<any> {
 }
 
 /**
- * One confirmation per CLI process. `cmu deploy` gates up front and then calls
- * runCompile(), which gates again; without this the user would be asked twice
- * about the same project.
+ * Which consequence sentence the prompt prints.
+ *
+ * - "default" - `deploy`, `console`: a key decrypted from the session, injected
+ *   for deploy scripts.
+ * - "readOnly" - `compile`, `explorer`: the config is read, nothing is signed.
+ * - "test" - `test`: the suite gets the full environment and a devnet key.
+ */
+export type TrustVariant = "default" | "readOnly" | "test";
+
+const CONSEQUENCE: Record<TrustVariant, string> = {
+  default:
+    "\n    They run with your full environment, including the PRIVATE_KEY decrypted from\n" +
+    "    your session and injected for deploy scripts, and can do anything your user\n" +
+    "    account can. This is the same trust model as Hardhat, Foundry and Truffle;\n" +
+    "    see the 'Trust Model' section of the README.\n",
+  readOnly:
+    "\n    They are require()d as code to read this project's configuration, run with\n" +
+    "    your full environment, and can do anything your user account can. This\n" +
+    "    command does not sign anything and does not unlock your session. This is the\n" +
+    "    same trust model as Hardhat, Foundry and Truffle; see the 'Trust Model'\n" +
+    "    section of the README.\n",
+  test:
+    "\n    They run with your full environment, including anything set in .env or your\n" +
+    "    shell, and can do anything your user account can. The test files also get a\n" +
+    "    PRIVATE_KEY for a devnet account derived from the devnet mnemonic. This is\n" +
+    "    the same trust model as Hardhat, Foundry and Truffle; see the 'Trust Model'\n" +
+    "    section of the README.\n",
+};
+
+/** Files listed by name before the rest are summarised as a count. */
+const MAX_LISTED_FILES = 20;
+
+/**
+ * One confirmation per CLI process. `cmu deploy` and `cmu test` gate up front
+ * and then call runCompile(), which gates again; without this the user would
+ * be asked twice about the same project.
+ *
+ * A boolean is only sound because the first gate lists a superset of what any
+ * later gate in the same process would: the up-front gate must come before
+ * runCompile(), or compile's config-only gate sets this and the one that lists
+ * deploy/ or test/ is silently skipped.
  */
 let confirmed = false;
 
@@ -67,11 +105,12 @@ let confirmed = false;
  * execution from the project directory. That is by design (the same trust model
  * as Hardhat/Foundry/Truffle), but it should never happen silently.
  *
- * Only `deploy` and `console` resolve a key, so only they get the sentence
- * about an injected PRIVATE_KEY. `compile` and `explorer` pass readOnly and get
- * wording that claims no more than they do: a gate that overstates its stakes
- * on the quiet commands is a gate people learn to dismiss on `cmu deploy`,
- * where the warning is literally true.
+ * Each caller gets the consequence sentence that is true for it. `deploy` and
+ * `console` decrypt a key from the session; `compile` and `explorer` only read
+ * the config and sign nothing; `test` hands its suite the full environment and
+ * a devnet key. A gate that overstates its stakes on the quiet commands is a
+ * gate people learn to dismiss on `cmu deploy`, where the warning is literally
+ * true, and one that understates them on `cmu test` is worse (issue #183).
  *
  * In a non-interactive session there is no one to answer the prompt, so this
  * throws instead of auto-continuing: silently bypassing the gate wherever
@@ -84,13 +123,15 @@ let confirmed = false;
  *   callers can pass its result straight in.
  * @param {object} [options]
  * @param {boolean} [options.yes] - Skip the prompt (`--yes`).
- * @param {boolean} [options.readOnly] - Print the wording for a command that
- *   loads the config but never resolves a key (`compile`, `explorer`).
+ * @param {TrustVariant} [options.variant] - Which consequence sentence to
+ *   print. Defaults to "default", the strongest one: a caller that forgets to
+ *   pass a variant gets the key-injection warning rather than a reassurance
+ *   that may be false for it.
  * @returns {Promise<void>} Resolves when execution is authorised.
  */
 export async function confirmProjectTrust(
   targets: (string | null)[],
-  options: { yes?: boolean; readOnly?: boolean } = {},
+  options: { yes?: boolean; variant?: TrustVariant } = {},
 ): Promise<void> {
   const files = targets.filter((target) => target !== null);
   if (confirmed || files.length === 0) return;
@@ -98,21 +139,13 @@ export async function confirmProjectTrust(
   console.log(
     "\n\x1b[33mwarning:\x1b[0m the following project files will be executed as code:",
   );
-  for (const target of files) {
+  for (const target of files.slice(0, MAX_LISTED_FILES)) {
     console.log(`      ${path.basename(target)}  ->  ${target}`);
   }
-  console.log(
-    options.readOnly
-      ? "\n    They are require()d as code to read this project's configuration, run with\n" +
-          "    your full environment, and can do anything your user account can. This\n" +
-          "    command does not sign anything and does not unlock your session. This is the\n" +
-          "    same trust model as Hardhat, Foundry and Truffle; see the 'Trust Model'\n" +
-          "    section of the README.\n"
-      : "\n    They run with your full environment, including the PRIVATE_KEY decrypted from\n" +
-          "    your session and injected for deploy scripts, and can do anything your user\n" +
-          "    account can. This is the same trust model as Hardhat, Foundry and Truffle;\n" +
-          "    see the 'Trust Model' section of the README.\n",
-  );
+  if (files.length > MAX_LISTED_FILES) {
+    console.log(`      ...and ${files.length - MAX_LISTED_FILES} more`);
+  }
+  console.log(CONSEQUENCE[options.variant ?? "default"]);
 
   if (options.yes) {
     console.log("    --yes: continuing without confirmation\n");

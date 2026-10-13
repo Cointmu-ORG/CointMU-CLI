@@ -10,6 +10,7 @@ import {
 } from "../utils/hardhat";
 import { startRpcProxy } from "../utils/rpcProxy";
 import { LOCAL_CHAIN_ID } from "../utils/defaults";
+import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 import { runCompile } from "./compile";
 
 const TEST_PORT = 8555;
@@ -82,7 +83,7 @@ export async function printGasReport(
  * @param {object} options - CLI options.
  * @returns {Promise<void>} Resolves when tests complete.
  */
-async function runTest(
+export async function runTest(
   options: {
     gas?: boolean;
     verbose?: boolean;
@@ -103,11 +104,6 @@ async function runTest(
     );
   }
 
-  console.log("Compiling contracts...");
-  // Compile failures keep reporting themselves as "compile failed" rather than
-  // being relabelled by the command that triggered the compile.
-  await runCompile({ yes: options.yes }).catch(fail("compile", options));
-
   const testDir = path.resolve(process.cwd(), TEST_DIR_NAME);
   if (!existsSync(testDir)) {
     throw new Error(
@@ -115,6 +111,32 @@ async function runTest(
         "\x1b[2mhint:\x1b[0m run `cmu test` from the root of your CointMU project.",
     );
   }
+
+  // The runner is picked from what is in test/: a TypeScript suite needs
+  // ts-node/register, a JavaScript one must not have it. The same extension
+  // decides what the trust prompt lists, so it names exactly what mocha runs.
+  const ext = readdirSync(testDir).some((f) => f.endsWith(".ts"))
+    ? ".ts"
+    : ".js";
+
+  // Gate up front, the way `cmu deploy` does, and before runCompile(): its
+  // config-only gate would otherwise set the per-process memo first and this
+  // one, the only one that names test/, would never print (issue #183).
+  // Recursive, because mocha's glob is test/**/*.
+  const testFiles = readdirSync(testDir, { recursive: true })
+    .map(String)
+    .filter((f) => f.endsWith(ext))
+    .sort((a, b) => a.localeCompare(b))
+    .map((f) => path.join(testDir, f));
+  await confirmProjectTrust([findProjectConfig(), ...testFiles], {
+    yes: options.yes,
+    variant: "test",
+  });
+
+  console.log("Compiling contracts...");
+  // Compile failures keep reporting themselves as "compile failed" rather than
+  // being relabelled by the command that triggered the compile.
+  await runCompile({ yes: options.yes }).catch(fail("compile", options));
 
   silenceHardhatNoise({ verbose: isVerbose });
 
@@ -153,12 +175,10 @@ async function runTest(
       PRIVATE_KEY: privateKey,
     };
 
-    // The runner is picked from what is in test/: a TypeScript suite needs
-    // ts-node/register, a JavaScript one must not have it.
-    const hasTsFiles = readdirSync(testDir).some((f) => f.endsWith(".ts"));
-    const runnerArgs = hasTsFiles
-      ? ["mocha", "-r", "ts-node/register", "test/**/*.ts"]
-      : ["mocha", "test/**/*.js"];
+    const runnerArgs =
+      ext === ".ts"
+        ? ["mocha", "-r", "ts-node/register", "test/**/*.ts"]
+        : ["mocha", "test/**/*.js"];
 
     console.log(`\n========================================`);
     console.log(`Running tests with Mocha`);

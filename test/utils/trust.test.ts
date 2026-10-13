@@ -70,17 +70,63 @@ describe("confirmProjectTrust", () => {
     const { confirmProjectTrust } = await loadTrust();
 
     await confirmProjectTrust(["/tmp/project/cmu.config.ts"], {
-      readOnly: true,
+      variant: "readOnly",
     });
 
     const output = (console.log as any).mock.calls.flat().join("\n");
     expect(output).toContain("/tmp/project/cmu.config.ts");
     expect(output).not.toContain("PRIVATE_KEY");
+    // Frozen verbatim: issue #183 added a variant for `test` and must not have
+    // touched what `compile` and `explorer` print.
     expect(output).toContain(
-      "does not sign anything and does not unlock your session",
+      "\n    They are require()d as code to read this project's configuration, run with\n" +
+        "    your full environment, and can do anything your user account can. This\n" +
+        "    command does not sign anything and does not unlock your session. This is the\n" +
+        "    same trust model as Hardhat, Foundry and Truffle; see the 'Trust Model'\n" +
+        "    section of the README.\n",
     );
     // Still a real gate, whatever the wording.
     expect(prompt).toHaveBeenCalledOnce();
+  });
+
+  // Issue #183: `cmu test` used to inherit the read-only wording from
+  // runCompile() while its suite ran with a PRIVATE_KEY and the full env.
+  it("tells test callers about the environment and the devnet key", async () => {
+    process.stdin.isTTY = true;
+    prompt.mockResolvedValue({ proceed: true });
+    const { confirmProjectTrust } = await loadTrust();
+
+    await confirmProjectTrust(["/tmp/project/test/Token.test.ts"], {
+      variant: "test",
+    });
+
+    const output = (console.log as any).mock.calls.flat().join("\n");
+    expect(output).toContain(
+      "\n    They run with your full environment, including anything set in .env or your\n" +
+        "    shell, and can do anything your user account can. The test files also get a\n" +
+        "    PRIVATE_KEY for a devnet account derived from the devnet mnemonic. This is\n" +
+        "    the same trust model as Hardhat, Foundry and Truffle; see the 'Trust Model'\n" +
+        "    section of the README.\n",
+    );
+    expect(output).not.toContain("does not sign anything");
+    expect(output).not.toContain("decrypted from");
+  });
+
+  it("names the first 20 files and counts the rest", async () => {
+    process.stdin.isTTY = true;
+    prompt.mockResolvedValue({ proceed: true });
+    const { confirmProjectTrust } = await loadTrust();
+    const files = Array.from(
+      { length: 25 },
+      (_, i) => `/tmp/project/test/s${String(i).padStart(2, "0")}.test.ts`,
+    );
+
+    await confirmProjectTrust(files, { variant: "test" });
+
+    const output = (console.log as any).mock.calls.flat().join("\n");
+    expect(output).toContain(files[19]);
+    expect(output).not.toContain(files[20]);
+    expect(output).toContain("...and 5 more");
   });
 
   it("aborts without executing anything when the user declines", async () => {

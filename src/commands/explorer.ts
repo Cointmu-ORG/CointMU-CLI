@@ -175,7 +175,7 @@ export async function runExplorer(
   // PRIVATE_KEY wording `cmu deploy` gets would be untrue here.
   await confirmProjectTrust([findProjectConfig()], {
     yes: options.yes,
-    readOnly: true,
+    variant: "readOnly",
   });
 
   // Read-only by nature - there is no signer here - so the encrypted session

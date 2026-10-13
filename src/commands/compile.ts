@@ -78,7 +78,7 @@ export async function runCompile(
     // nothing from deploy/, so no key is ever resolved or injected.
     await confirmProjectTrust([configPath], {
       yes: options.yes,
-      readOnly: true,
+      variant: "readOnly",
     });
     try {
       const cmuConfig = await loadProjectConfig(configPath);
