@@ -194,15 +194,35 @@ async function createEncryptedSession(
 
 /**
  * Generates a new, secure EVM-compatible wallet.
+ * @param {object} [options]
+ * @param {boolean} [options.login] - Encrypt it into .cmu-session (deprecated).
+ * @param {string} [options.save] - Encrypt it into the store under this name.
  * @returns {Promise<void>}
  */
 export async function runWalletCreate(
-  options: { verbose?: boolean; login?: boolean } = {},
+  options: { verbose?: boolean; login?: boolean; save?: string } = {},
 ): Promise<void> {
+  if (options.save !== undefined) {
+    if (options.login) {
+      throw new Error(
+        "--save and --login cannot be combined.\n" +
+          "\x1b[2mhint:\x1b[0m use --save <name>; --login is deprecated.",
+      );
+    }
+    return runWalletCreateSaved(options.save);
+  }
+
   const { ethers } = await import("ethers");
   const wallet = ethers.Wallet.createRandom();
 
   if (options.login) {
+    // Deprecated by #194. stderr, so the stdout below stays as it was.
+    console.warn(
+      "\n\x1b[33mwarning:\x1b[0m `cmu wallet create --login` is deprecated and will be removed in a later 1.x release.",
+    );
+    console.warn(
+      "\x1b[2mhint:\x1b[0m run `cmu wallet create --save <name>`, then `cmu wallet use <name>` - the key is stored encrypted and a mnemonic backup is printed.\n",
+    );
     // The generated key goes straight into the encrypted session. Neither it
     // nor the mnemonic is passed to console.log anywhere on this path, so
     // nothing recoverable reaches scrollback or a CI log.
@@ -253,11 +273,14 @@ export async function runWalletCreate(
   );
   console.log("shared.");
   console.log(
-    "\x1b[2mhint:\x1b[0m `cmu wallet create --login` encrypts the key into a session",
+    "\x1b[2mhint:\x1b[0m `cmu wallet create --save <name>` stores the key encrypted and prints only",
   );
-  console.log("instead of printing it.\n");
-  console.log("To start an encrypted local session with this wallet, run:");
-  console.log("  cmu wallet login");
+  console.log(
+    "the address and a mnemonic backup; activate it with `cmu wallet use <name>`.\n",
+  );
+  console.log("To keep this wallet encrypted and use it in a project, run:");
+  console.log("  cmu wallet save <name>");
+  console.log("  cmu wallet use <name>");
 }
 
 /**
@@ -265,6 +288,13 @@ export async function runWalletCreate(
  * @returns {Promise<void>}
  */
 export async function runWalletLogin(): Promise<void> {
+  // Deprecated by #194. stderr, so the stdout below stays as it was.
+  console.warn(
+    "\n\x1b[33mwarning:\x1b[0m `cmu wallet login` is deprecated and will be removed in a later 1.x release.",
+  );
+  console.warn(
+    "\x1b[2mhint:\x1b[0m save the key once with `cmu wallet save <name>`, then run `cmu wallet use <name>` in the project.\n",
+  );
   const privateKey = await promptPrivateKey();
   const { address, activeNetwork } = await createEncryptedSession(privateKey);
   console.log("Session encrypted and saved.");
@@ -322,13 +352,14 @@ function findWallet(wallets: WalletEntry[], name: string): WalletEntry {
 }
 
 /**
- * Saves a private key as a named wallet in ~/.cmu-wallets.json, encrypted
- * with its own password. The name is checked before anything is prompted.
+ * Checks that a new wallet can be saved under this name, before anything is
+ * prompted or generated.
  *
  * @param {string} name - The name to save the wallet under.
- * @returns {Promise<void>}
+ * @returns {Promise<WalletEntry[]>} The wallets already saved.
+ * @throws {Error} When the name is invalid or taken, or the store unreadable.
  */
-export async function runWalletSave(name: string): Promise<void> {
+async function checkNewWalletName(name: string): Promise<WalletEntry[]> {
   if (!WALLET_NAME_PATTERN.test(name)) {
     throw new Error(
       `invalid wallet name '${name}'.\n` +
@@ -342,6 +373,73 @@ export async function runWalletSave(name: string): Promise<void> {
         `\x1b[2mhint:\x1b[0m run \`cmu wallet delete ${name}\` first to replace it.`,
     );
   }
+  return wallets;
+}
+
+/**
+ * `wallet create --save <name>`: generates a wallet straight into the store.
+ *
+ * Nothing is generated until the name is free and the password confirmed, and
+ * nothing is printed until the encrypted entry is on disk, so a failure at any
+ * step leaves no mnemonic behind for a wallet that was never saved. The
+ * private key is never printed. The store keeps only that key, encrypted, so
+ * the printed mnemonic is the one backup.
+ *
+ * @param {string} name - The name to save the wallet under.
+ * @returns {Promise<void>}
+ */
+async function runWalletCreateSaved(name: string): Promise<void> {
+  await checkNewWalletName(name);
+  const password = await promptNewPassword("Wallet password:", true);
+
+  const { ethers } = await import("ethers");
+  const wallet = ethers.Wallet.createRandom();
+  await saveWallet({
+    name,
+    address: wallet.address,
+    ...encryptSessionKey(password, wallet.privateKey),
+  });
+
+  console.log("New CointMU wallet");
+  console.log("===========================");
+  console.log(`Address  : ${wallet.address}`);
+  if (wallet.mnemonic) {
+    console.log(`Mnemonic : ${wallet.mnemonic.phrase}`);
+  }
+  console.log("===========================");
+  console.log(
+    `Saved wallet '${name}' (${wallet.address}), encrypted in ~/.cmu-wallets.json.`,
+  );
+  console.log(
+    "\n\x1b[33mwarning:\x1b[0m write the mnemonic down now - it is shown once and cmu keeps no copy.",
+  );
+  console.log(
+    "~/.cmu-wallets.json holds only the private key, encrypted with your password.",
+  );
+  console.log(
+    "If you lose that file or forget the password, the mnemonic is the only way to",
+  );
+  console.log(
+    "recover this wallet - and anyone who reads it controls the funds.\n",
+  );
+  console.log(
+    "\x1b[33mwarning:\x1b[0m the mnemonic stays behind in terminal scrollback, tmux or screen logs",
+  );
+  console.log("and CI output. Clear them if this ran anywhere shared.");
+  console.log(
+    `\x1b[2mhint:\x1b[0m run \`cmu wallet use ${name}\` in a project to make it active there.`,
+  );
+}
+
+/**
+ * Saves a private key as a named wallet in ~/.cmu-wallets.json, encrypted
+ * with its own password. The name is checked before anything is prompted.
+ *
+ * @param {string} name - The name to save the wallet under.
+ * @returns {Promise<void>}
+ */
+export async function runWalletSave(name: string): Promise<void> {
+  const wallets = await checkNewWalletName(name);
 
   const privateKey = await promptPrivateKey();
   const { ethers } = await import("ethers");
@@ -424,7 +522,7 @@ export async function runWalletUse(name: string): Promise<void> {
       `\x1b[33mwarning:\x1b[0m replacing the session for ${previous} - that key is not a saved wallet.`,
     );
     console.log(
-      "\x1b[2mhint:\x1b[0m enter it again with `cmu wallet login` or `cmu wallet save` if you still need it.",
+      "\x1b[2mhint:\x1b[0m enter it again with `cmu wallet save <name>` if you still need it.",
     );
   }
 
@@ -667,7 +765,7 @@ export async function runWalletTransfer(
   if (!session.encryptedKey) {
     throw new Error(
       "the session holds no encrypted key.\n" +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` or `cmu wallet use <name>`.",
+        "\x1b[2mhint:\x1b[0m run `cmu wallet use <name>`.",
     );
   }
   const from = session.address;
@@ -774,7 +872,7 @@ export async function runWalletTransfer(
   if (!sameAddress(signer.address, from)) {
     throw new Error(
       `.cmu-session names ${from}, but its key belongs to another address - the file has been modified.\n` +
-        "\x1b[2mhint:\x1b[0m run `cmu wallet login` or `cmu wallet use <name>` again.",
+        "\x1b[2mhint:\x1b[0m run `cmu wallet use <name>` again.",
     );
   }
 
@@ -905,7 +1003,11 @@ walletCommand
   .description("Generate a new EVM-compatible wallet")
   .option(
     "--login",
-    "Encrypt the new key straight into a session instead of printing it",
+    "Deprecated: use --save <name> (encrypts the new key into a session)",
+  )
+  .option(
+    "--save <name>",
+    "Encrypt the new key into ~/.cmu-wallets.json under <name> and print only the address and mnemonic",
   )
   .action((options, command) =>
     runWalletCreate(options).catch(
@@ -915,14 +1017,16 @@ walletCommand
 
 walletCommand
   .command("login")
-  .description("Log in and store the key in an encrypted session")
+  .description(
+    "Deprecated: use `cmu wallet save` + `cmu wallet use` (stores a key in an encrypted session)",
+  )
   .action((options, command) =>
     runWalletLogin().catch(fail("wallet login", command.optsWithGlobals())),
   );
 
 walletCommand
   .command("balance")
-  .description("Show the native token balance of the logged-in wallet")
+  .description("Show the native token balance of the active wallet")
   .action((options, command) =>
     runWalletBalance().catch(fail("wallet balance", command.optsWithGlobals())),
   );

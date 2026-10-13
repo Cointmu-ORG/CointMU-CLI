@@ -36,7 +36,7 @@ export async function activeNetworkName(): Promise<string> {
  * @throws {Error} When there is no usable active network.
  */
 export async function activeNetwork(
-  noSessionHint = "run `cmu wallet login`, then `cmu network use <name>`.",
+  noSessionHint = "run `cmu wallet use <wallet>`, then `cmu network use <network>`.",
 ): Promise<NetworkEntry> {
   const session = await requireSession(noSessionHint);
 

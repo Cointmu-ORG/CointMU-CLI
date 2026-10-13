@@ -101,9 +101,9 @@ Commands:
   console [options]           Opens an interactive REPL against the configured network
   explorer [options]          Queries block and contract information over RPC
   wallet                      Wallet management commands
-    create                    Generates a new, secure EVM-compatible wallet
-    login                     Securely log into your wallet and create an encrypted session
-    balance                   Fetch and display the native token balance of the logged-in wallet
+    create [--save <name>]    Generates a new wallet; --save stores it encrypted under <name>
+    login                     Deprecated: use `wallet save` + `wallet use`
+    balance                   Fetch and display the native token balance of the active wallet
     info                      Display the current active wallet session information
     save|add <name>           Save a private key as a named, encrypted wallet
     use <name>                Make a saved wallet the active session in this project
@@ -118,7 +118,7 @@ Commands:
   version [options]           Displays detailed CLI, runtime, and dependency versions
   test [options]              Executes the automated smart contract test suite
   mine                        Mining control commands
-    start [--watch]           Starts mining blocks on the active network using the logged-in wallet
+    start [--watch]           Starts mining blocks on the active network using the active wallet
     stop                      Stops mining blocks on the active network
     status                    Shows mining state, hashrate, etherbase and your balance
   network [options]           Manage active RPC networks locally
@@ -189,23 +189,17 @@ Here is a standard, lightning-fast workflow to get a new CointMU project up and 
 1. **Create a new development wallet**: 🔐
 
 ```bash
-cmu wallet create
+cmu wallet create --save deployer
 ```
 
-_(Make sure to save your private key securely in a safe place! The key and mnemonic
-stay in your terminal scrollback, so clear it if you ran this somewhere shared.)_
+_(You are asked for a password twice. The private key is encrypted into
+`~/.cmu-wallets.json` and never printed; only the address and the mnemonic are
+shown, once. The store does not keep the mnemonic, so write it down: it is the
+only backup if you lose that file or the password. It also stays in your
+terminal scrollback, so clear it if you ran this somewhere shared.)_
 
-To keep the key off the screen entirely, let `cmu` encrypt it into a session instead:
-
-```bash
-cmu wallet create --login
-```
-
-The key is never printed on that path — it exists only inside `.cmu-session`, so
-there is no printed backup to fall back on if you lose that file or its password.
-
-Juggling several keys? Save each one once as a named wallet and switch with
-`cmu wallet use` - see [Named Wallets](#-named-wallets).
+Plain `cmu wallet create` still prints the private key and mnemonic instead of
+storing anything. See [Named Wallets](#-named-wallets) for juggling several keys.
 
 2. **Scaffold a new CointMU project**: ✨
 
@@ -221,8 +215,14 @@ _(You will be interactively prompted to choose between TypeScript/JavaScript and
 cd my-awesome-dapp
 ```
 
-4. **Configure your environment**: ⚙️
-   Rename `.env.example` to `.env` and paste your newly generated private key into the `PRIVATE_KEY` variable.
+4. **Pick the wallet for this project**: ⚙️
+
+```bash
+cmu wallet use deployer
+```
+
+_(`cmu deploy` then asks for that wallet's password. In CI, rename `.env.example`
+to `.env` and set `PRIVATE_KEY` instead - it takes precedence over the wallet.)_
 
 5. **Compile your smart contracts**: 🔨
 
@@ -259,7 +259,7 @@ cmu> .exit
 
 _(The REPL preloads `provider`, `signer`, `ethers` and `getContract(name, address)`. The address is required - the CLI does not track deployed addresses per network yet - and `name` is the contract name, the one `cmu compile` wrote to `artifacts/<Name>.json`.)_
 
-Without `cmu wallet login` or a `PRIVATE_KEY`, `signer` is `undefined` and the console is read-only; `--no-signer` starts that way deliberately and skips the session password prompt. The network follows `defaultNetwork` in `cmu.config.ts` rather than `cmu network use`, exactly like `cmu deploy`.
+Without an active wallet (`cmu wallet use <name>`) or a `PRIVATE_KEY`, `signer` is `undefined` and the console is read-only; `--no-signer` starts that way deliberately and skips the session password prompt. The network follows `defaultNetwork` in `cmu.config.ts` rather than `cmu network use`, exactly like `cmu deploy`.
 
 9. **Look up a block or a contract without leaving the terminal**: 🔍
 
@@ -289,11 +289,11 @@ The explorer is read-only: there is no signer, so it never asks for your session
 
 ## 👛 Named Wallets
 
-`cmu wallet login` holds one key per project. To switch between several keys
-without pasting them again, save each one once under a name:
+Save each key once under a name, then pick one per project:
 
 ```bash
-cmu wallet save deployer     # prompts for the private key and a password (twice)
+cmu wallet create --save dev # new wallet: prompts for a password (twice), prints the mnemonic
+cmu wallet save deployer     # existing key: prompts for it and a password (twice)
 cmu wallet save admin        # every wallet has its own password
 cmu wallet list              # names and addresses; no password needed
 cmu wallet use deployer      # prompts for deployer's password
@@ -309,16 +309,24 @@ cmu wallet delete admin      # asks first; --yes skips the question
   are stored in plaintext. `use` copies the encrypted key into `.cmu-session`,
   so `cmu deploy` asks for that wallet's password.
 - **`use` keeps your network.** The active network picked with
-  `cmu network use` carries over, as it does for `cmu wallet login`.
+  `cmu network use` carries over.
+- **`create --save` does not activate the wallet.** Run `cmu wallet use <name>`
+  in each project that should sign with it. The private key is never printed;
+  the mnemonic is printed once and is the only backup, since the store keeps
+  just the encrypted key.
 - **Deleting is local to the store.** A project that already ran
   `cmu wallet use <name>` keeps its own encrypted copy in `.cmu-session` and
   keeps working. cmu keeps no other copy of a deleted wallet's key.
 - **Names** are 1-32 lowercase letters, digits, `-` or `_`. Saving under a name
   that is taken is refused - delete the old wallet first.
-- `cmu wallet login` and `cmu wallet create --login` still work for one-off keys.
-  When `use` replaces a session whose key is not saved, it warns you.
+- **`cmu wallet login` and `cmu wallet create --login` are deprecated.** They
+  still work and print a warning to stderr naming the replacement
+  (`wallet save` + `wallet use`, or `wallet create --save <name>` then
+  `wallet use <name>`); they will be removed in a later 1.x release. A
+  `.cmu-session` written by `login` stays valid - the file format does not
+  change. When `use` replaces a session whose key is not saved, it warns you.
 
-**Prompts need a terminal.** `save`, `use`, `login` and `delete` without `--yes`
+**Prompts need a terminal.** `save`, `create --save`, `use`, `login` and `delete` without `--yes`
 fail with an error when stdin is not a TTY instead of hanging. In CI, set
 `PRIVATE_KEY` instead - `cmu deploy` uses it before any session.
 
@@ -331,7 +339,8 @@ the keys inside still need their password.
 
 **Windows terminals.** Git Bash (mintty) does not present itself as a TTY, so
 the prompts above refuse to run there. Use Windows Terminal, PowerShell or
-`cmd`, or prefix the command with `winpty` (`winpty cmu wallet save dev`).
+`cmd`, or prefix the command with `winpty` (`winpty cmu wallet save dev`,
+`winpty cmu wallet create --save dev`).
 
 ## 💸 Sending ETH
 

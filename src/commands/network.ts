@@ -55,7 +55,7 @@ async function runNetworkPing(name?: string): Promise<void> {
   const { name: networkName, rpcUrl } = name
     ? await getDynamicNetwork(name)
     : await activeNetwork(
-        "pass a network name, or run `cmu wallet login` first.",
+        "pass a network name, or run `cmu wallet use <name>` first.",
       );
 
   console.log(`Pinging ${networkName} (${rpcUrl})...`);

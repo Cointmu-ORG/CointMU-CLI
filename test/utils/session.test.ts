@@ -175,10 +175,15 @@ describe("requireSession", () => {
     expect(await requireSession()).toEqual(session);
   });
 
-  it("turns a missing session into an error that points at login", async () => {
-    await expect(requireSession()).rejects.toThrow(
-      /^no active session\.\n.*hint:.*run `cmu wallet login` first\.$/,
+  it("turns a missing session into an error that points at named wallets", async () => {
+    const error = await requireSession().catch((e: Error) => e);
+    expect((error as Error).message).toMatch(/^no active session\.\n.*hint:/);
+    // `create --save` does not activate the wallet, so it never stands alone.
+    expect((error as Error).message).toContain("`cmu wallet use <name>`");
+    expect((error as Error).message).toContain(
+      "`cmu wallet create --save <name>` and then `cmu wallet use <name>`",
     );
+    expect((error as Error).message).not.toContain("login");
   });
 
   it("carries the caller's hint instead, when given one", async () => {

@@ -53,6 +53,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.resetModules();
   vi.doUnmock("inquirer");
+  vi.doUnmock("../../src/utils/walletStorage");
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -103,7 +104,11 @@ describe("wallet create", () => {
     expect(output()).toContain("shown once");
     expect(output()).toContain("warning:");
     expect(output()).toContain("scrollback");
-    expect(output()).toContain("--login");
+    // #194: points at named wallets, and never at the deprecated login.
+    expect(output()).toContain("`cmu wallet create --save <name>`");
+    expect(output()).toContain("`cmu wallet use <name>`");
+    expect(output()).toContain("cmu wallet save <name>");
+    expect(output()).not.toContain("login");
     expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(false);
   });
 });
@@ -338,15 +343,21 @@ function allFiles(dir: string): string[] {
  * The private keys appear nowhere: not in anything printed during the test
  * (stdout or stderr, even before a `logged = []`), and not in any
  * file the commands left under tmpDir (HOME and cwd), with or without 0x.
+ *
+ * @param {string[]} [keys] - Further keys to look for, such as one the command
+ *   generated itself.
  */
-function expectNoKeyLeak(): void {
+function expectNoKeyLeak(keys: string[] = []): void {
   const files = allFiles(tmpDir);
   const haystacks = [
     everything.join("\n"),
     ...files.map((file) => fs.readFileSync(file, "utf8")),
   ].map((text) => text.toLowerCase());
   // With and without 0x, lowercased like the haystacks; and the password.
-  const secrets = [KEY, KEY_B].flatMap((key) => [key, key.slice(2)]);
+  const secrets = [KEY, KEY_B, ...keys].flatMap((key) => [
+    key.toLowerCase(),
+    key.slice(2).toLowerCase(),
+  ]);
   secrets.push(PASSWORD.toLowerCase());
   for (const secret of secrets) {
     for (const text of haystacks) {
@@ -430,6 +441,335 @@ describe("wallet save / list", () => {
     expect(fs.readFileSync(walletsFile(), "utf8")).toBe(before);
     expectNoKeyLeak();
   });
+});
+
+// Issue #194: `wallet create --save <name>` generates a wallet straight into
+// the store and prints only the address and the mnemonic. The store keeps the
+// key and not the mnemonic, so the printed mnemonic is the one backup: it must
+// derive the stored key, and it must never be printed for a wallet that did
+// not end up saved.
+
+describe("wallet create --save", () => {
+  const ANSWERS = { password: PASSWORD, confirmPassword: PASSWORD };
+
+  /** Spies on createRandom; the returned list fills with what it hands out. */
+  async function spyCreateRandom() {
+    const { ethers } = await import("ethers");
+    const createRandom = ethers.Wallet.createRandom.bind(ethers.Wallet);
+    const generated: ReturnType<typeof createRandom>[] = [];
+    vi.spyOn(ethers.Wallet, "createRandom").mockImplementation(((
+      ...args: Parameters<typeof createRandom>
+    ) => {
+      const wallet = createRandom(...args);
+      generated.push(wallet);
+      return wallet;
+    }) as typeof createRandom);
+    return generated;
+  }
+
+  /** Nothing a successful --save prints reached the output. */
+  function expectNothingPrinted(): void {
+    expect(output()).not.toContain("New CointMU wallet");
+    expect(output()).not.toContain("Mnemonic");
+    expect(output()).not.toContain("Address");
+  }
+
+  it("stores the key encrypted and prints a mnemonic that derives it", async () => {
+    const generated = await spyCreateRandom();
+    const { runWalletCreate } = await walletCommands(ANSWERS);
+    await runWalletCreate({ save: "alice" });
+
+    expect(generated).toHaveLength(1);
+    const [wallet] = generated;
+    const [entry] = readWallets().wallets;
+    expect(entry.name).toBe("alice");
+    expect(entry.address).toBe(wallet.address);
+    expect(entry.iterations).toBe(600000);
+
+    const line = logged.find((l) => l.startsWith("Mnemonic : "));
+    expect(line).toBeDefined();
+    const phrase = line!.slice("Mnemonic : ".length);
+    const { ethers } = await import("ethers");
+    expect(ethers.HDNodeWallet.fromPhrase(phrase).privateKey).toBe(
+      decryptSessionKey(PASSWORD, entry),
+    );
+    // Printed once, and the key not at all.
+    expect(everything.join("\n").split(phrase)).toHaveLength(2);
+    expect(output()).toContain(`Address  : ${wallet.address}`);
+    expect(output()).not.toContain("Private key");
+    expectNoKeyLeak([wallet.privateKey]);
+
+    // The store holds no mnemonic either; consecutive pairs, as above.
+    const stored = fs.readFileSync(walletsFile(), "utf8");
+    const words = phrase.split(" ");
+    for (let i = 0; i < words.length - 1; i++) {
+      expect(stored).not.toContain(`${words[i]} ${words[i + 1]}`);
+    }
+
+    expect(output()).toContain("cmu keeps no copy");
+    expect(output()).toContain("the mnemonic is the only way");
+    expect(output()).toContain("scrollback");
+    // Saved, not activated.
+    expect(output()).toContain("`cmu wallet use alice`");
+    expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(false);
+  });
+
+  it("saves through the commander action", async () => {
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+    const { walletCommand } = await walletCommands(ANSWERS);
+    await walletCommand.parseAsync(["create", "--save", "alice"], {
+      from: "user",
+    });
+
+    expect(exit).not.toHaveBeenCalled();
+    expect(readWallets().wallets.map((w) => w.name)).toEqual(["alice"]);
+  });
+
+  it("refuses a name that is already saved before prompting or generating", async () => {
+    await save("alice");
+    const before = fs.readFileSync(walletsFile(), "utf8");
+    logged = [];
+    const generated = await spyCreateRandom();
+
+    const { runWalletCreate } = await walletCommands();
+    await expect(runWalletCreate({ save: "alice" })).rejects.toThrow(
+      "wallet 'alice' is already saved",
+    );
+    expect(generated).toEqual([]);
+    expectNothingPrinted();
+    expect(fs.readFileSync(walletsFile(), "utf8")).toBe(before);
+  });
+
+  it.each(["", "Deployer", "-x", "__proto__", "a b", "x".repeat(33)])(
+    "refuses the invalid name %j before prompting or generating",
+    async (name) => {
+      const generated = await spyCreateRandom();
+      const { runWalletCreate } = await walletCommands();
+      await expect(runWalletCreate({ save: name })).rejects.toThrow(
+        "invalid wallet name",
+      );
+      expect(generated).toEqual([]);
+      expectNothingPrinted();
+      expect(fs.existsSync(walletsFile())).toBe(false);
+    },
+  );
+
+  it("refuses an unreadable wallets file before prompting, and leaves it", async () => {
+    fs.writeFileSync(walletsFile(), "{ not json");
+    const generated = await spyCreateRandom();
+
+    const { runWalletCreate } = await walletCommands();
+    await expect(runWalletCreate({ save: "alice" })).rejects.toThrow(
+      "not a valid wallets file",
+    );
+    expect(generated).toEqual([]);
+    expect(fs.readFileSync(walletsFile(), "utf8")).toBe("{ not json");
+  });
+
+  it("writes and prints nothing when the password confirmation does not match", async () => {
+    const generated = await spyCreateRandom();
+    const mismatch = { password: PASSWORD, confirmPassword: "correct horse 8" };
+
+    let commands = await walletCommands(mismatch);
+    await expect(commands.runWalletCreate({ save: "alice" })).rejects.toThrow(
+      "passwords do not match",
+    );
+    expect(fs.existsSync(walletsFile())).toBe(false);
+
+    await save("other", KEY_B);
+    const before = fs.readFileSync(walletsFile(), "utf8");
+    logged = [];
+    commands = await walletCommands(mismatch);
+    await expect(commands.runWalletCreate({ save: "alice" })).rejects.toThrow(
+      "passwords do not match",
+    );
+    expect(fs.readFileSync(walletsFile(), "utf8")).toBe(before);
+
+    expect(generated).toEqual([]);
+    expectNothingPrinted();
+    expectNoKeyLeak();
+  });
+
+  it("prints no mnemonic when the store cannot be written, even with --verbose", async () => {
+    vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const tmpPath = `${walletsFile()}.${process.pid}.tmp`;
+    vi.doMock("../../src/utils/walletStorage", async (importOriginal) => ({
+      ...(await importOriginal<
+        typeof import("../../src/utils/walletStorage")
+      >()),
+      saveWallet: async () => {
+        throw Object.assign(
+          new Error(`EACCES: permission denied, open '${tmpPath}'`),
+          { code: "EACCES", syscall: "open", path: tmpPath },
+        );
+      },
+    }));
+    const generated = await spyCreateRandom();
+    const { fail } = await import("../../src/utils/errors");
+
+    const { runWalletCreate } = await walletCommands(ANSWERS);
+    await runWalletCreate({ save: "alice" }).catch(
+      fail("wallet create", { verbose: true }),
+    );
+
+    expect(output()).toContain("wallet create failed");
+    expect(output()).toContain("EACCES");
+    expect(generated).toHaveLength(1);
+    const [wallet] = generated;
+    expectNothingPrinted();
+    expect(output()).not.toContain(wallet.address);
+    const words = wallet.mnemonic!.phrase.split(" ");
+    for (let i = 0; i < words.length - 1; i++) {
+      expect(output()).not.toContain(`${words[i]} ${words[i + 1]}`);
+    }
+    expect(fs.existsSync(walletsFile())).toBe(false);
+    expectNoKeyLeak([wallet.privateKey]);
+  });
+
+  it("fails without a terminal the way wallet save does, before generating", async () => {
+    process.stdin.isTTY = false;
+    const generated = await spyCreateRandom();
+
+    const { runWalletCreate, runWalletSave } = await walletCommands();
+    const created = await runWalletCreate({ save: "alice" }).catch(
+      (error: Error) => error,
+    );
+    const saved = await runWalletSave("bob").catch((error: Error) => error);
+
+    expect(created).toBeInstanceOf(Error);
+    expect((created as Error).message).toContain("non-interactive session");
+    // The same error, naming what it would have prompted for.
+    expect(
+      (created as Error).message.replace("a password", "a private key"),
+    ).toBe((saved as Error).message);
+    expect(generated).toEqual([]);
+    expect(fs.existsSync(walletsFile())).toBe(false);
+  });
+
+  it("refuses --save together with --login, through the CLI too", async () => {
+    const generated = await spyCreateRandom();
+    const { runWalletCreate } = await walletCommands();
+    await expect(
+      runWalletCreate({ save: "alice", login: true }),
+    ).rejects.toThrow("--save and --login cannot be combined");
+
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+    const { walletCommand } = await walletCommands();
+    await walletCommand.parseAsync(["create", "--save", "alice", "--login"], {
+      from: "user",
+    });
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(output()).toContain("wallet create failed");
+    expect(output()).toContain("cannot be combined");
+
+    expect(generated).toEqual([]);
+    expect(fs.existsSync(walletsFile())).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(false);
+  });
+});
+
+// Issue #194: `login` and `create --login` keep working behind a deprecation
+// notice on stderr. stdout and the exit code stay exactly as they were, so a
+// script that reads them keeps working through the deprecation window.
+
+describe("deprecated login paths", () => {
+  const LOGIN_ANSWERS = { privateKey: KEY, password: PASSWORD };
+  const DEPLOY_LINE =
+    "`cmu deploy` will use this key automatically when PRIVATE_KEY is not set.";
+
+  function stdout(): string[] {
+    return vi.mocked(console.log).mock.calls.map((args) => args.join(" "));
+  }
+
+  function stderr(): string {
+    return [
+      ...vi.mocked(console.warn).mock.calls,
+      ...vi.mocked(console.error).mock.calls,
+    ]
+      .map((args) => args.join(" "))
+      .join("\n");
+  }
+
+  it("wallet login warns once on stderr, with stdout unchanged", async () => {
+    const { runWalletLogin } = await walletCommands(LOGIN_ANSWERS);
+    await runWalletLogin();
+
+    expect(stderr().match(/is deprecated/g)).toHaveLength(1);
+    expect(stderr()).toContain("`cmu wallet login` is deprecated");
+    expect(stderr()).toContain(
+      "`cmu wallet save <name>`, then run `cmu wallet use <name>`",
+    );
+    expect(stdout()).toEqual([
+      "Session encrypted and saved.",
+      `Logged in as ${ADDRESS_A}`,
+      "Active network: local",
+      DEPLOY_LINE,
+    ]);
+    expectNoKeyLeak();
+  });
+
+  it("wallet create --login warns once on stderr, with stdout unchanged", async () => {
+    const { runWalletCreate } = await walletCommands(LOGIN_ANSWERS);
+    await runWalletCreate({ login: true });
+
+    expect(stderr().match(/is deprecated/g)).toHaveLength(1);
+    expect(stderr()).toContain("`cmu wallet create --login` is deprecated");
+    expect(stderr()).toContain(
+      "`cmu wallet create --save <name>`, then `cmu wallet use <name>`",
+    );
+    const session = readSession();
+    expect(stdout()).toEqual([
+      "New CointMU wallet",
+      "===========================",
+      `Address : ${session.address}`,
+      "===========================",
+      "Session encrypted and saved.",
+      "Active network: local",
+      "\n\x1b[33mwarning:\x1b[0m the private key and mnemonic were not printed - this wallet",
+      "exists only inside .cmu-session. Lose that file or its password and the funds",
+      "in it cannot be recovered.",
+      "\x1b[2mhint:\x1b[0m run `cmu wallet create` without --login for a printed backup.\n",
+      DEPLOY_LINE,
+    ]);
+    expectNoKeyLeak([decryptSessionKey(PASSWORD, session)]);
+  });
+
+  describe.each([[["login"]], [["create", "--login"]]])(
+    "through the commander action: %j",
+    (argv) => {
+      let exit: ReturnType<typeof vi.spyOn>;
+      beforeEach(() => {
+        exit = vi
+          .spyOn(process, "exit")
+          .mockImplementation((() => undefined) as never);
+      });
+
+      it("exits as before on success", async () => {
+        const { walletCommand } = await walletCommands(LOGIN_ANSWERS);
+        await walletCommand.parseAsync(argv, { from: "user" });
+
+        expect(exit).not.toHaveBeenCalled();
+        expect(stderr()).toContain("is deprecated");
+        expect(stdout().join("\n")).not.toContain("deprecated");
+        expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(true);
+      });
+
+      it("exits 1 without a terminal, still warning on stderr", async () => {
+        process.stdin.isTTY = false;
+        const { walletCommand } = await walletCommands();
+        await walletCommand.parseAsync(argv, { from: "user" });
+
+        expect(exit).toHaveBeenCalledWith(1);
+        expect(stderr()).toContain("is deprecated");
+        expect(stderr()).toContain("non-interactive session");
+        expect(stdout().join("\n")).not.toContain("deprecated");
+      });
+    },
+  );
 });
 
 describe("wallet use", () => {

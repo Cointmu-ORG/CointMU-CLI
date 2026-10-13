@@ -7,7 +7,7 @@ import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 import { pingNetwork } from "./deploy";
 
 /** Shown in place of an address when the console starts without a signer. */
-const NO_SIGNER_LABEL = "none (read-only) - run `cmu wallet login`";
+const NO_SIGNER_LABEL = "none (read-only) - run `cmu wallet use <name>`";
 
 interface ConsoleOptions {
   network?: string;
