@@ -1,7 +1,7 @@
 {
   "name": "cointmu-cli",
-  "version": "1.4.1",
-  "codename": "Titan",
+  "version": "1.5.0",
+  "codename": "Gudeg",
   "description": "Primary development toolkit for the CointMU blockchain",
   "keywords": [
     "cointmu",
