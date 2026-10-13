@@ -108,6 +108,7 @@ Commands:
     balance                   Fetch and display the native token balance of the active wallet
     info                      Display the current active wallet session information
     save|add <name>           Save a private key as a named, encrypted wallet
+                              (--session: save this project's session key instead)
     use <name>                Make a saved wallet the active session in this project
     list                      List saved wallets
     delete <name>             Delete a saved wallet
@@ -312,6 +313,7 @@ Save each key once under a name, then pick one per project:
 cmu wallet create --save dev # new wallet: prompts for a password (twice), prints the mnemonic
 cmu wallet save deployer     # existing key: prompts for it and a password (twice)
 cmu wallet save admin        # every wallet has its own password
+cmu wallet save old --session # keep this project's session key; opens with the session password
 cmu wallet list              # names and addresses; no password needed
 cmu wallet use deployer      # prompts for deployer's password
 cmu wallet delete admin      # asks first; --yes skips the question
@@ -341,15 +343,30 @@ cmu wallet delete admin      # asks first; --yes skips the question
   (`wallet save` + `wallet use`, or `wallet create --save <name>` then
   `wallet use <name>`); they will be removed in a later 1.x release. A
   `.cmu-session` written by `login` stays valid - the file format does not
-  change. When `use` replaces a session whose key is not saved, it warns you.
+  change.
+- **A key that is not saved is never replaced without asking.** `use`,
+  `login` and `create --login` check `.cmu-session` before any prompt. If it
+  holds a key whose address is not a saved wallet - such as one from
+  `create --login`, which was never printed - they name that address and ask
+  `Replace it anyway? (y/N)`. Answering no (or Ctrl-C) leaves the file as it
+  was and exits 1; replacing it deletes that key for good. Keep it first with
+  `cmu wallet save <name> --session`: it copies the encrypted key into
+  `~/.cmu-wallets.json` without decrypting it, so it needs no terminal and
+  the saved wallet opens with the session's password. A session with no
+  readable key (missing, corrupt, or from before AES-GCM) is replaced without
+  a question.
 
 **Prompts need a terminal.** `save`, `create --save`, `use`, `login` and `delete` without `--yes`
-fail with an error when stdin is not a TTY instead of hanging. In CI, set
+fail with an error when stdin is not a TTY instead of hanging. So does the
+replace question above; there is no flag to skip it. `save --session` asks
+nothing and works anywhere. In CI, set
 `PRIVATE_KEY` instead - `cmu deploy` uses it before any session.
 
 **File permissions.** On Linux and macOS, `~/.cmu-wallets.json` and
 `.cmu-session` are written with mode `0600` (owner only), and an existing file
-with a looser mode is tightened on the next write. On Windows, `chmod` only
+with a looser mode is tightened on the next write. Both are written to a temp
+file and renamed into place, so an interrupted write leaves the old file
+intact. On Windows, `chmod` only
 toggles the read-only attribute: the file is protected by the ACL it inherits
 from your user profile folder (by default you, SYSTEM and Administrators), and
 the keys inside still need their password.
