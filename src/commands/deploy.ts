@@ -47,14 +47,15 @@ export async function pingNetwork(
   rpcUrl: string,
   name?: string,
 ): Promise<void> {
-  // An unset url is a config error, not an unreachable endpoint: dialing "" only
-  // buys the user a NETWORK_TIMEOUT_MS wait and a message with a hole in it. The
-  // stock `cmu create` scaffold ships `mainnet` with url: "", so this is a
-  // first-run mistake, not an exotic one.
+  // An unset url is a broken entry, not an unreachable endpoint: dialing "" only
+  // buys the user a NETWORK_TIMEOUT_MS wait and a message with a hole in it.
+  // getDeployNetwork() already rejects a cmu.config network without one, naming
+  // the file, so what still arrives here is a saved network (`wallet transfer`)
+  // from a hand-edited .cmu-networks.json - `network save` refuses an empty url.
   if (!rpcUrl) {
     throw new Error(
-      "the resolved network has no url.\n" +
-        "\x1b[2mhint:\x1b[0m set `url` for this network in cmu.config.ts.",
+      `${name ? `network '${name}'` : "the resolved network"} has no url.\n` +
+        `\x1b[2mhint:\x1b[0m re-save it with \`cmu network save <url> --name ${name ?? "<name>"}\`.`,
     );
   }
 

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { stripVTControlCharacters } from "util";
 import {
   decryptSessionKey,
   encryptSessionKey,
@@ -2150,6 +2151,24 @@ describe("wallet transfer", () => {
       await expect(transfer()).rejects.toThrow("unreachable");
       expect(asked).toEqual([]);
       expect(sendTransaction).not.toHaveBeenCalled();
+    });
+
+    // The network here comes from .cmu-networks.json, not a cmu.config, so the
+    // hint must send the user to `network save`, never to a config file.
+    it("points a saved network with no url at network save, not a config file", async () => {
+      fs.writeFileSync(
+        path.join(tmpDir, ".cmu-networks.json"),
+        JSON.stringify([{ name: "local", rpcUrl: "" }]),
+      );
+      await mockChain({ refuse: true });
+
+      const error = await transfer().catch((e: Error) => e);
+
+      expect(stripVTControlCharacters((error as Error).message)).toBe(
+        "network 'local' has no url.\n" +
+          "hint: re-save it with `cmu network save <url> --name local`.",
+      );
+      expect(asked).toEqual([]);
     });
 
     it("fails without a session", async () => {
