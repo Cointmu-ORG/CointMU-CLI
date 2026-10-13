@@ -452,6 +452,8 @@ const SESSION_HINT =
 const storeHint = (name: string) =>
   `hint: retype the password '${name}' was saved with - cmu cannot recover a forgotten one.`;
 
+type Commands = typeof import("../../src/commands/wallet");
+
 /** The last line of an error's message, where the hint goes, uncoloured. */
 function hintOf(error: unknown): string | undefined {
   return stripVTControlCharacters(String((error as Error)?.message))
@@ -1455,6 +1457,56 @@ describe("named wallets without a terminal", () => {
     expect(readWallets().wallets).toHaveLength(1);
   });
 
+  // #188: one case per requireInteractive() call site. PRIVATE_KEY stands in
+  // for a session key, so only login may suggest it; the rest either have a
+  // flag of their own or no way around a terminal. (transfer: see its suite.)
+  const TERMINAL = "hint: run this in a terminal.";
+  it.each([
+    [
+      "login",
+      "hint: run this in a terminal; in CI, set PRIVATE_KEY instead.",
+      (m: Commands) => m.runWalletLogin(),
+    ],
+    [
+      "create --login",
+      TERMINAL,
+      (m: Commands) => m.runWalletCreate({ login: true }),
+    ],
+    [
+      "create --save",
+      TERMINAL,
+      (m: Commands) => m.runWalletCreate({ save: "other" }),
+    ],
+    ["save", TERMINAL, (m: Commands) => m.runWalletSave("other")],
+    ["use", TERMINAL, (m: Commands) => m.runWalletUse("deployer")],
+    [
+      "delete",
+      "hint: re-run with --yes to delete without asking.",
+      (m: Commands) => m.runWalletDelete("deployer"),
+    ],
+  ])("%s names the right way out", async (route, hint, run) => {
+    const error = await run(await walletCommands()).catch((e: Error) => e);
+
+    expect(hintOf(error)).toBe(hint);
+    if (route !== "login") {
+      expect((error as Error).message).not.toContain("PRIVATE_KEY");
+    }
+    expectNoKeyLeak();
+  });
+
+  it("use over an unsaved session names `save --session`, not PRIVATE_KEY", async () => {
+    writeKeySession(ADDRESS_B);
+    const { runWalletUse } = await walletCommands();
+
+    const error = await runWalletUse("deployer").catch((e: Error) => e);
+
+    expect(hintOf(error)).toBe(
+      "hint: keep the key first with `cmu wallet save <name> --session`, or run this in a terminal to confirm.",
+    );
+    expect((error as Error).message).not.toContain("PRIVATE_KEY");
+    expectNoKeyLeak();
+  });
+
   it("delete --yes and list still work", async () => {
     const { runWalletDelete, runWalletList } = await walletCommands();
     await runWalletDelete("deployer", { yes: true });
@@ -1800,8 +1852,11 @@ describe("wallet transfer", () => {
         await mockChain({ refuse: true });
         process.stdin.isTTY = false;
 
-        await expect(transfer({ yes })).rejects.toThrow(
-          "non-interactive session",
+        const error = await transfer({ yes }).catch((e: Error) => e);
+
+        expect((error as Error).message).toContain("non-interactive session");
+        expect(hintOf(error)).toBe(
+          "hint: transfer signs with the .cmu-session key and needs its password; run it in a terminal.",
         );
         expect(asked).toEqual([]);
         expect(sendTransaction).not.toHaveBeenCalled();

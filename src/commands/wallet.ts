@@ -63,7 +63,7 @@ async function carriedOverNetwork(): Promise<string> {
  */
 function requireInteractive(
   what: string,
-  hint = "run this in a terminal; in CI, set PRIVATE_KEY instead.",
+  hint = "run this in a terminal.",
 ): void {
   if (!process.stdin.isTTY) {
     throw new Error(
@@ -77,10 +77,12 @@ function requireInteractive(
  * Prompts for a private key, masked, and rejects anything that is not one.
  * The validation message never echoes the input.
  *
+ * @param {string} [hint] - What to do without a terminal, for a caller that
+ *   has a better answer than running it in one.
  * @returns {Promise<string>} The entered private key.
  */
-async function promptPrivateKey(): Promise<string> {
-  requireInteractive("a private key");
+async function promptPrivateKey(hint?: string): Promise<string> {
+  requireInteractive("a private key", hint);
   const inquirer = (await import("inquirer")).default;
   const { ethers } = await import("ethers");
 
@@ -354,8 +356,14 @@ export async function runWalletLogin(): Promise<void> {
   console.warn(
     "\x1b[2mhint:\x1b[0m save the key once with `cmu wallet save <name>`, then run `cmu wallet use <name>` in the project.\n",
   );
+  // Only login gets the PRIVATE_KEY hint: the env var stands in for a session
+  // key, but it cannot save, select or delete a wallet (#188).
   const { address, activeNetwork } = await storeSession(async () =>
-    encryptNewKey(await promptPrivateKey()),
+    encryptNewKey(
+      await promptPrivateKey(
+        "run this in a terminal; in CI, set PRIVATE_KEY instead.",
+      ),
+    ),
   );
   console.log("Session encrypted and saved.");
   console.log(`Logged in as ${address}`);
