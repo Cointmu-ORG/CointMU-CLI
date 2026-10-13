@@ -101,6 +101,10 @@ describe("getContract", () => {
     const getContract = await loadGetContract({ provider });
 
     expect(() => (getContract as any)("Token")).toThrow(/requires an address/);
+    // The hint names the whole fix: the recorded path, and the explicit one.
+    expect(() => (getContract as any)("Token")).toThrow(
+      'await getDeployed("Name")',
+    );
   });
 
   it("rejects a name-shaped address instead of resolving it as ENS", async () => {

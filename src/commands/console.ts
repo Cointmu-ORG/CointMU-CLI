@@ -96,7 +96,7 @@ export function makeGetContract(ctx: { provider: any; signer?: any }) {
     if (!address) {
       throw new Error(
         "getContract(name, address) requires an address.\n" +
-          '\x1b[2mhint:\x1b[0m getContract("Token", "0x...") - the console does not look addresses up.',
+          '\x1b[2mhint:\x1b[0m if it was deployed with `cmu deploy`, use `await getDeployed("Name")` (run `cmu deploy` first if it has no record yet); otherwise pass the address: `getContract("Name", "0x...")`.',
       );
     }
     // ethers treats a non-address string as a possible ENS name and resolves it
