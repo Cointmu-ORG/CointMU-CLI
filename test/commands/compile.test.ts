@@ -210,3 +210,52 @@ describe("runCompile diagnostics", () => {
     expect(fs.existsSync(path.join(tmpDir, "artifacts"))).toBe(false);
   });
 });
+
+// getDeployed checks on-chain code against the runtime bytecode, masking the
+// slots the constructor fills in, so both have to be in the artifact.
+describe("runCompile artifact shape", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-compile-shape-"));
+    fs.mkdirSync(path.join(tmpDir, "contracts"));
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("writes the runtime bytecode and the immutable ranges", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "contracts", "Imm.sol"),
+      "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n" +
+        "contract Imm { uint256 public immutable x; constructor(uint256 v) { x = v; } }\n",
+    );
+
+    const { runCompile } = await import("../../src/commands/compile");
+    await runCompile();
+
+    const artifact = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, "artifacts", "Imm.json"), "utf8"),
+    );
+    expect(artifact.evm.bytecode.object).toMatch(/^[0-9a-f]+$/);
+    expect(artifact.evm.deployedBytecode.object).toMatch(/^[0-9a-f]+$/);
+    const ranges = Object.values(
+      artifact.evm.deployedBytecode.immutableReferences,
+    ).flat() as { start: number; length: number }[];
+    expect(ranges.length).toBeGreaterThan(0);
+    for (const { start, length } of ranges) {
+      expect(length).toBe(32);
+      // Left zero for the constructor to fill: what codeMatchesArtifact masks.
+      expect(
+        artifact.evm.deployedBytecode.object.slice(
+          start * 2,
+          (start + length) * 2,
+        ),
+      ).toBe("0".repeat(64));
+    }
+  });
+});

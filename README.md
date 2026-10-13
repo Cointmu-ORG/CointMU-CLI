@@ -254,12 +254,23 @@ cmu console
 
 ```text
 cmu> await provider.getBlockNumber()
-cmu> const token = getContract("Token", "0xYOUR_CONTRACT_ADDRESS")
+cmu> const token = await getDeployed("Token")
+getDeployed: Token -> 0x5FbD... on 'local' (chain 1912), recorded 2026-10-13T08:00:00.000Z from deployments/local/Token.json
 cmu> await token.totalSupply()
+cmu> const other = getContract("Token", "0xANOTHER_ADDRESS")
 cmu> .exit
 ```
 
-_(The REPL preloads `provider`, `signer`, `ethers` and `getContract(name, address)`. The address is required - the CLI does not track deployed addresses per network yet - and `name` is the contract name, the one `cmu compile` wrote to `artifacts/<Name>.json`.)_
+_(The REPL preloads `provider`, `signer`, `ethers`, `getContract(name, address)` and `getDeployed(name)`. `name` is the contract name, the one `cmu compile` wrote to `artifacts/<Name>.json`.)_
+
+- `getContract(name, address)` is synchronous and attaches the ABI to the address you give it; it never looks anything up.
+- `getDeployed(name)` is always async (`await` it). It resolves the address from `deployments/<network>/<Name>.json` for the console's network, as recorded by `cmu deploy`. Before it hands back a contract, it checks the record against the chain:
+  - the chain ID is the recorded one;
+  - the address still holds code (a restarted devnet leaves none);
+  - that code is the code that was recorded;
+  - that code is what your local `artifacts/<Name>.json` compiles to, with immutables masked.
+
+  A failed check is an error, never a silent fallback. Every successful resolve prints the address and the record it came from. Records in a cloned repository were written by someone else; the artifact check is what stops one from pointing your console at a different contract. Run `cmu compile` after cloning so that `artifacts/` is your own build. Contracts with linked libraries cannot be checked yet, so `getDeployed` refuses them.
 
 Without an active wallet (`cmu wallet use <name>`) or a `PRIVATE_KEY`, `signer` is `undefined` and the console is read-only; `--no-signer` starts that way deliberately and skips the session password prompt. The network follows `defaultNetwork` in `cmu.config.ts` rather than `cmu network use`, exactly like `cmu deploy`.
 
@@ -283,9 +294,13 @@ Validator    : 0xC014BA5EC014ba5ec014Ba5EC014ba5Ec014bA5E
 Address      : 0x47aD01814e2Bfeb6dEA1B0262723899188bD4F5E
 Bytecode     : 1842 bytes
 Balance      : 0.0 (0 wei)
+Recorded as  : Token (deployments/local/Token.json, recorded 2026-09-21T14:20:58.000Z)
+Record check : code matches the record
 ```
 
 _(Exactly one of `--block` or `--contract` per run: they answer unrelated questions, and passing neither would otherwise do nothing at all. An address with no bytecode is reported as such and still exits `0` - "not a contract" is an answer, not a failure.)_
+
+When a deployment record on the same network names the address, the explorer shows it under `Recorded as`. `Record check` compares the record's code hash with what is on-chain. A stale record is labelled, not refused: the explorer only reads.
 
 The explorer is read-only: there is no signer, so it never asks for your session password even when `.cmu-session` is locked. Like `cmu console` and `cmu deploy`, the network follows `defaultNetwork` in `cmu.config.ts` unless `-n/--network` overrides it.
 

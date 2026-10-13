@@ -101,6 +101,10 @@ describe("getContract", () => {
     const getContract = await loadGetContract({ provider });
 
     expect(() => (getContract as any)("Token")).toThrow(/requires an address/);
+    // The hint names the whole fix: the recorded path, and the explicit one.
+    expect(() => (getContract as any)("Token")).toThrow(
+      'await getDeployed("Name")',
+    );
   });
 
   it("rejects a name-shaped address instead of resolving it as ENS", async () => {
@@ -260,5 +264,329 @@ describe("consoleCommand", () => {
     expect(flags).toContain("-n, --network <name>");
     expect(flags).toContain("--no-signer");
     expect(flags).toContain("-y, --yes");
+  });
+});
+
+// getDeployed(name) resolves the address from deployments/<network>/ and
+// checks the record against the chain first. The provider is a fake object:
+// only getNetwork and getCode are ever asked.
+describe("getDeployed", () => {
+  const TOKEN = "0x00000000000000000000000000000000000000c1";
+  /** Runtime code as it sits on-chain, and as the artifact has it. */
+  const RUNTIME = "0x6080604052348015600f57600080fd5b50";
+  /** With a 32-byte immutable at byte 2: zero in the artifact, set on-chain. */
+  const RUNTIME_IMM_ARTIFACT = `0x6080${"00".repeat(32)}5b`;
+  const RUNTIME_IMM_CHAIN = `0x6080${"ab".repeat(32)}5b`;
+
+  let tmpDir: string;
+  let out: string[];
+  let code: string;
+  let liveChainId: bigint;
+  const provider = {
+    getNetwork: async () => ({ chainId: liveChainId }),
+    getCode: vi.fn(async () => code),
+  };
+  const signer = new ethers.Wallet(PRIVATE_KEY);
+
+  beforeEach(() => {
+    vi.resetModules();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-getdeployed-"));
+    vi.stubEnv("HOME", tmpDir);
+    vi.stubEnv("USERPROFILE", tmpDir);
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    out = [];
+    for (const method of ["log", "warn", "error"] as const) {
+      vi.spyOn(console, method).mockImplementation((...a: unknown[]) => {
+        out.push(a.map(String).join(" "));
+      });
+    }
+    code = RUNTIME;
+    liveChainId = 1912n;
+    provider.getCode.mockClear();
+    writeArtifact("Token", RUNTIME);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeArtifact(
+    name: string,
+    runtime: string | undefined,
+    immutableReferences: unknown = {},
+  ): void {
+    fs.mkdirSync(path.join(tmpDir, "artifacts"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, "artifacts", `${name}.json`),
+      JSON.stringify({
+        abi: ABI,
+        evm: {
+          bytecode: { object: "60aa" },
+          ...(runtime && {
+            deployedBytecode: { object: runtime, immutableReferences },
+          }),
+        },
+      }),
+    );
+  }
+
+  function writeRecord(
+    network: string,
+    overrides: Record<string, unknown> = {},
+    name = "Token",
+  ): string {
+    const dir = path.join(tmpDir, "deployments", network);
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${name}.json`);
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        format: 1,
+        contract: name,
+        network,
+        chainId: 1912,
+        address: TOKEN,
+        deployer: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        txHash: `0x${"11".repeat(32)}`,
+        blockNumber: 3,
+        timestamp: "2026-10-13T08:00:00.000Z",
+        codeHash: ethers.keccak256(code),
+        ...overrides,
+      }),
+    );
+    return file;
+  }
+
+  async function load(network = "local") {
+    const { makeGetDeployed } = await import("../../src/commands/console");
+    return makeGetDeployed({ provider, signer, network });
+  }
+
+  it("resolves the recorded contract and says where the address came from", async () => {
+    writeRecord("local");
+    const getDeployed = await load();
+
+    const token: any = await getDeployed("Token");
+
+    expect(token.target).toBe(TOKEN);
+    expect(token.runner).toBe(signer);
+    expect(token.interface.getFunction("totalSupply")).toBeTruthy();
+    expect(out).toContain(
+      `getDeployed: Token -> ${TOKEN} on 'local' (chain 1912), recorded 2026-10-13T08:00:00.000Z from ${path.join("deployments", "local", "Token.json")}`,
+    );
+  });
+
+  it("finds nothing on a second network that shares the chainId", async () => {
+    // local and kampus are both chain 1912; the record is keyed by name.
+    writeRecord("kampus");
+
+    await expect((await load("local"))("Token")).rejects.toThrow(
+      "no deployment record for 'Token' on 'local'",
+    );
+    await expect((await load("kampus"))("Token")).resolves.toBeDefined();
+  });
+
+  it("refuses a record for another chain", async () => {
+    writeRecord("local", { chainId: 31337 });
+
+    await expect((await load())("Token")).rejects.toThrow(
+      "the record for Token on 'local' is for chain 31337, but 'local' is chain 1912.",
+    );
+  });
+
+  it("refuses a stale record with no code behind it", async () => {
+    writeRecord("local");
+    code = "0x";
+
+    await expect((await load())("Token")).rejects.toThrow(
+      `the record for Token on 'local' is stale: there is no contract at ${TOKEN} (was the devnet restarted?).`,
+    );
+  });
+
+  it("refuses a stale record whose address now holds other code", async () => {
+    writeRecord("local");
+    code = "0x6001";
+
+    await expect((await load())("Token")).rejects.toThrow(
+      `the record for Token on 'local' is stale: the code at ${TOKEN} is not the code that was recorded.`,
+    );
+  });
+
+  // The record's own codeHash is whatever its author wrote, so a record
+  // pointing at someone else's contract passes the staleness checks; only
+  // the local artifact can catch it.
+  it("refuses code that is not what the artifact compiles to, without suggesting a way around it", async () => {
+    code = "0x60806040deadbeef";
+    writeRecord("local");
+
+    const error = await (
+      await load()
+    )("Token").then(
+      () => undefined,
+      (e: Error) => e,
+    );
+
+    expect(error?.message).toBe(
+      `Token at ${TOKEN}: the compiled artifact no longer matches the deployed code (did the source change since the last deploy?).\n` +
+        "\x1b[2mhint:\x1b[0m run `cmu deploy` again.",
+    );
+    expect(error?.message).not.toMatch(/getContract|explicit|address\)/);
+  });
+
+  it("masks immutables, and only as solc emits them", async () => {
+    code = RUNTIME_IMM_CHAIN;
+    writeRecord("local");
+    writeArtifact("Token", RUNTIME_IMM_ARTIFACT, {
+      "7": [{ start: 2, length: 32 }],
+    });
+    await expect((await load())("Token")).resolves.toBeDefined();
+
+    // Without the mask the immutable's value is a mismatch...
+    writeArtifact("Token", RUNTIME_IMM_ARTIFACT, {});
+    await expect((await load())("Token")).rejects.toThrow(
+      /no longer matches the deployed code/,
+    );
+    // ...and a range that is not a zeroed 32-byte slot cannot excuse one.
+    writeArtifact("Token", RUNTIME_IMM_ARTIFACT, {
+      "7": [{ start: 0, length: 34 }],
+    });
+    await expect((await load())("Token")).rejects.toThrow(
+      /no longer matches the deployed code/,
+    );
+    writeArtifact("Token", `0x6080${"ab".repeat(32)}00`, {
+      "7": [{ start: 2, length: 32 }],
+    });
+    code = `0x6080${"cd".repeat(32)}00`;
+    writeRecord("local");
+    await expect((await load())("Token")).rejects.toThrow(
+      /no longer matches the deployed code/,
+    );
+  });
+
+  it("asks for a recompile when the artifact predates deployedBytecode", async () => {
+    writeRecord("local");
+    writeArtifact("Token", undefined);
+
+    await expect((await load())("Token")).rejects.toThrow(
+      "artifacts/Token.json has no deployed bytecode to check the contract against.\n" +
+        "\x1b[2mhint:\x1b[0m run `cmu compile`.",
+    );
+  });
+
+  it("refuses an artifact with library placeholders as unverifiable", async () => {
+    writeRecord("local");
+    writeArtifact("Token", `0x73__$0123456789abcdef0123456789abcdef01$__00`);
+
+    await expect((await load())("Token")).rejects.toThrow(
+      /Token links libraries, so its deployed code cannot be checked/,
+    );
+  });
+
+  it("refuses a newer-format record", async () => {
+    writeRecord("local", { format: 2 });
+
+    await expect((await load())("Token")).rejects.toThrow(
+      /record format 2, newer than this cmu reads \(1\)[\s\S]*cmu update/,
+    );
+    expect(provider.getCode).not.toHaveBeenCalled();
+  });
+
+  it("refuses malformed records and one filed under the wrong network", async () => {
+    writeRecord("local", { address: "not-an-address" });
+    await expect((await load())("Token")).rejects.toThrow(
+      /not a usable deployment record/,
+    );
+
+    writeRecord("local", { network: "kampus" });
+    await expect((await load())("Token")).rejects.toThrow(
+      /not a usable deployment record/,
+    );
+    expect(provider.getCode).not.toHaveBeenCalled();
+  });
+
+  it("never reads the flat deployments/<Contract>.json, only names it in the hint", async () => {
+    fs.mkdirSync(path.join(tmpDir, "deployments"));
+    fs.writeFileSync(
+      path.join(tmpDir, "deployments", "Token.json"),
+      JSON.stringify({ address: TOKEN, abi: ABI }),
+    );
+
+    await expect((await load())("Token")).rejects.toThrow(
+      /no deployment record for 'Token' on 'local'[\s\S]*deployments\/Token\.json is from an older scaffold and is not read/,
+    );
+    expect(provider.getCode).not.toHaveBeenCalled();
+  });
+
+  it("rejects a name that is not a contract name before touching the disk", async () => {
+    await expect((await load())("../../etc/passwd")).rejects.toThrow(
+      /is not a contract name/,
+    );
+  });
+
+  it("leaves getContract(name, address) synchronous and unchanged", async () => {
+    writeRecord("local");
+    const { makeGetContract } = await import("../../src/commands/console");
+    const getContract = makeGetContract({ provider, signer });
+
+    const token: any = getContract("Token", ADDRESS);
+
+    expect(token).not.toBeInstanceOf(Promise);
+    expect(token.target).toBe(ADDRESS);
+    // Still no lookup, even with a record right there.
+    expect(() => (getContract as any)("Token")).toThrow(/requires an address/);
+    expect(provider.getCode).not.toHaveBeenCalled();
+  });
+
+  /** Every file under dir, recursively. */
+  function allFiles(dir: string): string[] {
+    return fs
+      .readdirSync(dir, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => path.join(entry.parentPath, entry.name));
+  }
+
+  /**
+   * The signer's key, with or without 0x, is nowhere in what was printed, in
+   * the errors thrown, or in any file under tmpDir (HOME and the project).
+   */
+  function expectNoKeyLeak(errors: string[]): void {
+    const haystacks = [
+      out.join("\n"),
+      errors.join("\n"),
+      ...allFiles(tmpDir).map((f) => fs.readFileSync(f, "utf8")),
+    ].map((t) => t.toLowerCase());
+    for (const secret of [PRIVATE_KEY, PRIVATE_KEY.slice(2)]) {
+      for (const text of haystacks) {
+        expect(text).not.toContain(secret.toLowerCase());
+      }
+    }
+  }
+
+  it("leaks the signer's key nowhere, resolving or refusing", async () => {
+    const getDeployed = await load();
+    const errors: string[] = [];
+    const attempt = (name: string) =>
+      getDeployed(name).catch((e: Error) => errors.push(e.message));
+
+    writeRecord("local");
+    await attempt("Token");
+    code = "0x";
+    await attempt("Token");
+    code = "0x6001";
+    writeRecord("local");
+    await attempt("Token");
+    await attempt("Ghost");
+
+    expect(out.some((l) => l.startsWith("getDeployed: Token"))).toBe(true);
+    expect(errors).toHaveLength(3);
+    expectNoKeyLeak(errors);
+  });
+
+  it("expectNoKeyLeak catches a planted key", () => {
+    expect(() => expectNoKeyLeak([`x ${PRIVATE_KEY.slice(2)}`])).toThrow();
+    fs.writeFileSync(path.join(tmpDir, "leak.txt"), PRIVATE_KEY);
+    expect(() => expectNoKeyLeak([])).toThrow();
   });
 });

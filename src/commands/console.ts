@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import * as path from "path";
 import { Command } from "commander";
+import { readRecord, verifyDeployed } from "../utils/deployments";
 import { fail } from "../utils/errors";
 import { getDeployNetwork } from "../utils/network";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
@@ -74,12 +75,12 @@ export async function resolveConsoleContext(options: ConsoleOptions = {}) {
  * Builds the REPL's `getContract(name, address)` over a provider and, when
  * there is one, a signer.
  *
- * The address is required. Nothing in a project records deployed addresses per
- * network: deployments/<Contract>.json is written by the scaffolded deploy
- * script, is one file per contract rather than per chain, and is absent
- * entirely for a hand-written script - so resolving an address from it would
- * silently point the console at a contract on the wrong chain. Per-network
- * deployment tracking is tracked separately.
+ * The address is required, and this never looks one up: resolving a name from
+ * the per-network deployment records is `getDeployed(name)`, which has to read
+ * the chain to check the record and so is async. Keeping the two apart keeps
+ * this one synchronous whatever it is passed. The flat deployments/<Contract>.json
+ * older scaffolds wrote is read by neither: it is not per network, so it could
+ * point the console at a contract on the wrong chain.
  *
  * Synchronous on purpose: it reads one local file, and returning the contract
  * rather than a promise keeps `getContract("Token", "0x...").totalSupply()`
@@ -95,7 +96,7 @@ export function makeGetContract(ctx: { provider: any; signer?: any }) {
     if (!address) {
       throw new Error(
         "getContract(name, address) requires an address.\n" +
-          '\x1b[2mhint:\x1b[0m getContract("Token", "0x...") - the console does not look addresses up.',
+          '\x1b[2mhint:\x1b[0m if it was deployed with `cmu deploy`, use `await getDeployed("Name")` (run `cmu deploy` first if it has no record yet); otherwise pass the address: `getContract("Name", "0x...")`.',
       );
     }
     // ethers treats a non-address string as a possible ENS name and resolves it
@@ -139,6 +140,41 @@ export function makeGetContract(ctx: { provider: any; signer?: any }) {
 }
 
 /**
+ * Builds the REPL's `getDeployed(name)`: the contract recorded for `name` on
+ * the console's network by `cmu deploy`, as getContract() would attach it.
+ *
+ * Always async, since every call checks the record against the chain first
+ * (see verifyDeployed): a restarted devnet, a record from someone else's
+ * clone, or source edited since the deploy each fail here instead of handing
+ * back a contract at the wrong address. Each successful resolve prints where
+ * the address came from, so a recorded address is never used silently.
+ *
+ * @param {object} ctx - The REPL's provider, optional signer and network name.
+ * @returns {(name: string) => Promise<object>} The bound helper.
+ */
+export function makeGetDeployed(ctx: {
+  provider: any;
+  signer?: any;
+  network: string;
+}) {
+  const getContract = makeGetContract(ctx);
+
+  return async function getDeployed(name: string) {
+    const cwd = process.cwd();
+    const { record, file } = await readRecord(cwd, ctx.network, name);
+    // Before the chain is asked anything: a missing or abi-less artifact has
+    // getContract's own error and hint.
+    const contract = getContract(name, record.address);
+    await verifyDeployed(ctx.provider, cwd, record);
+
+    console.log(
+      `getDeployed: ${name} -> ${record.address} on '${ctx.network}' (chain ${record.chainId}), recorded ${record.timestamp} from ${file}`,
+    );
+    return contract;
+  };
+}
+
+/**
  * Opens the interactive console.
  *
  * Never calls process.exit() itself, following runDeploy(); the single exit
@@ -160,7 +196,7 @@ export async function runConsole(options: ConsoleOptions = {}): Promise<void> {
   console.log(`Chain ID     : ${network.chainId}`);
   console.log(`Signer       : ${signer ? signer.address : NO_SIGNER_LABEL}`);
   console.log(
-    `Preloaded    : provider, signer, ethers, getContract(name, address)`,
+    `Preloaded    : provider, signer, ethers, getContract(name, address), getDeployed(name)`,
   );
   console.log(`-----------------------------\n`);
 
@@ -182,6 +218,7 @@ export async function runConsole(options: ConsoleOptions = {}): Promise<void> {
     signer,
     ethers,
     getContract: makeGetContract({ provider, signer }),
+    getDeployed: makeGetDeployed({ provider, signer, network: network.name }),
   });
 
   // The REPL owns stdin and SIGINT from here: Ctrl+C interrupts the running

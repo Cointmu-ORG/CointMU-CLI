@@ -117,7 +117,14 @@ export async function runCompile(
     ...compilerSettings,
     outputSelection: {
       "*": {
-        "*": ["abi", "evm.bytecode.object"],
+        // The runtime bytecode and its immutable ranges are what `getDeployed`
+        // checks on-chain code against.
+        "*": [
+          "abi",
+          "evm.bytecode.object",
+          "evm.deployedBytecode.object",
+          "evm.deployedBytecode.immutableReferences",
+        ],
       },
     },
   };

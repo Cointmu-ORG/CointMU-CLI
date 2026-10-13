@@ -445,3 +445,271 @@ export async function recordAndSummarise(
   }
   console.log("-".repeat(40));
 }
+
+const HINT = "\x1b[2mhint:\x1b[0m";
+
+/**
+ * A parsed record holds every field with the right shape. Records in a cloned
+ * repository are data someone else wrote, so nothing is assumed of them.
+ *
+ * @param {any} r - The parsed JSON.
+ * @returns {boolean} Whether it is a usable format-1 record.
+ */
+function isRecord(r: any): r is DeploymentRecord {
+  return (
+    r?.format === RECORD_FORMAT &&
+    typeof r.contract === "string" &&
+    typeof r.network === "string" &&
+    Number.isSafeInteger(r.chainId) &&
+    /^0x[0-9a-fA-F]{40}$/.test(r.address) &&
+    /^0x[0-9a-fA-F]{64}$/.test(r.codeHash) &&
+    typeof r.timestamp === "string"
+  );
+}
+
+/**
+ * Reads a contract's record for one network.
+ *
+ * Never falls back to the flat deployments/<Contract>.json older scaffolds
+ * wrote: it is not per network, so it could name a contract on another chain
+ * (#131). Its presence only changes the hint.
+ *
+ * @param {string} cwd - The project root.
+ * @param {string} network - The network the console is on.
+ * @param {string} name - The contract name.
+ * @returns {Promise<{ record: DeploymentRecord, file: string }>} The record
+ *   and its path relative to cwd.
+ * @throws {Error} When there is no usable record.
+ */
+export async function readRecord(
+  cwd: string,
+  network: string,
+  name: string,
+): Promise<{ record: DeploymentRecord; file: string }> {
+  if (!CONTRACT_NAME_PATTERN.test(name)) {
+    throw new Error(
+      `'${name}' is not a contract name.\n` +
+        `${HINT} pass the name \`cmu compile\` wrote to artifacts/<Name>.json.`,
+    );
+  }
+
+  const file = path.join(await networkDir(cwd, network), `${name}.json`);
+  const shown = path.relative(cwd, file);
+
+  if (!existsSync(file)) {
+    const legacy = path.join(cwd, "deployments", `${name}.json`);
+    throw new Error(
+      `no deployment record for '${name}' on '${network}' (${shown}).\n` +
+        (existsSync(legacy)
+          ? `${HINT} deployments/${name}.json is from an older scaffold and is not read; run \`cmu deploy\` to record ${name} on '${network}'.`
+          : `${HINT} run \`cmu deploy\` to deploy and record it on '${network}', or pick the network it was deployed to with -n.`),
+    );
+  }
+
+  let record: any;
+  try {
+    record = JSON.parse(await readFile(file, "utf8"));
+  } catch {
+    // Unreadable and malformed share the message below.
+  }
+  if (typeof record?.format === "number" && record.format > RECORD_FORMAT) {
+    throw new Error(
+      `${shown} is record format ${record.format}, newer than this cmu reads (${RECORD_FORMAT}).\n` +
+        `${HINT} update cmu with \`cmu update\`.`,
+    );
+  }
+  // A record copied in from another network's directory, or renamed, names
+  // something other than what its path says.
+  if (
+    !isRecord(record) ||
+    record.contract !== name ||
+    record.network !== network
+  ) {
+    throw new Error(
+      `${shown} is not a usable deployment record.\n` +
+        `${HINT} delete it and run \`cmu deploy\` again.`,
+    );
+  }
+
+  return { record, file: shown };
+}
+
+/**
+ * The runtime bytecode compile.ts wrote for a contract, with the byte ranges
+ * solc leaves for immutables.
+ *
+ * @param {string} cwd - The project root.
+ * @param {string} name - The contract name.
+ * @returns {Promise<{ object: string, immutables: { start: number, length: number }[] }>}
+ * @throws {Error} When the artifact has no runtime bytecode, or links libraries.
+ */
+async function loadRuntimeBytecode(
+  cwd: string,
+  name: string,
+): Promise<{
+  object: string;
+  immutables: { start: number; length: number }[];
+}> {
+  let deployed: any;
+  try {
+    const artifact = JSON.parse(
+      await readFile(path.join(cwd, "artifacts", `${name}.json`), "utf8"),
+    );
+    deployed = artifact.evm?.deployedBytecode;
+  } catch {
+    // Missing or unreadable: the same fix as an artifact from an older cmu.
+  }
+  if (typeof deployed?.object !== "string" || !deployed.object) {
+    throw new Error(
+      `artifacts/${name}.json has no deployed bytecode to check the contract against.\n` +
+        `${HINT} run \`cmu compile\`.`,
+    );
+  }
+  // ponytail: linked libraries are refused rather than verified. Upgrade path:
+  // compare with each placeholder's 20 bytes masked, like the immutables.
+  if (deployed.object.includes("__$")) {
+    throw new Error(
+      `${name} links libraries, so its deployed code cannot be checked against artifacts/${name}.json.\n` +
+        `${HINT} getDeployed() does not support contracts with linked libraries yet.`,
+    );
+  }
+  const immutables = Object.values(deployed.immutableReferences ?? {}).flat();
+  return { object: strip0x(deployed.object), immutables: immutables as any };
+}
+
+/**
+ * Whether on-chain runtime code is what the artifact compiles to.
+ *
+ * Immutables are written into the runtime code by the constructor, so their
+ * ranges are masked on both sides. A range is only honoured as solc emits it -
+ * 32 bytes, all zero in the artifact - so an artifact cannot declare the whole
+ * contract "immutable" and match anything.
+ *
+ * @param {string} code - eth_getCode at the address.
+ * @param {string} object - The artifact's runtime bytecode, without 0x.
+ * @param {{ start: number, length: number }[]} immutables - Byte ranges.
+ * @returns {boolean} True when the two agree outside the immutables.
+ */
+export function codeMatchesArtifact(
+  code: string,
+  object: string,
+  immutables: { start: number; length: number }[],
+): boolean {
+  let onChain = strip0x(code);
+  let compiled = strip0x(object);
+  if (onChain.length !== compiled.length) return false;
+
+  for (const { start, length } of immutables) {
+    const from = start * 2;
+    const to = from + length * 2;
+    if (
+      !Number.isSafeInteger(start) ||
+      length !== 32 ||
+      to > compiled.length ||
+      !/^0*$/.test(compiled.slice(from, to))
+    ) {
+      return false;
+    }
+    const zeros = "0".repeat(to - from);
+    onChain = onChain.slice(0, from) + zeros + onChain.slice(to);
+    compiled = compiled.slice(0, from) + zeros + compiled.slice(to);
+  }
+  return onChain === compiled;
+}
+
+/**
+ * Checks a record against the chain before anything trusts its address.
+ *
+ * In order: the chain is the one recorded; there is code at the address (a
+ * restarted devnet leaves none); it is the code recorded (a restarted devnet
+ * can put another contract at the same deployer+nonce address); and it is
+ * what the local artifact compiles to, which is what stops a record in a
+ * cloned repository from pointing the console at someone else's contract.
+ *
+ * @param {any} provider - An ethers provider on the record's network.
+ * @param {string} cwd - The project root.
+ * @param {DeploymentRecord} record - From readRecord().
+ * @returns {Promise<void>} Resolves when every check passes.
+ * @throws {Error} On the first check that fails.
+ */
+export async function verifyDeployed(
+  provider: any,
+  cwd: string,
+  record: DeploymentRecord,
+): Promise<void> {
+  const { keccak256 } = await import("ethers");
+  const { contract: name, network, address } = record;
+
+  const live = Number((await provider.getNetwork()).chainId);
+  if (live !== record.chainId) {
+    throw new Error(
+      `the record for ${name} on '${network}' is for chain ${record.chainId}, but '${network}' is chain ${live}.\n` +
+        `${HINT} run \`cmu deploy\` again on this network.`,
+    );
+  }
+
+  const code = await provider.getCode(address);
+  if (!code || code === "0x") {
+    throw new Error(
+      `the record for ${name} on '${network}' is stale: there is no contract at ${address} (was the devnet restarted?).\n` +
+        `${HINT} run \`cmu deploy\` again.`,
+    );
+  }
+  if (keccak256(code) !== record.codeHash.toLowerCase()) {
+    throw new Error(
+      `the record for ${name} on '${network}' is stale: the code at ${address} is not the code that was recorded.\n` +
+        `${HINT} run \`cmu deploy\` again.`,
+    );
+  }
+
+  const { object, immutables } = await loadRuntimeBytecode(cwd, name);
+  if (!codeMatchesArtifact(code, object, immutables)) {
+    throw new Error(
+      `${name} at ${address}: the compiled artifact no longer matches the deployed code (did the source change since the last deploy?).\n` +
+        `${HINT} run \`cmu deploy\` again.`,
+    );
+  }
+}
+
+/**
+ * Every usable record on a network that names `address`. Read-only callers
+ * (the explorer) use this to label an address, so anything unreadable - a bad
+ * network name, a malformed or newer record - is skipped, never an error.
+ *
+ * @param {string} cwd - The project root.
+ * @param {string} network - The network name.
+ * @param {string} address - The address to look up.
+ * @returns {Promise<{ record: DeploymentRecord, file: string }[]>} Matches.
+ */
+export async function findRecordsByAddress(
+  cwd: string,
+  network: string,
+  address: string,
+): Promise<{ record: DeploymentRecord; file: string }[]> {
+  let dir: string;
+  try {
+    dir = await networkDir(cwd, network);
+  } catch {
+    return [];
+  }
+  if (!existsSync(dir)) return [];
+
+  const out: { record: DeploymentRecord; file: string }[] = [];
+  for (const entry of await readdir(dir)) {
+    if (!entry.endsWith(".json")) continue;
+    const file = path.join(dir, entry);
+    try {
+      const record = JSON.parse(await readFile(file, "utf8"));
+      if (
+        isRecord(record) &&
+        record.network === network &&
+        record.address.toLowerCase() === address.toLowerCase()
+      ) {
+        out.push({ record, file: path.relative(cwd, file) });
+      }
+    } catch {
+      // Not a record; nothing to label the address with.
+    }
+  }
+  return out;
+}

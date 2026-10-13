@@ -1,5 +1,9 @@
 import type { Block } from "ethers";
 import { Command } from "commander";
+import {
+  findRecordsByAddress,
+  type DeploymentRecord,
+} from "../utils/deployments";
 import { fail } from "../utils/errors";
 import { getDeployNetwork } from "../utils/network";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
@@ -78,7 +82,14 @@ export function formatBlock(block: Block, networkName: string): string {
  * @param {string} address - The queried address.
  * @param {string} code - The result of eth_getCode.
  * @param {bigint} balance - The result of eth_getBalance, in wei.
+ * Records naming the address are labels, not verdicts: the explorer only
+ * reads, so a stale or foreign record is reported as such rather than refused.
+ * What it can check cheaply - the code hash the record was taken with - is
+ * shown next to each one.
+ *
  * @param {string} networkName - The network it was read from.
+ * @param {object[]} [records] - Deployment records on this network that name
+ *   the address, from findRecordsByAddress().
  * @returns {string} The printable report.
  */
 export function formatContract(
@@ -86,18 +97,34 @@ export function formatContract(
   code: string,
   balance: bigint,
   networkName: string,
+  records: { record: DeploymentRecord; file: string }[] = [],
 ): string {
-  const { formatEther } = require("ethers");
+  const { formatEther, keccak256 } = require("ethers");
   const empty = !code || code === "0x";
   const bytecode = empty
     ? "none - not a contract (an ordinary account, or an unused address)"
     : `${(code.length - 2) / 2} bytes`;
 
+  const recorded = records
+    .map(({ record, file }) => {
+      const check = empty
+        ? "no code at the address - the record is stale"
+        : keccak256(code) === record.codeHash.toLowerCase()
+          ? "code matches the record"
+          : "code differs from the record - the record is stale";
+      return (
+        `Recorded as  : ${record.contract} (${file}, recorded ${record.timestamp})\n` +
+        `Record check : ${check}\n`
+      );
+    })
+    .join("");
+
   return (
     `\n--- Address on '${networkName}' ---\n` +
     `Address      : ${address}\n` +
     `Bytecode     : ${bytecode}\n` +
-    `Balance      : ${formatEther(balance)} (${balance} wei)\n`
+    `Balance      : ${formatEther(balance)} (${balance} wei)\n` +
+    recorded
   );
 }
 
@@ -182,8 +209,19 @@ export async function runExplorer(
         provider.getCode(contract as string),
         provider.getBalance(contract as string),
       ]);
+      const records = await findRecordsByAddress(
+        process.cwd(),
+        network.name,
+        contract as string,
+      );
       console.log(
-        formatContract(contract as string, code, balance, network.name),
+        formatContract(
+          contract as string,
+          code,
+          balance,
+          network.name,
+          records,
+        ),
       );
     }
   } finally {
