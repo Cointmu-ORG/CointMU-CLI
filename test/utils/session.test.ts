@@ -107,6 +107,37 @@ describe("writeSessionFile", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  // #182: a write cut off midway used to leave a truncated .cmu-session, and
+  // with it the only copy of a key that was never saved.
+  it("leaves the old session intact and no temp file when the write fails", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-atomic-"));
+    const file = path.join(dir, ".cmu-session");
+    try {
+      fs.writeFileSync(file, "old session");
+      // Imported after doMock and resetModules: the static import above holds
+      // the real fs/promises.
+      vi.resetModules();
+      vi.doMock("fs/promises", async (importOriginal) => ({
+        ...(await importOriginal<typeof import("fs/promises")>()),
+        rename: async () => {
+          throw new Error("disk full");
+        },
+      }));
+      const session = await import("../../src/utils/session");
+
+      await expect(
+        session.writeSessionFile(file, makeSession()),
+      ).rejects.toThrow("disk full");
+
+      expect(fs.readFileSync(file, "utf8")).toBe("old session");
+      expect(fs.readdirSync(dir)).toEqual([".cmu-session"]);
+    } finally {
+      vi.doUnmock("fs/promises");
+      vi.resetModules();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("readSession", () => {

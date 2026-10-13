@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { decryptSessionKey, type SessionData } from "../../src/utils/session";
+import {
+  decryptSessionKey,
+  encryptSessionKey,
+  LEGACY_PBKDF2_ITERATIONS,
+  type SessionData,
+} from "../../src/utils/session";
 
 // Issue #87 (c): `wallet create` printed a private key and mnemonic to stdout,
 // where they survive in scrollback, tmux logs and CI output. --login encrypts
@@ -54,6 +59,7 @@ afterEach(() => {
   vi.resetModules();
   vi.doUnmock("inquirer");
   vi.doUnmock("../../src/utils/walletStorage");
+  vi.doUnmock("../../src/utils/session");
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -312,6 +318,48 @@ async function walletCommands(answers?: Record<string, unknown>) {
   return import("../../src/commands/wallet");
 }
 
+/** Every question the last askingCommands() SUT asked, in order. */
+let asked: string[];
+/** The same questions, whole, for the options they were asked with. */
+let questions: Record<string, unknown>[];
+
+/**
+ * A fresh SUT whose prompts answer by question name. A question with no
+ * answer fails the test, an Error answer is thrown (Ctrl-C), and every
+ * question asked is recorded, so a test can prove which prompts ran, in which
+ * order - or that none did.
+ */
+async function askingCommands(answers: Record<string, unknown> = {}) {
+  vi.resetModules();
+  asked = [];
+  questions = [];
+  vi.doMock("inquirer", () => ({
+    default: {
+      prompt: async (batch: { name: string }[]) => {
+        const result: Record<string, unknown> = {};
+        for (const question of batch) {
+          const { name } = question;
+          asked.push(name);
+          questions.push(question);
+          if (!(name in answers))
+            throw new Error(`unexpected prompt '${name}'`);
+          if (answers[name] instanceof Error) throw answers[name];
+          result[name] = answers[name];
+        }
+        return result;
+      },
+    },
+  }));
+  return import("../../src/commands/wallet");
+}
+
+/** What inquirer throws when the user presses Ctrl-C at a prompt. */
+function ctrlC(): Error {
+  return Object.assign(new Error("User force closed the prompt with 0 null"), {
+    name: "ExitPromptError",
+  });
+}
+
 async function save(
   name: string,
   privateKey = KEY,
@@ -329,6 +377,35 @@ async function save(
 async function use(name: string, password = PASSWORD): Promise<void> {
   const { runWalletUse } = await walletCommands({ password });
   await runWalletUse(name);
+}
+
+function sessionFile(): string {
+  return path.join(tmpDir, ".cmu-session");
+}
+
+/**
+ * Writes a session holding `key`, as `login` or `create --login` leaves it:
+ * encrypted with PASSWORD, and saved nowhere else unless a test does so.
+ *
+ * @param {string} address - The address the session names.
+ * @param {string} [key] - The key to encrypt into it.
+ * @param {Partial<SessionData>} [over] - Fields to replace or (as undefined) drop.
+ * @returns {string} The file's exact contents, to compare against later.
+ */
+function writeKeySession(
+  address: string,
+  key = KEY_B,
+  over: Partial<SessionData> = {},
+): string {
+  const session = {
+    address,
+    activeNetwork: "local",
+    ...encryptSessionKey(PASSWORD, key),
+    ...over,
+  };
+  const text = `${JSON.stringify(session, null, 2)}\n`;
+  fs.writeFileSync(sessionFile(), text);
+  return text;
 }
 
 /** Every file under dir, recursively. */
@@ -448,6 +525,85 @@ describe("wallet save / list", () => {
 // key and not the mnemonic, so the printed mnemonic is the one backup: it must
 // derive the stored key, and it must never be printed for a wallet that did
 // not end up saved.
+
+// #182: the way out before a session is replaced. A `create --login` key was
+// never printed, so plain `wallet save` (which asks for the key) cannot keep it.
+describe("wallet save --session", () => {
+  /** Saves the session key with no prompt available and no terminal. */
+  async function saveSession(name: string): Promise<void> {
+    process.stdin.isTTY = false;
+    const { runWalletSave } = await walletCommands();
+    await runWalletSave(name, { session: true });
+  }
+
+  it("copies the session key into the store, openable with the session password", async () => {
+    const session = writeKeySession(ADDRESS_B);
+
+    await saveSession("keep");
+
+    const [entry] = readWallets().wallets;
+    expect(entry).toMatchObject({ name: "keep", address: ADDRESS_B });
+    expect(decryptSessionKey(PASSWORD, entry)).toBe(KEY_B);
+    expect(fs.readFileSync(sessionFile(), "utf8")).toBe(session);
+    expect(output()).toContain(
+      `Saved wallet 'keep' (${ADDRESS_B}) from .cmu-session.`,
+    );
+    expect(output()).toContain("session's password");
+    expect(output()).not.toContain(entry.encryptedKey as string);
+
+    process.stdin.isTTY = true;
+    await save("deployer");
+    await use("deployer");
+    await use("keep");
+    expect(readSession().address).toBe(ADDRESS_B);
+    expect(decryptSessionKey(PASSWORD, readSession())).toBe(KEY_B);
+    expectNoKeyLeak();
+  });
+
+  it("keeps a session from before the iterations field openable", async () => {
+    writeKeySession(ADDRESS_B, KEY_B, {
+      ...encryptSessionKey(PASSWORD, KEY_B, LEGACY_PBKDF2_ITERATIONS),
+      iterations: undefined,
+    });
+
+    await saveSession("old");
+
+    const [entry] = readWallets().wallets;
+    expect(entry.iterations).toBe(LEGACY_PBKDF2_ITERATIONS);
+    expect(decryptSessionKey(PASSWORD, entry)).toBe(KEY_B);
+  });
+
+  it.each([
+    ["there is no session", () => {}, "holds no key to save"],
+    ["the session holds no key", () => writeSession("local"), "holds no key"],
+    [
+      "the session predates AES-GCM",
+      () => writeKeySession(ADDRESS_B, KEY_B, { authTag: undefined }),
+      "holds no key",
+    ],
+    [
+      "the session is corrupt",
+      () => fs.writeFileSync(sessionFile(), "{ not json"),
+      "JSON",
+    ],
+  ])("refuses when %s", async (_, setup, message) => {
+    setup();
+    await expect(saveSession("keep")).rejects.toThrow(message);
+    expect(fs.existsSync(walletsFile())).toBe(false);
+  });
+
+  it.each([
+    ["the name is taken", "keep", "already saved"],
+    ["the key is already saved", "other", "already saved as 'keep'"],
+  ])("refuses when %s, store unchanged", async (_, name, message) => {
+    await save("keep", KEY_B);
+    writeKeySession(ADDRESS_B);
+    const store = fs.readFileSync(walletsFile(), "utf8");
+
+    await expect(saveSession(name)).rejects.toThrow(message);
+    expect(fs.readFileSync(walletsFile(), "utf8")).toBe(store);
+  });
+});
 
 describe("wallet create --save", () => {
   const ANSWERS = { password: PASSWORD, confirmPassword: PASSWORD };
@@ -902,25 +1058,301 @@ describe("wallet use", () => {
       "wallet 'ghost' is not saved",
     );
   });
+});
 
-  it("warns when it replaces a session whose key is not saved", async () => {
-    await save("deployer");
-    writeSession("local"); // address 0xTest, as a `wallet login` would leave
+// #182: login, create --login and use replaced a session whose key was saved
+// nowhere else without asking. All three must now ask first - before any
+// prompt for a key or password - and leave the file alone unless told yes.
+describe("replacing an unsaved session", () => {
+  const paths = {
+    login: {
+      answers: { privateKey: KEY, password: PASSWORD },
+      run: async (answers: Record<string, unknown>) =>
+        (await askingCommands(answers)).runWalletLogin(),
+    },
+    "create --login": {
+      answers: { password: PASSWORD },
+      run: async (answers: Record<string, unknown>) =>
+        (await askingCommands(answers)).runWalletCreate({ login: true }),
+    },
+    use: {
+      answers: { password: PASSWORD },
+      run: async (answers: Record<string, unknown>) =>
+        (await askingCommands(answers)).runWalletUse("deployer"),
+    },
+  };
 
-    await use("deployer");
+  /**
+   * Makes any session write fail the test loudly, and returns the spy: a
+   * refusal must not reach writeSessionFile at all.
+   */
+  function blockSessionWrites() {
+    const write = vi.fn(async () => {
+      throw new Error("writeSessionFile must not be called");
+    });
+    vi.doMock("../../src/utils/session", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("../../src/utils/session")>()),
+      writeSessionFile: write,
+    }));
+    return write;
+  }
 
-    expect(output()).toContain("warning:");
-    expect(output()).toContain("replacing the session for 0xTest");
+  /** The refusal left the session byte-identical, with no temp file. */
+  function expectUntouched(
+    before: string,
+    write: ReturnType<typeof blockSessionWrites>,
+  ): void {
+    expect(write).not.toHaveBeenCalled();
+    expect(fs.readFileSync(sessionFile(), "utf8")).toBe(before);
+    expectNoKeyLeak();
+  }
+
+  beforeEach(async () => {
+    await save("deployer"); // KEY, the key login and use write
+    logged = [];
   });
 
-  it("does not warn when the replaced session's key is saved", async () => {
-    await save("a");
-    await save("b", KEY_B);
-    await use("a");
-    await use("a");
-    await use("b");
+  describe.each(Object.keys(paths) as (keyof typeof paths)[])(
+    "%s",
+    (pathName) => {
+      const { answers, run } = paths[pathName];
 
-    expect(output()).not.toContain("replacing the session");
+      it("asks before any other prompt, and replaces the session on yes", async () => {
+        writeKeySession(ADDRESS_B);
+
+        await run({ ...answers, replace: true });
+
+        expect(asked[0]).toBe("replace");
+        expect(questions[0]).toMatchObject({
+          type: "confirm",
+          message: "Replace it anyway?",
+          default: false,
+        });
+        expect(asked.length).toBeGreaterThan(1);
+        expect(output()).toContain(
+          `warning:\x1b[0m .cmu-session holds the key for ${ADDRESS_B}, which is not a saved wallet.`,
+        );
+        expect(output()).toContain("cannot recover it");
+        expect(output()).toContain("`cmu wallet save <name> --session`");
+        const session = readSession();
+        expect(session.address).not.toBe(ADDRESS_B);
+        expectNoKeyLeak([decryptSessionKey(PASSWORD, session)]);
+      });
+
+      it.each([
+        [
+          "no",
+          false,
+          `aborted: .cmu-session was not changed; it still holds ${ADDRESS_B}.`,
+        ],
+        ["Ctrl-C", ctrlC(), "force closed the prompt"],
+      ])(
+        "leaves the session untouched on %s, without prompting for a secret",
+        async (_, replace, message) => {
+          const before = writeKeySession(ADDRESS_B);
+          const write = blockSessionWrites();
+
+          await expect(run({ ...answers, replace })).rejects.toThrow(message);
+
+          expect(asked).toEqual(["replace"]);
+          expectUntouched(before, write);
+        },
+      );
+
+      it("refuses without a terminal, before any prompt", async () => {
+        const before = writeKeySession(ADDRESS_B);
+        const write = blockSessionWrites();
+        process.stdin.isTTY = false;
+
+        const error = await run(answers).catch((e: Error) => e);
+
+        expect((error as Error).message).toContain(
+          "cannot prompt for confirmation in a non-interactive session",
+        );
+        expect((error as Error).message).toContain(
+          "`cmu wallet save <name> --session`",
+        );
+        expect(asked).toEqual([]);
+        expectUntouched(before, write);
+      });
+
+      it.each([
+        ["there is no session", async () => {}],
+        [
+          "the session's key is saved",
+          async () => {
+            writeKeySession(ADDRESS_B);
+            await save("b", KEY_B);
+          },
+        ],
+        [
+          "the session's key is saved, address in another case",
+          async () => {
+            writeKeySession(ADDRESS_B.toLowerCase());
+            await save("b", KEY_B);
+          },
+        ],
+        [
+          "the session is corrupt",
+          async () => fs.writeFileSync(sessionFile(), "{ not json"),
+        ],
+        ["the session holds no key", async () => writeSession("local")],
+        [
+          "the session predates AES-GCM",
+          async () => writeKeySession(ADDRESS_B, KEY_B, { authTag: undefined }),
+        ],
+      ])("replaces silently when %s", async (_, setup) => {
+        await setup();
+
+        await run(answers); // no `replace` answer: asking would throw
+
+        expect(asked).not.toContain("replace");
+        expect(output()).not.toContain("not a saved wallet");
+        const session = readSession();
+        expect(session.address).not.toBe(ADDRESS_B);
+        expect(decryptSessionKey(PASSWORD, session)).toMatch(
+          /^0x[0-9a-f]{64}$/,
+        );
+      });
+
+      it("refuses on an unreadable store, since the key's safety is unknown", async () => {
+        const before = writeKeySession(ADDRESS_B);
+        fs.writeFileSync(walletsFile(), "{");
+        const write = blockSessionWrites();
+
+        await expect(run(answers)).rejects.toThrow("not a valid wallets file");
+
+        expect(asked).toEqual([]);
+        expectUntouched(before, write);
+      });
+    },
+  );
+
+  describe.each([
+    ["login", ["login"], () => paths.login.run],
+    [
+      "create --login",
+      ["create", "--login"],
+      () => paths["create --login"].run,
+    ],
+  ] as const)("%s (deprecated)", (pathName, argv) => {
+    it("prints the deprecation notice before the question", async () => {
+      writeKeySession(ADDRESS_B);
+
+      await paths[pathName].run({ ...paths[pathName].answers, replace: true });
+
+      const notice = everything.findIndex((l) => l.includes("is deprecated"));
+      const warning = everything.findIndex((l) =>
+        l.includes("not a saved wallet"),
+      );
+      expect(notice).toBeGreaterThanOrEqual(0);
+      expect(warning).toBeGreaterThan(notice);
+    });
+
+    it("leaves the session untouched when the password prompt is aborted after yes", async () => {
+      const before = writeKeySession(ADDRESS_B);
+      const write = blockSessionWrites();
+
+      await expect(
+        paths[pathName].run({
+          ...paths[pathName].answers,
+          replace: true,
+          password: ctrlC(),
+        }),
+      ).rejects.toThrow("force closed the prompt");
+
+      expect(asked[0]).toBe("replace");
+      expect(asked.at(-1)).toBe("password");
+      expectUntouched(before, write);
+    });
+
+    it("exits 1 through the commander action on no", async () => {
+      const before = writeKeySession(ADDRESS_B);
+      const exit = vi
+        .spyOn(process, "exit")
+        .mockImplementation((() => undefined) as never);
+      const { walletCommand } = await askingCommands({
+        ...paths[pathName].answers,
+        replace: false,
+      });
+
+      await walletCommand.parseAsync([...argv], { from: "user" });
+
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(output()).toContain("aborted: .cmu-session was not changed");
+      expect(fs.readFileSync(sessionFile(), "utf8")).toBe(before);
+    });
+  });
+
+  // The address is not known before the key is typed, so login asks even
+  // when it is about to write the very key the session already holds.
+  it("login asks even when the entered key is the session's own", async () => {
+    writeKeySession(ADDRESS_B);
+
+    await paths.login.run({
+      privateKey: KEY_B,
+      password: PASSWORD,
+      replace: true,
+    });
+
+    expect(asked[0]).toBe("replace");
+    expect(readSession().address).toBe(ADDRESS_B);
+    expect(decryptSessionKey(PASSWORD, readSession())).toBe(KEY_B);
+  });
+
+  describe("use, after yes", () => {
+    it("leaves the session untouched on a wrong password", async () => {
+      const before = writeKeySession(ADDRESS_B);
+      const write = blockSessionWrites();
+
+      await expect(
+        paths.use.run({ replace: true, password: "wrong password 1" }),
+      ).rejects.toThrow("wrong password for wallet 'deployer'");
+
+      expect(asked).toEqual(["replace", "password"]);
+      expectUntouched(before, write);
+    });
+
+    it("leaves the session untouched when the decrypted address does not match", async () => {
+      const before = writeKeySession(ADDRESS_B);
+      const file = readWallets();
+      file.wallets[0].address = "0x90F79bf6EB2c4f870365E785982E1f101E93b906";
+      fs.writeFileSync(walletsFile(), JSON.stringify(file));
+      const write = blockSessionWrites();
+
+      await expect(
+        paths.use.run({ replace: true, password: PASSWORD }),
+      ).rejects.toThrow("has been modified");
+
+      expect(asked).toEqual(["replace", "password"]);
+      expectUntouched(before, write);
+    });
+
+    it("does not leak the key through --verbose after a refusal", async () => {
+      writeKeySession(ADDRESS_B);
+      const { fail } = await import("../../src/utils/errors");
+      vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+
+      await paths.use
+        .run({ replace: false, password: PASSWORD })
+        .catch(fail("wallet use", { verbose: true }));
+
+      expect(output()).toContain("wallet use failed");
+      expect(output()).toContain("aborted");
+      expectNoKeyLeak();
+    });
+
+    it("stays silent once the session key was kept with save --session", async () => {
+      writeKeySession(ADDRESS_B);
+      process.stdin.isTTY = false;
+      await (await walletCommands()).runWalletSave("keep", { session: true });
+      process.stdin.isTTY = true;
+
+      await paths.use.run({ password: PASSWORD });
+
+      expect(asked).toEqual(["password"]);
+      expect(readSession().address).toBe(ADDRESS_A);
+    });
   });
 });
 
@@ -1151,7 +1583,6 @@ describe("wallet transfer", () => {
 
   let sendTransaction: ReturnType<typeof vi.fn>;
   let wait: ReturnType<typeof vi.fn>;
-  let asked: string[];
 
   type Chain = {
     balance: bigint;
@@ -1205,39 +1636,13 @@ describe("wallet transfer", () => {
     );
   }
 
-  /**
-   * A fresh SUT whose prompts answer by question name. A question with no
-   * answer fails the test, and every question asked is recorded, so a test
-   * can prove which prompts ran - or that none did.
-   */
-  async function transferCommands(answers: Record<string, unknown> = {}) {
-    vi.resetModules();
-    asked = [];
-    vi.doMock("inquirer", () => ({
-      default: {
-        prompt: async (questions: { name: string }[]) => {
-          const result: Record<string, unknown> = {};
-          for (const { name } of questions) {
-            asked.push(name);
-            if (!(name in answers))
-              throw new Error(`unexpected prompt '${name}'`);
-            if (answers[name] instanceof Error) throw answers[name];
-            result[name] = answers[name];
-          }
-          return result;
-        },
-      },
-    }));
-    return import("../../src/commands/wallet");
-  }
-
   const YES_ANSWERS = { password: PASSWORD, proceed: true };
 
   async function transfer(
     { to = TO, amount = "1.5", yes = false } = {},
     answers: Record<string, unknown> = YES_ANSWERS,
   ) {
-    const { runWalletTransfer } = await transferCommands(answers);
+    const { runWalletTransfer } = await askingCommands(answers);
     return runWalletTransfer(to, amount, { yes });
   }
 
@@ -1249,18 +1654,9 @@ describe("wallet transfer", () => {
     const exit = vi
       .spyOn(process, "exit")
       .mockImplementation((() => undefined) as never);
-    const { walletCommand } = await transferCommands(answers);
+    const { walletCommand } = await askingCommands(answers);
     await walletCommand.parseAsync(["transfer", ...argv], { from: "user" });
     return exit;
-  }
-
-  function ctrlC(): Error {
-    return Object.assign(
-      new Error("User force closed the prompt with 0 null"),
-      {
-        name: "ExitPromptError",
-      },
-    );
   }
 
   function sentRequest(): Record<string, unknown> {
@@ -1544,7 +1940,7 @@ describe("wallet transfer", () => {
 
     it("waits for 1 confirmation with the named timeout", async () => {
       await mockChain();
-      const { TRANSFER_CONFIRM_TIMEOUT_MS } = await transferCommands();
+      const { TRANSFER_CONFIRM_TIMEOUT_MS } = await askingCommands();
       await transfer();
       expect(wait).toHaveBeenCalledWith(1, TRANSFER_CONFIRM_TIMEOUT_MS);
     });
@@ -1624,7 +2020,7 @@ describe("wallet transfer", () => {
 
       logged = [];
       vi.resetModules();
-      const { walletCommand } = await transferCommands({});
+      const { walletCommand } = await askingCommands({});
       await walletCommand.parseAsync(["tf", "-y", TO, "1."], { from: "user" });
       expect(output()).toContain("invalid amount");
     });
@@ -1705,7 +2101,7 @@ describe("wallet transfer", () => {
     ])("through --verbose after %s", async (_, chain, answers) => {
       await mockChain(chain as Partial<Chain>);
       const { fail } = await import("../../src/utils/errors");
-      const { runWalletTransfer } = await transferCommands(answers);
+      const { runWalletTransfer } = await askingCommands(answers);
 
       await runWalletTransfer(TO, "1.5").catch(
         fail("wallet transfer", { verbose: true }),
