@@ -2,6 +2,7 @@ import { existsSync } from "fs";
 import { readdir } from "fs/promises";
 import * as path from "path";
 import { Command } from "commander";
+import { startRecording } from "../utils/deployments";
 import { fail } from "../utils/errors";
 import { run } from "../utils/exec";
 import { getDeployNetwork } from "../utils/network";
@@ -190,25 +191,34 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
     PRIVATE_KEY: privateKey,
   };
 
-  for (const script of scripts) {
-    const fullPath = path.join(deployDir, script);
-    const isTypeScript = path.extname(script) === ".ts";
+  // The scripts cannot report back (their stdio is the terminal's), so what
+  // they deployed is read off the chain afterwards - see utils/deployments.
+  const recording = await startRecording(network, wallet!.address);
 
-    console.log(`\n========================================`);
-    console.log(`Running ${script}`);
-    console.log(`========================================\n`);
+  try {
+    for (const script of scripts) {
+      const fullPath = path.join(deployDir, script);
+      const isTypeScript = path.extname(script) === ".ts";
 
-    // A .js script runs on the same Node that runs the CLI (process.execPath),
-    // not on whichever "node" is first on PATH; a .ts one goes through
-    // ts-node. A non-zero exit throws, so the run stops at that script.
-    await run(
-      isTypeScript ? "npx" : process.execPath,
-      isTypeScript ? ["ts-node", fullPath] : [fullPath],
-      { env: injectedEnv, label: script },
-    );
+      console.log(`\n========================================`);
+      console.log(`Running ${script}`);
+      console.log(`========================================\n`);
+
+      // A .js script runs on the same Node that runs the CLI (process.execPath),
+      // not on whichever "node" is first on PATH; a .ts one goes through
+      // ts-node. A non-zero exit throws, so the run stops at that script.
+      await run(
+        isTypeScript ? "npx" : process.execPath,
+        isTypeScript ? ["ts-node", fullPath] : [fullPath],
+        { env: injectedEnv, label: script },
+      );
+    }
+
+    console.log("\nAll deploy scripts completed.");
+  } finally {
+    // Also after a failed script: whatever it deployed first is on-chain.
+    await recording?.finish();
   }
-
-  console.log("\nAll deploy scripts completed.");
 }
 
 export const deployCommand = new Command("deploy")
@@ -224,7 +234,10 @@ export const deployCommand = new Command("deploy")
     "after",
     "\nEvery script in deploy/ is executed as code and receives your decrypted\n" +
       "PRIVATE_KEY through the environment. Only deploy projects you trust; see the\n" +
-      "'Trust Model' section of the README.",
+      "'Trust Model' section of the README.\n\n" +
+      "Afterwards, the contracts the deployer created are read off the chain and\n" +
+      "recorded in deployments/<network>/<Contract>.json. Contracts created by a\n" +
+      "factory, or deployed with another key, are not seen.",
   )
   .action((options: DeployOptions, command) => {
     // runDeploy reports its own compile step, so it needs the inherited

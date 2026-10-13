@@ -112,6 +112,15 @@ describe("generated deploy scripts", () => {
     },
   );
 
+  // `cmu deploy` writes deployments/<network>/ from the chain itself; a
+  // script still writing the old flat deployments/<Contract>.json would leave
+  // a second, not-per-network copy that the scaffold no longer gitignores.
+  it.each(scripts)("$id writes no deployment file of its own", ({ source }) => {
+    expect(source).not.toContain("deployments");
+    expect(source).not.toContain("writeFile");
+    expect(source).not.toContain("mkdir");
+  });
+
   it.each(scripts.filter((s) => s.contract))(
     "$id prints the deployed address",
     ({ source, contract }) => {

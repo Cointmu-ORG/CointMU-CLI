@@ -75,7 +75,9 @@ When you scaffold a new project using `cmu create`, the following pristine direc
 
 - 📜 `contracts/`: For your raw Solidity smart contracts. This is where your core on-chain logic and magic resides!
 - 🚀 `deploy/`: For sequential deployment scripts. Scripts here are executed natively in alphanumeric order (e.g., `01_token.ts`, `02_dao.ts`) when you deploy.
-- 💾 `deployments/`: For storing immutable JSON artifacts of successfully deployed contracts. These files contain the contract address, ABI, and network details, serving as a permanent historical record.
+- 💾 `deployments/`: Deployment records, one per network and contract: `deployments/<network>/<Contract>.json`, holding the address, chain ID, deployer, transaction hash, block number, block time and a hash of the deployed code. `cmu deploy` writes them itself by reading the chain after your scripts run, so hand-written scripts are covered too. The ABI stays in `artifacts/`. A redeploy overwrites the record; `deployments/local/` is gitignored, other networks' records are meant to be committed.
+  - Not detected: contracts created by another contract (factories), contracts deployed with a key other than the one `cmu deploy` injects, and contracts whose artifact still has unlinked library placeholders (listed as `(unrecognised)` in the summary). A deploy that spans more than 1000 blocks is not recorded.
+  - Older scaffolds wrote a flat `deployments/<Contract>.json`; CointMU never reads that file.
 - 🛠️ `scripts/`: For ad-hoc utility scripts. Use this sandbox directory for tasks like checking balances, interacting with deployed contracts, or database seeding.
 - ⚙️ `cmu.config.ts`: The main brain/configuration file where you define your target networks, RPC URLs, chain IDs, and compiler versions.
 - 🔐 `.env`: For sensitive variables like private keys. (A `.env.example` is generated for you automatically!)
@@ -236,7 +238,7 @@ cmu compile
 cmu deploy
 ```
 
-_(This will automatically and sequentially execute the scripts in your `deploy/` folder and save the precious artifacts to `deployments/`)_
+_(This will automatically and sequentially execute the scripts in your `deploy/` folder, then print a summary of the contracts they deployed and record each one under `deployments/<network>/`)_
 
 7. **Test the connection to your local node**: 📡
 

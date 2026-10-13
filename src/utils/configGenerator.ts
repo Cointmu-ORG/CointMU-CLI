@@ -60,8 +60,10 @@ coverage/
 
 # Compiled artifacts
 artifacts/
-deployments/
 dist/
+
+# Local devnet deployment records (other networks' records are meant to be committed)
+deployments/${LOCAL_NETWORK_NAME}/
 
 # Logs
 logs
