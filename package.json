@@ -1,7 +1,7 @@
 {
   "name": "cointmu-cli",
-  "version": "1.4.0",
-  "codename": "Orion",
+  "version": "1.4.1",
+  "codename": "Titan",
   "description": "Primary development toolkit for the CointMU blockchain",
   "keywords": [
     "cointmu",
