@@ -1,7 +1,13 @@
+import * as path from "path";
 import { loadNetworks, type NetworkEntry } from "./networkStorage";
 import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
 import { readSession, requireSession, resolvePrivateKey } from "./session";
-import { findProjectConfig, loadProjectConfig, TS_CONFIG_FILE } from "./trust";
+import {
+  findProjectConfig,
+  JS_CONFIG_FILE,
+  loadProjectConfig,
+  TS_CONFIG_FILE,
+} from "./trust";
 
 export interface NetworkConfig {
   name: string;
@@ -108,10 +114,10 @@ export async function getDeployNetwork(
   const configPath = findProjectConfig();
   const config = configPath ? await loadProjectConfig(configPath) : null;
 
-  if (!config) {
+  if (!configPath || !config) {
     if (targetNetwork && targetNetwork !== LOCAL_NETWORK_NAME) {
       throw new Error(
-        `network '${targetNetwork}' was requested, but no cmu.config.ts was found.\n` +
+        `network '${targetNetwork}' was requested, but no ${TS_CONFIG_FILE} or ${JS_CONFIG_FILE} was found.\n` +
           "\x1b[2mhint:\x1b[0m run this from a CointMU project, or drop -n to deploy to the local network.",
       );
     }
@@ -126,11 +132,25 @@ export async function getDeployNetwork(
   const networkName =
     targetNetwork || config.defaultNetwork || LOCAL_NETWORK_NAME;
   const network = config.networks?.[networkName];
+  // Named after the file actually loaded: a `cmu create -l javascript`
+  // project has no cmu.config.ts to go and edit.
+  const configFile = path.basename(configPath);
 
   if (!network) {
     throw new Error(
-      `network '${networkName}' is not defined in ${TS_CONFIG_FILE}.\n` +
+      `network '${networkName}' is not defined in ${configFile}.\n` +
         "\x1b[2mhint:\x1b[0m add it under `networks`, or pick one that is already defined.",
+    );
+  }
+
+  // Checked here rather than left to pingNetwork(), which knows neither the
+  // network's name nor which config it came from. Before the key is resolved,
+  // so a config error never costs the user a password prompt first. The stock
+  // `cmu create` scaffold ships `mainnet` with url: "".
+  if (!network.url) {
+    throw new Error(
+      `network '${networkName}' has no url.\n` +
+        `\x1b[2mhint:\x1b[0m set networks.${networkName}.url in ${configFile}.`,
     );
   }
 

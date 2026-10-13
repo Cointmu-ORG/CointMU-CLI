@@ -80,12 +80,16 @@ describe("pingNetwork", () => {
     );
   });
 
-  it("rejects an empty url as a config error without waiting out the timeout", async () => {
+  it("rejects an empty url without waiting out the timeout", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    await expect(pingNetwork("")).rejects.toThrow(
-      /has no url[\s\S]*cmu\.config\.ts/,
+    // cmu.config networks are rejected earlier, by getDeployNetwork(); what
+    // reaches here is a saved network, so the hint must not name a config file.
+    const error = await pingNetwork("", "staging").catch((e: Error) => e);
+    expect((error as Error).message).toMatch(
+      /^network 'staging' has no url\.\n.*`cmu network save <url> --name staging`/,
     );
+    expect((error as Error).message).not.toMatch(/cmu\.config/);
     // Never announces a ping it did not attempt.
     expect(log).not.toHaveBeenCalled();
   });
