@@ -445,6 +445,20 @@ function expectNoKeyLeak(keys: string[] = []): void {
   expect(files.filter((file) => file.endsWith(".tmp"))).toEqual([]);
 }
 
+// #188: the hint that follows a wrong password depends on where the key came
+// from. Neither may send the user to the deprecated `wallet login`.
+const SESSION_HINT =
+  "hint: check the password. To start a fresh session, run `cmu wallet use <name>`.";
+const storeHint = (name: string) =>
+  `hint: retype the password '${name}' was saved with - cmu cannot recover a forgotten one.`;
+
+/** The last line of an error's message, where the hint goes, uncoloured. */
+function hintOf(error: unknown): string | undefined {
+  return stripVTControlCharacters(String((error as Error)?.message))
+    .split("\n")
+    .at(-1);
+}
+
 describe("wallet save / list", () => {
   it("saves an encrypted entry and lists it by name and address", async () => {
     await save("deployer");
@@ -1012,6 +1026,18 @@ describe("wallet use", () => {
     expect(fs.readFileSync(path.join(tmpDir, ".cmu-session"), "utf8")).toBe(
       before,
     );
+    expectNoKeyLeak();
+  });
+
+  it("hints at the wallet's own password on a wrong one, not the session's", async () => {
+    await save("deployer");
+
+    const error = await use("deployer", "wrong password 1").catch(
+      (e: Error) => e,
+    );
+
+    expect(hintOf(error)).toBe(storeHint("deployer"));
+    expect((error as Error).message).not.toContain("wallet login");
     expectNoKeyLeak();
   });
 
@@ -1738,6 +1764,21 @@ describe("wallet transfer", () => {
       );
       expect(asked).toEqual(["password"]);
       expect(sendTransaction).not.toHaveBeenCalled();
+    });
+
+    it("TTY, wrong password: hints at the session, sends nothing", async () => {
+      await mockChain({ refuse: true });
+
+      const error = await transfer(
+        {},
+        { password: "wrong password 1", proceed: true },
+      ).catch((e: Error) => e);
+
+      expect(hintOf(error)).toBe(SESSION_HINT);
+      expect((error as Error).message).not.toContain("wallet login");
+      expect(asked).toEqual(["password"]);
+      expect(sendTransaction).not.toHaveBeenCalled();
+      expectNoKeyLeak();
     });
 
     it("TTY with --yes: asks for the password only, then sends", async () => {

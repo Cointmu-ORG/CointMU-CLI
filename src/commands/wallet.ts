@@ -635,7 +635,8 @@ export async function runWalletUse(name: string): Promise<void> {
       privateKey = decryptSessionKey(password, wallet);
     } catch {
       throw new Error(
-        `wrong password for wallet '${name}', or ~/.cmu-wallets.json has been tampered with.`,
+        `wrong password for wallet '${name}', or ~/.cmu-wallets.json has been tampered with.\n` +
+          `\x1b[2mhint:\x1b[0m retype the password '${name}' was saved with - cmu cannot recover a forgotten one.`,
       );
     }
     const { ethers } = await import("ethers");
