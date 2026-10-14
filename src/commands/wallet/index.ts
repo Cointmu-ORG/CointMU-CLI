@@ -1,17 +1,17 @@
 import { Command, Option } from "commander";
 import type { JsonRpcProvider } from "ethers";
-import { LOCAL_NETWORK_NAME } from "../utils/defaults";
-import { fail } from "../utils/errors";
-import { pingNetwork } from "./deploy";
-import { optional } from "./mine";
-import { getDynamicNetwork } from "../utils/network";
-import { loadNetworks } from "../utils/networkStorage";
+import { LOCAL_NETWORK_NAME } from "../../utils/defaults";
+import { fail } from "../../utils/errors";
+import { pingNetwork } from "../deploy";
+import { optional } from "../mine";
+import { getDynamicNetwork } from "../../utils/network";
+import { loadNetworks } from "../../utils/networkStorage";
 import {
   deleteWallet,
   loadWallets,
   saveWallet,
   type WalletEntry,
-} from "../utils/walletStorage";
+} from "../../utils/walletStorage";
 import {
   decryptSessionKey,
   type EncryptedKey,
@@ -23,7 +23,7 @@ import {
   type SessionData,
   validatePasswordStrength,
   writeSessionFile,
-} from "../utils/session";
+} from "../../utils/session";
 
 /**
  * The activeNetwork a new session should carry: the one the existing session
