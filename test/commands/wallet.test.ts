@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import { stripVTControlCharacters } from "util";
 import {
@@ -9,120 +8,67 @@ import {
   LEGACY_PBKDF2_ITERATIONS,
   type SessionData,
 } from "../../src/utils/session";
+import {
+  PASSWORD,
+  KEY,
+  tmpDir,
+  logged,
+  everything,
+  useRealPbkdf2,
+  output,
+  clearLogged,
+  readSession,
+  writeSession,
+  writeNetworks,
+  KEY_B,
+  ADDRESS_A,
+  ADDRESS_B,
+  walletsFile,
+  readWallets,
+  sessionFile,
+  writeKeySession,
+  expectNoKeyLeak,
+  SESSION_HINT,
+  storeHint,
+  hintOf,
+  setUp,
+  tearDown,
+} from "../helpers/walletEnv";
+import {
+  mockPrompt,
+  walletCommands,
+  asked,
+  questions,
+  askingCommands,
+  ctrlC,
+  save,
+  use,
+  type Commands,
+} from "../helpers/walletSut";
+import {
+  TO,
+  TX_HASH,
+  GWEI,
+  AMOUNT_WEI,
+  MAX_FEE_1559,
+  sendTransaction,
+  wait,
+  send,
+  type Chain,
+  mockChain,
+  YES_ANSWERS,
+  transfer,
+  transferCli,
+  sentRequest,
+  transferSetUp,
+} from "../helpers/walletTransfer";
+
+beforeEach(setUp);
+afterEach(tearDown);
 
 // Issue #87 (c): `wallet create` printed a private key and mnemonic to stdout,
 // where they survive in scrollback, tmux logs and CI output. --save encrypts
 // the generated key into the store and prints only the mnemonic backup.
-
-const PASSWORD = "correct horse 9";
-// Hardhat account #1, so the address in the assertions is a known value.
-const KEY =
-  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-
-let tmpDir: string;
-let logged: string[];
-/** Everything printed during the test; unlike `logged`, never reset midway. */
-let everything: string[];
-const realIsTTY = process.stdin.isTTY;
-
-/**
- * PBKDF2 work factor for the keys these tests encrypt. At the real 600k,
- * every save, use and transfer setup spends most of a second deriving keys,
- * which dominated the suite. Decryption reads the factor stored with the
- * key, so only encryption needs it. The tests that pin the real default call
- * useRealPbkdf2() first.
- */
-const TEST_PBKDF2_ITERATIONS = 1000;
-
-/** Undoes the cheap work factor for the next SUT import, for one test. */
-function useRealPbkdf2(): void {
-  vi.doUnmock("../../src/utils/session");
-}
-
-/** Everything the command wrote to stdout and stderr, as one string. */
-function output(): string {
-  return logged.join("\n");
-}
-
-beforeEach(() => {
-  // The SUT is imported after mockPrompt(), so it must not come from a cache
-  // a previous test filled with the real inquirer.
-  vi.resetModules();
-  vi.doMock("../../src/utils/session", async (importOriginal) => {
-    const real =
-      await importOriginal<typeof import("../../src/utils/session")>();
-    return {
-      ...real,
-      encryptSessionKey: (
-        password: string,
-        privateKey: string,
-        iterations = TEST_PBKDF2_ITERATIONS,
-      ) => real.encryptSessionKey(password, privateKey, iterations),
-    };
-  });
-  // Prompts refuse to run without a TTY, and vitest's stdin usually is not one.
-  process.stdin.isTTY = true;
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-wallet-"));
-  vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
-  logged = [];
-  everything = [];
-  const capture = (...args: unknown[]) => {
-    logged.push(args.map(String).join(" "));
-    everything.push(args.map(String).join(" "));
-  };
-  vi.spyOn(console, "log").mockImplementation(capture);
-  vi.spyOn(console, "error").mockImplementation(capture);
-  vi.spyOn(console, "warn").mockImplementation(capture);
-  // networkStorage keys .cmu-networks.json off os.homedir(); without this the
-  // suite would read the developer's real saved networks.
-  vi.stubEnv("HOME", tmpDir);
-  vi.stubEnv("USERPROFILE", tmpDir);
-});
-
-afterEach(() => {
-  process.stdin.isTTY = realIsTTY;
-  vi.unstubAllEnvs();
-  vi.restoreAllMocks();
-  vi.resetModules();
-  vi.doUnmock("inquirer");
-  vi.doUnmock("../../src/utils/walletStorage");
-  vi.doUnmock("../../src/utils/session");
-  fs.rmSync(tmpDir, { recursive: true, force: true });
-});
-
-/** Mocks inquirer so a password prompt answers, or fails the test outright. */
-function mockPrompt(answer?: Record<string, string>) {
-  vi.doMock("inquirer", () => ({
-    default: {
-      prompt: async () => {
-        if (!answer) throw new Error("inquirer.prompt should not be called");
-        return answer;
-      },
-    },
-  }));
-}
-
-/** Reads back the session the command under test wrote. */
-function readSession(): SessionData {
-  return JSON.parse(fs.readFileSync(path.join(tmpDir, ".cmu-session"), "utf8"));
-}
-
-/** Writes a session that already picked a network, as `network use` would. */
-function writeSession(activeNetwork: string): void {
-  fs.writeFileSync(
-    path.join(tmpDir, ".cmu-session"),
-    JSON.stringify({ address: "0xTest", activeNetwork }),
-  );
-}
-
-function writeNetworks(names: string[]): void {
-  fs.writeFileSync(
-    path.join(tmpDir, ".cmu-networks.json"),
-    JSON.stringify(
-      names.map((name) => ({ name, rpcUrl: "http://127.0.0.1:9999" })),
-    ),
-  );
-}
 
 describe("wallet create", () => {
   it("still prints the key and mnemonic by default, with a sensitivity reminder", async () => {
@@ -146,176 +92,6 @@ describe("wallet create", () => {
   });
 });
 
-// Issue #177: named wallets in ~/.cmu-wallets.json. HOME and the cwd are both
-// tmpDir (see beforeEach), so the store and the session sit side by side and
-// the developer's real ~/.cmu-wallets.json is never read or written.
-
-// Hardhat account #2: a second known key for the two-wallet cases.
-const KEY_B =
-  "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
-const ADDRESS_A = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
-const ADDRESS_B = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
-
-function walletsFile(): string {
-  return path.join(tmpDir, ".cmu-wallets.json");
-}
-
-function readWallets(): {
-  version: number;
-  wallets: Record<string, unknown>[];
-} {
-  return JSON.parse(fs.readFileSync(walletsFile(), "utf8"));
-}
-
-/** A fresh SUT whose prompts all answer from `answers`. */
-async function walletCommands(answers?: Record<string, unknown>) {
-  vi.resetModules();
-  mockPrompt(answers as Record<string, string>);
-  return import("../../src/commands/wallet");
-}
-
-/** Every question the last askingCommands() SUT asked, in order. */
-let asked: string[];
-/** The same questions, whole, for the options they were asked with. */
-let questions: Record<string, unknown>[];
-
-/**
- * A fresh SUT whose prompts answer by question name. A question with no
- * answer fails the test, an Error answer is thrown (Ctrl-C), and every
- * question asked is recorded, so a test can prove which prompts ran, in which
- * order - or that none did.
- */
-async function askingCommands(answers: Record<string, unknown> = {}) {
-  vi.resetModules();
-  asked = [];
-  questions = [];
-  vi.doMock("inquirer", () => ({
-    default: {
-      prompt: async (batch: { name: string }[]) => {
-        const result: Record<string, unknown> = {};
-        for (const question of batch) {
-          const { name } = question;
-          asked.push(name);
-          questions.push(question);
-          if (!(name in answers))
-            throw new Error(`unexpected prompt '${name}'`);
-          if (answers[name] instanceof Error) throw answers[name];
-          result[name] = answers[name];
-        }
-        return result;
-      },
-    },
-  }));
-  return import("../../src/commands/wallet");
-}
-
-/** What inquirer throws when the user presses Ctrl-C at a prompt. */
-function ctrlC(): Error {
-  return Object.assign(new Error("User force closed the prompt with 0 null"), {
-    name: "ExitPromptError",
-  });
-}
-
-async function save(
-  name: string,
-  privateKey = KEY,
-  password = PASSWORD,
-  confirmPassword = password,
-): Promise<void> {
-  const { runWalletSave } = await walletCommands({
-    privateKey,
-    password,
-    confirmPassword,
-  });
-  await runWalletSave(name);
-}
-
-async function use(name: string, password = PASSWORD): Promise<void> {
-  const { runWalletUse } = await walletCommands({ password });
-  await runWalletUse(name);
-}
-
-function sessionFile(): string {
-  return path.join(tmpDir, ".cmu-session");
-}
-
-/**
- * Writes a session holding `key`, as 1.5.x `login` or `create --login` left it:
- * encrypted with PASSWORD, and saved nowhere else unless a test does so.
- *
- * @param {string} address - The address the session names.
- * @param {string} [key] - The key to encrypt into it.
- * @param {Partial<SessionData>} [over] - Fields to replace or (as undefined) drop.
- * @returns {string} The file's exact contents, to compare against later.
- */
-function writeKeySession(
-  address: string,
-  key = KEY_B,
-  over: Partial<SessionData> = {},
-): string {
-  const session = {
-    address,
-    activeNetwork: "local",
-    ...encryptSessionKey(PASSWORD, key, TEST_PBKDF2_ITERATIONS),
-    ...over,
-  };
-  const text = `${JSON.stringify(session, null, 2)}\n`;
-  fs.writeFileSync(sessionFile(), text);
-  return text;
-}
-
-/** Every file under dir, recursively. */
-function allFiles(dir: string): string[] {
-  return fs
-    .readdirSync(dir, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.join(entry.parentPath, entry.name));
-}
-
-/**
- * The private keys appear nowhere: not in anything printed during the test
- * (stdout or stderr, even before a `logged = []`), and not in any
- * file the commands left under tmpDir (HOME and cwd), with or without 0x.
- *
- * @param {string[]} [keys] - Further keys to look for, such as one the command
- *   generated itself.
- */
-function expectNoKeyLeak(keys: string[] = []): void {
-  const files = allFiles(tmpDir);
-  const haystacks = [
-    everything.join("\n"),
-    ...files.map((file) => fs.readFileSync(file, "utf8")),
-  ].map((text) => text.toLowerCase());
-  // With and without 0x, lowercased like the haystacks; and the password.
-  const secrets = [KEY, KEY_B, ...keys].flatMap((key) => [
-    key.toLowerCase(),
-    key.slice(2).toLowerCase(),
-  ]);
-  secrets.push(PASSWORD.toLowerCase());
-  for (const secret of secrets) {
-    for (const text of haystacks) {
-      expect(text).not.toContain(secret);
-    }
-  }
-  expect(files.filter((file) => file.endsWith(".tmp"))).toEqual([]);
-}
-
-// #188: the hint that follows a wrong password depends on where the key came
-// from. Neither may send the user to the removed `wallet login`.
-const SESSION_HINT =
-  "hint: check the password. To start a fresh session, run `cmu wallet use <name>`.";
-const storeHint = (name: string) =>
-  `hint: retype the password '${name}' was saved with - cmu cannot recover a forgotten one.`;
-
-type Commands = typeof import("../../src/commands/wallet");
-
-/** The last line of an error's message, where the hint goes, uncoloured. */
-function hintOf(error: unknown): string | undefined {
-  return stripVTControlCharacters(String((error as Error)?.message))
-    .split("\n")
-    .at(-1);
-}
-
 describe("wallet save / list", () => {
   it("saves an encrypted entry and lists it by name and address", async () => {
     useRealPbkdf2();
@@ -330,7 +106,7 @@ describe("wallet save / list", () => {
     expect(entry.iterations).toBe(600000);
     expect(decryptSessionKey(PASSWORD, entry)).toBe(KEY);
 
-    logged = [];
+    clearLogged();
     const { runWalletList } = await walletCommands();
     await runWalletList();
     expect(output()).toContain("deployer");
@@ -369,7 +145,7 @@ describe("wallet save / list", () => {
 
   it("warns when the same key is saved under a second name, and saves it", async () => {
     await save("one");
-    logged = [];
+    clearLogged();
     await save("two");
 
     expect(output()).toContain("warning:");
@@ -392,12 +168,6 @@ describe("wallet save / list", () => {
     expectNoKeyLeak();
   });
 });
-
-// Issue #194: `wallet create --save <name>` generates a wallet straight into
-// the store and prints only the address and the mnemonic. The store keeps the
-// key and not the mnemonic, so the printed mnemonic is the one backup: it must
-// derive the stored key, and it must never be printed for a wallet that did
-// not end up saved.
 
 // #182: the way out before a session is replaced. A `create --login` key was
 // never printed, so plain `wallet save` (which asks for the key) cannot keep it.
@@ -477,6 +247,12 @@ describe("wallet save --session", () => {
     expect(fs.readFileSync(walletsFile(), "utf8")).toBe(store);
   });
 });
+
+// Issue #194: `wallet create --save <name>` generates a wallet straight into
+// the store and prints only the address and the mnemonic. The store keeps the
+// key and not the mnemonic, so the printed mnemonic is the one backup: it must
+// derive the stored key, and it must never be printed for a wallet that did
+// not end up saved.
 
 describe("wallet create --save", () => {
   const ANSWERS = { password: PASSWORD, confirmPassword: PASSWORD };
@@ -560,7 +336,7 @@ describe("wallet create --save", () => {
   it("refuses a name that is already saved before prompting or generating", async () => {
     await save("alice");
     const before = fs.readFileSync(walletsFile(), "utf8");
-    logged = [];
+    clearLogged();
     const generated = await spyCreateRandom();
 
     const { runWalletCreate } = await walletCommands();
@@ -610,7 +386,7 @@ describe("wallet create --save", () => {
 
     await save("other", KEY_B);
     const before = fs.readFileSync(walletsFile(), "utf8");
-    logged = [];
+    clearLogged();
     commands = await walletCommands(mismatch);
     await expect(commands.runWalletCreate({ save: "alice" })).rejects.toThrow(
       "passwords do not match",
@@ -761,7 +537,7 @@ describe("removed login paths", () => {
 describe("wallet use", () => {
   it("writes a session for the wallet that opens with its password", async () => {
     await save("deployer");
-    logged = [];
+    clearLogged();
     await use("deployer");
 
     const session = readSession();
@@ -778,7 +554,7 @@ describe("wallet use", () => {
     await save("a");
     await save("b", KEY_B);
     await use("b");
-    logged = [];
+    clearLogged();
 
     const { runWalletList } = await walletCommands();
     await runWalletList();
@@ -943,7 +719,7 @@ describe("replacing an unsaved session", () => {
 
   beforeEach(async () => {
     await save("deployer"); // KEY, the key use writes
-    logged = [];
+    clearLogged();
   });
 
   describe.each(Object.keys(paths) as (keyof typeof paths)[])(
@@ -1125,7 +901,7 @@ describe("wallet delete", () => {
 
     const { runWalletDelete, runWalletList } = await walletCommands();
     await runWalletDelete("a", { yes: true });
-    logged = [];
+    clearLogged();
     await runWalletList();
 
     expect(readWallets().wallets.map((w) => w.name)).toEqual(["b"]);
@@ -1145,7 +921,7 @@ describe("wallet delete", () => {
   it("leaves a session that already uses the wallet working", async () => {
     await save("deployer");
     await use("deployer");
-    logged = [];
+    clearLogged();
 
     const { runWalletDelete } = await walletCommands({ proceed: true });
     await runWalletDelete("deployer");
@@ -1375,111 +1151,7 @@ describe("transfer amount parsing", () => {
 });
 
 describe("wallet transfer", () => {
-  const TO = ADDRESS_B;
-  const TX_HASH = `0x${"ab".repeat(32)}`;
-  const GWEI = 1_000_000_000n;
-  const ETH = 10n ** 18n;
-  const AMOUNT_WEI = 1_500_000_000_000_000_000n; // "1.5"
-  const MAX_FEE_1559 = 21_000n * 3n * GWEI;
-
-  let sendTransaction: ReturnType<typeof vi.fn>;
-  let wait: ReturnType<typeof vi.fn>;
-  let send: ReturnType<typeof vi.fn>;
-
-  type Chain = {
-    balance: bigint;
-    feeData: [bigint | null, bigint | null, bigint | null];
-    code: string;
-    gas: bigint;
-    networkError?: Error;
-    estimateError?: Error;
-    sendError?: Error;
-    refuse?: boolean;
-    wait?: () => Promise<unknown>;
-    /** The node's answer to eth_mining, asked only after a missed confirmation. */
-    mining?: () => Promise<unknown>;
-  };
-
-  /**
-   * Stubs the provider and the signer. With `refuse`, signing throws: the
-   * refusal tests also assert it was never reached, which is the only proof
-   * that nothing was signed.
-   */
-  async function mockChain(over: Partial<Chain> = {}): Promise<void> {
-    const { ethers } = await import("ethers");
-    const chain: Chain = {
-      balance: 10n * ETH,
-      // gasPrice, maxFeePerGas, maxPriorityFeePerGas
-      feeData: [2n * GWEI, 3n * GWEI, 1n * GWEI],
-      code: "0x",
-      gas: 21_000n,
-      ...over,
-    };
-    const P = ethers.JsonRpcProvider.prototype;
-    vi.spyOn(P, "getNetwork").mockImplementation(async () => {
-      if (chain.networkError) throw chain.networkError;
-      return new ethers.Network("local", 1912n);
-    });
-    vi.spyOn(P, "getBalance").mockImplementation(async () => chain.balance);
-    vi.spyOn(P, "getFeeData").mockImplementation(
-      async () => new ethers.FeeData(...chain.feeData),
-    );
-    vi.spyOn(P, "getCode").mockImplementation(async () => chain.code);
-    vi.spyOn(P, "estimateGas").mockImplementation(async () => {
-      if (chain.estimateError) throw chain.estimateError;
-      return chain.gas;
-    });
-    send = vi.fn(async (method: string) => {
-      if (method === "eth_mining" && chain.mining) return chain.mining();
-      throw new Error(`unexpected RPC ${method}`);
-    });
-    vi.spyOn(P, "send").mockImplementation(send as never);
-    wait = vi.fn(chain.wait ?? (async () => ({ blockNumber: 42 })));
-    sendTransaction = vi.fn(async () => {
-      if (chain.refuse) throw new Error("must not sign");
-      if (chain.sendError) throw chain.sendError;
-      return { hash: TX_HASH, wait };
-    });
-    vi.spyOn(ethers.Wallet.prototype, "sendTransaction").mockImplementation(
-      sendTransaction as never,
-    );
-  }
-
-  const YES_ANSWERS = { password: PASSWORD, proceed: true };
-
-  async function transfer(
-    { to = TO, amount = "1.5", yes = false } = {},
-    answers: Record<string, unknown> = YES_ANSWERS,
-  ) {
-    const { runWalletTransfer } = await askingCommands(answers);
-    return runWalletTransfer(to, amount, { yes });
-  }
-
-  /** Runs the real commander action, with process.exit spied. */
-  async function transferCli(
-    argv: string[],
-    answers: Record<string, unknown> = YES_ANSWERS,
-  ) {
-    const exit = vi
-      .spyOn(process, "exit")
-      .mockImplementation((() => undefined) as never);
-    const { walletCommand } = await askingCommands(answers);
-    await walletCommand.parseAsync(["transfer", ...argv], { from: "user" });
-    return exit;
-  }
-
-  function sentRequest(): Record<string, unknown> {
-    return sendTransaction.mock.calls[0][0] as Record<string, unknown>;
-  }
-
-  beforeEach(async () => {
-    // A port nothing listens on: every provider call is stubbed, and one
-    // that slipped through must not reach a real devnet.
-    writeNetworks(["local"]);
-    await save("deployer");
-    await use("deployer");
-    logged = [];
-  });
+  beforeEach(transferSetUp);
 
   describe("input routes", () => {
     it("TTY, confirmed: sends exactly what the summary showed", async () => {
@@ -1961,7 +1633,7 @@ describe("wallet transfer", () => {
       expect(output()).toContain("wallet transfer failed");
       expect(sendTransaction).not.toHaveBeenCalled();
 
-      logged = [];
+      clearLogged();
       vi.resetModules();
       const { walletCommand } = await askingCommands({});
       await walletCommand.parseAsync(["tf", "-y", TO, "1."], { from: "user" });
