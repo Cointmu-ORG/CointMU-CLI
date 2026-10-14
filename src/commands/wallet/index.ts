@@ -1,8 +1,7 @@
 import { Command, Option } from "commander";
 import { fail } from "../../utils/errors";
-import { getDynamicNetwork } from "../../utils/network";
 import { saveWallet } from "../../utils/walletStorage";
-import { encryptSessionKey, requireSession } from "../../utils/session";
+import { encryptSessionKey } from "../../utils/session";
 import { promptNewPassword } from "./prompts";
 import { checkNewWalletName } from "./savedWallets";
 import { runWalletSave } from "./save";
@@ -10,6 +9,7 @@ import { runWalletUse } from "./use";
 import { runWalletList } from "./list";
 import { runWalletDelete } from "./delete";
 import { runWalletTransfer } from "./transfer";
+import { runWalletBalance, runWalletInfo } from "./info";
 
 export { runWalletSave } from "./save";
 export { runWalletUse } from "./use";
@@ -132,43 +132,6 @@ async function runWalletCreateSaved(name: string): Promise<void> {
   console.log(
     `\x1b[2mhint:\x1b[0m run \`cmu wallet use ${name}\` in a project to make it active there.`,
   );
-}
-
-/**
- * Fetch and display the native token balance of the logged-in wallet.
- * @returns {Promise<void>}
- */
-async function runWalletBalance(): Promise<void> {
-  const session = await requireSession();
-
-  const { ethers } = await import("ethers");
-
-  const network = await getDynamicNetwork(session.activeNetwork);
-  const provider = new ethers.JsonRpcProvider(network.rpcUrl);
-
-  console.log(`Connecting to ${network.name} (${network.rpcUrl})...`);
-  const balance = await provider.getBalance(session.address);
-
-  console.log("---------------------------");
-  console.log(`Address : ${session.address}`);
-  console.log(`Balance : ${ethers.formatEther(balance)} ETH`);
-  console.log("---------------------------");
-}
-
-/**
- * Display the current active wallet session information.
- * @returns {Promise<void>}
- */
-async function runWalletInfo(): Promise<void> {
-  const session = await requireSession();
-
-  const network = await getDynamicNetwork(session.activeNetwork);
-
-  console.log("--- Active session ---");
-  console.log(`Address      : ${session.address}`);
-  console.log(`Network      : ${network.name}`);
-  console.log(`RPC endpoint : ${network.rpcUrl}`);
-  console.log("----------------------");
 }
 
 export const walletCommand = new Command("wallet").description(
