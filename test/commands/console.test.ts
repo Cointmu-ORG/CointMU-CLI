@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { ethers } from "ethers";
 import { encryptSessionKey } from "../../src/utils/session";
+import { TEST_PBKDF2_ITERATIONS } from "../helpers/testPbkdf2";
 import { consoleCommand } from "../../src/commands/console";
 
 // The REPL loop itself (repl.start, the preloaded context, the exit handler)
@@ -189,7 +190,11 @@ describe("resolveConsoleContext", () => {
       JSON.stringify({
         address: "0xTest",
         activeNetwork: "local",
-        ...encryptSessionKey(SESSION_PASSWORD, PRIVATE_KEY),
+        ...encryptSessionKey(
+          SESSION_PASSWORD,
+          PRIVATE_KEY,
+          TEST_PBKDF2_ITERATIONS,
+        ),
       }),
     );
   }
