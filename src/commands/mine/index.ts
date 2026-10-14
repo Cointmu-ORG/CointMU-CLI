@@ -1,9 +1,9 @@
 import { Command } from "commander";
 import type { Block, JsonRpcProvider } from "ethers";
 import { setTimeout as delay } from "timers/promises";
-import { fail } from "../utils/errors";
-import { getDynamicNetwork } from "../utils/network";
-import { requireSession } from "../utils/session";
+import { fail } from "../../utils/errors";
+import { getDynamicNetwork } from "../../utils/network";
+import { requireSession } from "../../utils/session";
 
 const HINT = "\x1b[2mhint:\x1b[0m";
 const WARNING = "\x1b[33mwarning:\x1b[0m";
