@@ -25,6 +25,20 @@ let logged: string[];
 let everything: string[];
 const realIsTTY = process.stdin.isTTY;
 
+/**
+ * PBKDF2 work factor for the keys these tests encrypt. At the real 600k,
+ * every save, use and transfer setup spends most of a second deriving keys,
+ * which dominated the suite. Decryption reads the factor stored with the
+ * key, so only encryption needs it. The tests that pin the real default call
+ * useRealPbkdf2() first.
+ */
+const TEST_PBKDF2_ITERATIONS = 1000;
+
+/** Undoes the cheap work factor for the next SUT import, for one test. */
+function useRealPbkdf2(): void {
+  vi.doUnmock("../../src/utils/session");
+}
+
 /** Everything the command wrote to stdout and stderr, as one string. */
 function output(): string {
   return logged.join("\n");
@@ -34,6 +48,18 @@ beforeEach(() => {
   // The SUT is imported after mockPrompt(), so it must not come from a cache
   // a previous test filled with the real inquirer.
   vi.resetModules();
+  vi.doMock("../../src/utils/session", async (importOriginal) => {
+    const real =
+      await importOriginal<typeof import("../../src/utils/session")>();
+    return {
+      ...real,
+      encryptSessionKey: (
+        password: string,
+        privateKey: string,
+        iterations = TEST_PBKDF2_ITERATIONS,
+      ) => real.encryptSessionKey(password, privateKey, iterations),
+    };
+  });
   // Prompts refuse to run without a TTY, and vitest's stdin usually is not one.
   process.stdin.isTTY = true;
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-wallet-"));
@@ -230,7 +256,7 @@ function writeKeySession(
   const session = {
     address,
     activeNetwork: "local",
-    ...encryptSessionKey(PASSWORD, key),
+    ...encryptSessionKey(PASSWORD, key, TEST_PBKDF2_ITERATIONS),
     ...over,
   };
   const text = `${JSON.stringify(session, null, 2)}\n`;
@@ -292,6 +318,7 @@ function hintOf(error: unknown): string | undefined {
 
 describe("wallet save / list", () => {
   it("saves an encrypted entry and lists it by name and address", async () => {
+    useRealPbkdf2();
     await save("deployer");
 
     const file = readWallets();
@@ -477,6 +504,7 @@ describe("wallet create --save", () => {
   }
 
   it("stores the key encrypted and prints a mnemonic that derives it", async () => {
+    useRealPbkdf2();
     const generated = await spyCreateRandom();
     const { runWalletCreate } = await walletCommands(ANSWERS);
     await runWalletCreate({ save: "alice" });
