@@ -14,24 +14,30 @@ import {
   writeSessionFile,
   type SessionData,
 } from "../../src/utils/session";
+import { TEST_PBKDF2_ITERATIONS } from "../helpers/testPbkdf2";
 
 const PASSWORD = "correct horse";
 // well-known Ganache test key — never fund this
 const PRIVATE_KEY =
   "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
-function makeSession(overrides: Partial<SessionData> = {}): SessionData {
+function makeSession(
+  overrides: Partial<SessionData> = {},
+  iterations = TEST_PBKDF2_ITERATIONS,
+): SessionData {
   return {
     address: "0xTest",
     activeNetwork: "local",
-    ...encryptSessionKey(PASSWORD, PRIVATE_KEY),
+    ...encryptSessionKey(PASSWORD, PRIVATE_KEY, iterations),
     ...overrides,
   };
 }
 
 describe("decryptSessionKey", () => {
   it("round-trips an encrypted private key", () => {
-    expect(decryptSessionKey(PASSWORD, makeSession())).toBe(PRIVATE_KEY);
+    // At the real work factor: the one full-cost round trip in this file.
+    const session = makeSession({}, DEFAULT_PBKDF2_ITERATIONS);
+    expect(decryptSessionKey(PASSWORD, session)).toBe(PRIVATE_KEY);
   });
 
   it("throws a clear error on the wrong password", () => {
@@ -69,6 +75,9 @@ describe("decryptSessionKey", () => {
       DEFAULT_PBKDF2_ITERATIONS,
     );
     expect(DEFAULT_PBKDF2_ITERATIONS).toBeGreaterThan(LEGACY_PBKDF2_ITERATIONS);
+    // Pinned as a literal: the fixtures above use a cheap factor, so this is
+    // what fails if the production default is ever lowered or changed.
+    expect(DEFAULT_PBKDF2_ITERATIONS).toBe(600000);
   });
 
   it("still decrypts a legacy session that predates the iterations field", () => {
@@ -79,6 +88,8 @@ describe("decryptSessionKey", () => {
     };
     delete legacy.iterations; // old files never wrote this key
     expect(decryptSessionKey(PASSWORD, legacy)).toBe(PRIVATE_KEY);
+    // Files written before the field existed used exactly this factor.
+    expect(LEGACY_PBKDF2_ITERATIONS).toBe(100000);
   });
 });
 
@@ -110,7 +121,7 @@ describe("writeSessionFile", () => {
       await writeSessionFile(file, {
         address: "0xTest",
         activeNetwork: "local",
-        ...encryptSessionKey(PASSWORD, PRIVATE_KEY),
+        ...encryptSessionKey(PASSWORD, PRIVATE_KEY, TEST_PBKDF2_ITERATIONS),
       });
       expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     } finally {

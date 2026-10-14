@@ -3,6 +3,7 @@ import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
 import { encryptSessionKey } from "../../src/utils/session";
+import { TEST_PBKDF2_ITERATIONS } from "../helpers/testPbkdf2";
 
 // getDynamicNetwork's "never resolve/prompt a private key" regression is
 // covered in session.test.ts. This file covers getDeployNetwork's resolution
@@ -62,7 +63,11 @@ describe("getDeployNetwork private key resolution", () => {
       JSON.stringify({
         address: "0xTest",
         activeNetwork: "local",
-        ...encryptSessionKey(SESSION_PASSWORD, PRIVATE_KEY),
+        ...encryptSessionKey(
+          SESSION_PASSWORD,
+          PRIVATE_KEY,
+          TEST_PBKDF2_ITERATIONS,
+        ),
       }),
     );
   }

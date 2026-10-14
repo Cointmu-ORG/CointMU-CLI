@@ -4,6 +4,7 @@ import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
 import { encryptSessionKey } from "../../src/utils/session";
+import { TEST_PBKDF2_ITERATIONS } from "../helpers/testPbkdf2";
 import {
   explorerCommand,
   formatBlock,
@@ -169,7 +170,11 @@ describe("runExplorer", () => {
       JSON.stringify({
         address: "0xTest",
         activeNetwork: "local",
-        ...encryptSessionKey(SESSION_PASSWORD, PRIVATE_KEY),
+        ...encryptSessionKey(
+          SESSION_PASSWORD,
+          PRIVATE_KEY,
+          TEST_PBKDF2_ITERATIONS,
+        ),
       }),
     );
   }
