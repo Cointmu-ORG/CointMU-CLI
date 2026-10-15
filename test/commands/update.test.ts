@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { explainInstallFailure } from "../../src/commands/update";
 
 /**
@@ -12,6 +12,12 @@ async function loadWithNpm(execFileSync: () => Buffer) {
 }
 
 describe("resolveTargetVersion", () => {
+  // The static import above loads update.ts with the real child_process
+  // before any test runs; reset first so loadWithNpm() gets a fresh copy.
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.doUnmock("child_process");
