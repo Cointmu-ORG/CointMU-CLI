@@ -18,6 +18,8 @@ const SESSION_PASSWORD = "correct horse";
 describe("getDeployNetwork private key resolution", () => {
   let tmpDir: string;
   const prevKey = process.env.PRIVATE_KEY;
+  // Usually absent under vitest rather than false; put back exactly as found.
+  const realIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-deploy-net-"));
@@ -28,6 +30,8 @@ describe("getDeployNetwork private key resolution", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
+    if (realIsTTY) Object.defineProperty(process.stdin, "isTTY", realIsTTY);
+    else Reflect.deleteProperty(process.stdin, "isTTY");
     fs.rmSync(tmpDir, { recursive: true, force: true });
     if (prevKey === undefined) delete process.env.PRIVATE_KEY;
     else process.env.PRIVATE_KEY = prevKey;
@@ -99,6 +103,7 @@ describe("getDeployNetwork private key resolution", () => {
     vi.doMock("inquirer", () => ({
       default: { prompt: async () => ({ password: SESSION_PASSWORD }) },
     }));
+    process.stdin.isTTY = true;
 
     const { getDeployNetwork } = await import("../../src/utils/network");
     const network = await getDeployNetwork("local");
