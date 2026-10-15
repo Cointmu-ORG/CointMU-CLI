@@ -55,6 +55,17 @@ describe("generateConfigFiles", () => {
       ).toContain(".cmu-session");
     });
 
+    // writeSessionFile writes .cmu-session.<pid>.<hex>.tmp before the rename;
+    // a crash in between must not leave it committable.
+    it(`ignores the session's temp files for ${language}`, async () => {
+      await generateConfigFiles(tmpDir, language);
+
+      const lines = fs
+        .readFileSync(path.join(tmpDir, ".gitignore"), "utf8")
+        .split("\n");
+      expect(lines).toContain(".cmu-session.*.tmp");
+    });
+
     it(`ignores only the local devnet's deployment records for ${language}`, async () => {
       await generateConfigFiles(tmpDir, language);
 
