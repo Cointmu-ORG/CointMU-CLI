@@ -1,5 +1,5 @@
 /**
- * The local CointMU devnet, in one place. These four values travel together -
+ * The local CointMU devnet, in one place. The first four values travel together -
  * the RPC endpoint is the port, the scaffolded config quotes both, and the
  * devnet, the saved-network seed and the deploy fallback all have to agree on
  * the chain - so a copy that drifts points a command at a network that is not
@@ -17,3 +17,6 @@ export const LOCAL_PORT = 8585;
 
 /** RPC endpoint of the local devnet. Derived, so it cannot disagree with the port. */
 export const LOCAL_RPC_URL = `http://127.0.0.1:${LOCAL_PORT}`;
+
+/** Coin symbol of the CointMU chain, local devnet included. */
+export const LOCAL_SYMBOL = "CMU";

@@ -112,6 +112,9 @@ export function mineSetUp(): void {
     path.join(tmpDir, ".cmu-session"),
     JSON.stringify({ address: ADDRESS, activeNetwork: "local" }),
   );
+  // A networks file from before symbols (#228), so amounts read ETH; a fresh
+  // seed would label local CMU. writeNetworksFile() swaps it per test.
+  writeNetworksFile([{ name: "local", rpcUrl: "http://127.0.0.1:8585" }]);
   // Non-TTY output path: one line per event, no redraw.
   ttyDescriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
   Object.defineProperty(process.stdout, "isTTY", {
@@ -141,6 +144,14 @@ export function mineSetUp(): void {
       ethers: { ...real.ethers, JsonRpcProvider: FakeProvider },
     };
   });
+}
+
+/** Replaces ~/.cmu-networks.json (HOME is tmpDir). */
+export function writeNetworksFile(networks: object[]): void {
+  fs.writeFileSync(
+    path.join(tmpDir, ".cmu-networks.json"),
+    JSON.stringify(networks),
+  );
 }
 
 export function mineTearDown(): void {

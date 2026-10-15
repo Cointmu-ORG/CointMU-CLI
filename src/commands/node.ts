@@ -8,7 +8,7 @@ import {
   silenceHardhatNoise,
 } from "../utils/hardhat";
 import { isLoopbackHost, startRpcProxy } from "../utils/rpcProxy";
-import { LOCAL_CHAIN_ID, LOCAL_PORT } from "../utils/defaults";
+import { LOCAL_CHAIN_ID, LOCAL_PORT, LOCAL_SYMBOL } from "../utils/defaults";
 
 const DEFAULT_HOST = "127.0.0.1";
 const MAX_PORT = 65535;
@@ -181,7 +181,9 @@ async function runNodeStart(options: {
   originalConsoleLog(
     `\x1b[33mwarning:\x1b[0m development mnemonic - never use it on a live network.\n`,
   );
-  originalConsoleLog("\nPre-funded developer accounts (100 ETH each):");
+  originalConsoleLog(
+    `\nPre-funded developer accounts (100 ${LOCAL_SYMBOL} each):`,
+  );
 
   const { ethers } = await import("ethers");
   for (let i = 0; i < ACCOUNT_COUNT; i++) {
