@@ -98,14 +98,15 @@ export function formatHashrate(hashrate: bigint | null): string {
 
 /**
  * @param {number} seconds - Age of a block.
- * @returns {string} e.g. "12s", "11m", "3h".
+ * @returns {string} e.g. "12s", "11m", "3h", "20741d".
  */
 export function formatAge(seconds: number): string {
   // A node clock slightly ahead of ours would print a negative age.
   const s = Math.max(0, Math.round(seconds));
   if (s < 60) return `${s}s`;
   if (s < 3600) return `${Math.floor(s / 60)}m`;
-  return `${Math.floor(s / 3600)}h`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
 }
 
 export interface MiningStatus {

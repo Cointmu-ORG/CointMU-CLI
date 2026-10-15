@@ -130,7 +130,10 @@ async function runMineStatus(): Promise<void> {
 
   const symbol = coinSymbol(network);
   const status = await readStatus(provider, session.address);
-  const { block, coinbase, mining } = status;
+  const { block, mining } = status;
+  // No eth_mining means no miner API at all (the local DevNet): its
+  // eth_coinbase is then a placeholder that no reward ever goes to.
+  const coinbase = mining === null ? null : status.coinbase;
   const foreign =
     typeof coinbase === "string" && !sameAddress(coinbase, session.address);
   const age = Date.now() / 1000 - block.timestamp;
