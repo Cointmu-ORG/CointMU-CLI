@@ -113,6 +113,10 @@ export class FakeProvider {
     if (typeof value === "function") throw value();
     return value;
   };
+  getNetwork = async () => {
+    await this.check();
+    return { name: "unknown", chainId: 1912n };
+  };
   getBlock = async (tag: "latest" | number) => {
     await this.check();
     return tag === "latest"

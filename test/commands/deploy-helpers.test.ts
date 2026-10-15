@@ -58,6 +58,29 @@ describe("pingNetwork", () => {
     expect(output).not.toContain("unknown");
   });
 
+  // A pending timer holds the process open: every command that pings first
+  // would sit for NETWORK_TIMEOUT_MS after it is done.
+  it("clears its timeout once the node answers", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.doMock("ethers", () => ({
+      ethers: {
+        JsonRpcProvider: class {
+          getNetwork() {
+            return Promise.resolve({ name: "unknown", chainId: 1912n });
+          }
+        },
+      },
+    }));
+    vi.useFakeTimers();
+    try {
+      await pingNetwork("http://127.0.0.1:8585", "local");
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("falls back to the name ethers reports when the caller passes none", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     vi.doMock("ethers", () => ({

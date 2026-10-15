@@ -4,24 +4,26 @@ import {
   isValidSymbol,
   savedSymbolNote,
   SYMBOL_RULE,
-} from "../utils/coinSymbol";
-import { fail } from "../utils/errors";
+} from "../../utils/coinSymbol";
+import { LOCAL_NETWORK_NAME } from "../../utils/defaults";
+import { fail } from "../../utils/errors";
 import {
   activeNetwork,
   activeNetworkName,
   getDynamicNetwork,
-} from "../utils/network";
+} from "../../utils/network";
 import {
   deleteNetwork,
   loadNetworks,
   saveNetwork,
-} from "../utils/networkStorage";
+} from "../../utils/networkStorage";
 import {
   getSessionFilePath,
   readSession,
   requireSession,
   writeSessionFile,
-} from "../utils/session";
+} from "../../utils/session";
+import { runNetworkPing } from "./ping";
 
 /**
  * Validates that a value is a well-formed RPC endpoint.
@@ -51,33 +53,6 @@ async function runNetworkInfo(): Promise<void> {
   console.log(`RPC endpoint : ${network.rpcUrl}`);
   console.log(`Symbol       : ${coinSymbol(network)}`);
   console.log("----------------------");
-}
-
-/**
- * Pings a network to check connectivity and latency.
- * @param {string} [name] - The name of the network to ping.
- * @returns {Promise<void>} Resolves when the ping is completed.
- */
-async function runNetworkPing(name?: string): Promise<void> {
-  const { name: networkName, rpcUrl } = name
-    ? await getDynamicNetwork(name)
-    : await activeNetwork(
-        "pass a network name, or run `cmu wallet use <name>` first.",
-      );
-
-  console.log(`Pinging ${networkName} (${rpcUrl})...`);
-  const { ethers } = await import("ethers");
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
-
-  const startTime = Date.now();
-  const blockNumber = await provider.getBlockNumber();
-  const latency = Date.now() - startTime;
-
-  console.log("--- Ping result ---");
-  console.log(`Network      : ${networkName}`);
-  console.log(`Block number : ${blockNumber}`);
-  console.log(`Latency      : ${latency}ms`);
-  console.log("-------------------");
 }
 
 /**
@@ -124,6 +99,14 @@ async function runNetworkSave(
  * @returns {Promise<void>} Resolves when the network is deleted.
  */
 async function runNetworkDelete(name: string): Promise<void> {
+  // Every fallback (no session, `wallet use`) points at it, and only a missing
+  // networks file seeds it again.
+  if (name === LOCAL_NETWORK_NAME) {
+    throw new Error(
+      `network '${LOCAL_NETWORK_NAME}' is the built-in fallback and cannot be deleted.\n` +
+        `\x1b[2mhint:\x1b[0m point it at another endpoint with \`cmu network save <url> --name ${LOCAL_NETWORK_NAME}\`.`,
+    );
+  }
   if ((await readSession())?.activeNetwork === name) {
     throw new Error(
       `network '${name}' is currently active and cannot be deleted.\n` +

@@ -4,6 +4,7 @@ import { coinSymbol } from "../../utils/coinSymbol";
 import { fail } from "../../utils/errors";
 import { getDynamicNetwork } from "../../utils/network";
 import { requireSession } from "../../utils/session";
+import { pingNetwork } from "../deploy";
 import {
   HINT,
   WARNING,
@@ -75,6 +76,9 @@ async function runMiner(
   // Only the watch prints an amount. Read before any miner call, so a broken
   // symbol cannot fail the watch after mining has already started.
   const symbol = options.watch ? coinSymbol(network) : undefined;
+  // Fails within its timeout when the node is down; a bare provider prints
+  // ethers' retry notice and a raw error, or hangs on a silent endpoint.
+  await pingNetwork(network.rpcUrl, network.name);
 
   if (starting) {
     await warnIfForeignEtherbase(provider, session.address);
@@ -129,8 +133,12 @@ async function runMineStatus(): Promise<void> {
   });
 
   const symbol = coinSymbol(network);
+  await pingNetwork(network.rpcUrl, network.name);
   const status = await readStatus(provider, session.address);
-  const { block, coinbase, mining } = status;
+  const { block, mining } = status;
+  // No eth_mining means no miner API at all (the local DevNet): its
+  // eth_coinbase is then a placeholder that no reward ever goes to.
+  const coinbase = mining === null ? null : status.coinbase;
   const foreign =
     typeof coinbase === "string" && !sameAddress(coinbase, session.address);
   const age = Date.now() / 1000 - block.timestamp;

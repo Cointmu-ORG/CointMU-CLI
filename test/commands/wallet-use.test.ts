@@ -101,6 +101,33 @@ describe("wallet use", () => {
     expect(output()).toContain("'testnet' is no longer saved");
   });
 
+  // Issue #212: the local fallback only works while `local` is saved.
+  const LOCAL_MISSING =
+    "network 'local' is not saved - re-add it with `cmu network save http://127.0.0.1:8585 --name local`.";
+
+  it("warns with the save command when the local fallback is not saved", async () => {
+    await save("deployer");
+    writeNetworks(["testnet"]);
+
+    await use("deployer");
+
+    expect(readSession().activeNetwork).toBe("local");
+    expect(output()).toContain(LOCAL_MISSING);
+    expectNoKeyLeak();
+  });
+
+  it("does not claim a reset to local when local is gone too", async () => {
+    await save("deployer");
+    writeSession("testnet");
+    writeNetworks(["staging"]);
+
+    await use("deployer");
+
+    expect(readSession().activeNetwork).toBe("local");
+    expect(output()).toContain(LOCAL_MISSING);
+    expect(output()).not.toContain("reset to local");
+  });
+
   it("rejects a wrong password and leaves the session alone", async () => {
     await save("deployer");
     writeSession("testnet");

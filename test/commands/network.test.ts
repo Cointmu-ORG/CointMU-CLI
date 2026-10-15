@@ -157,6 +157,41 @@ describe("networkCommand wiring", () => {
     expect(saved.map((n: any) => n.name)).toEqual(["local"]);
   });
 
+  // Issue #212: every fallback points at `local`, and nothing re-adds it.
+  it.each([
+    ["no session", undefined],
+    ["a session on another network", "staging"],
+  ])(
+    "refuses to delete the built-in local network with %s",
+    async (_label, active) => {
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+        throw new Error("exited");
+      }) as any);
+      await run("save", "http://127.0.0.1:9000", "--name", "staging");
+      if (active) {
+        fs.writeFileSync(
+          path.join(tmpDir, ".cmu-session"),
+          JSON.stringify({ activeNetwork: active }),
+        );
+      }
+
+      await expect(run("delete", "local")).rejects.toThrow("exited");
+
+      const output = (error as any).mock.calls.flat().join("\n");
+      expect(output).toContain(
+        "network 'local' is the built-in fallback and cannot be deleted",
+      );
+      expect(output).toContain("`cmu network save <url> --name local`");
+      expect(exit).toHaveBeenCalledWith(1);
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(tmpDir, ".cmu-networks.json"), "utf8"),
+      );
+      expect(saved.map((n: any) => n.name)).toEqual(["local", "staging"]);
+    },
+  );
+
   it.each([
     [
       ["--save", "http://127.0.0.1:9000", "--name", "staging"],

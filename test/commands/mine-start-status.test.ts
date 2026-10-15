@@ -161,7 +161,8 @@ describe("mineCommand", () => {
       expect(out).toContain("Mining       : yes");
       expect(out).toContain("Hashrate     : 1.20 MH/s");
       expect(out).toContain(`Etherbase    : ${ADDRESS.toLowerCase()}\n`);
-      expect(out).toMatch(/Latest block : #10, \d+[smh] ago/);
+      // The fake chain is dated 2023, so its age is in days (#211).
+      expect(out).toMatch(/Latest block : #10, \d+d ago/);
       expect(out).toContain("Difficulty   : 131072");
       expect(out).toContain(`Wallet       : ${ADDRESS}`);
       expect(out).toContain("Balance      : 2.0 ETH");
@@ -216,6 +217,24 @@ describe("mineCommand", () => {
         expect(out).toContain("Hashrate     : n/a");
         expect(out).toContain("Etherbase    : n/a\n");
         expect(out).toContain("Balance      : 2.0 ETH");
+      },
+    );
+
+    // Issue #211: EDR answers eth_coinbase with a placeholder but has no miner
+    // API and no block rewards, so its etherbase means nothing either.
+    it.each(Object.entries(unsupported))(
+      "shows n/a for the etherbase of a node without eth_mining (%s error shape)",
+      async (_shape, makeError) => {
+        node.rpc.eth_mining = makeError;
+        node.rpc.eth_hashrate = makeError;
+        node.rpc.eth_coinbase = "0xc014ba5ec014ba5ec014ba5ec014ba5ec014ba5e";
+
+        await run("status");
+
+        const out = output();
+        expect(out).toContain("Etherbase    : n/a\n");
+        expect(out).not.toContain("0xc014ba5e");
+        expect(out).not.toContain("rewards go there");
       },
     );
 
