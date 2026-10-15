@@ -7,6 +7,8 @@ import {
   ETH,
   unsupported,
   connectionError,
+  etherbaseUnset,
+  otherServerError,
   node,
   sent,
   tmpDir,
@@ -15,6 +17,7 @@ import {
   mineTearDown,
   run,
   runFailing,
+  runSucceeding,
   minerCalls,
   writeNetworksFile,
 } from "../helpers/mineEnv";
@@ -70,6 +73,20 @@ describe("mineCommand", () => {
 
       await run("start");
 
+      expect(output()).not.toContain("warning:");
+    });
+
+    // Issue #210: a fresh geth node has no etherbase, and setting one is what
+    // start is for.
+    it("start sets the etherbase on a node that has none yet", async () => {
+      node.rpc.eth_coinbase = etherbaseUnset;
+
+      await runSucceeding("start");
+
+      expect(minerCalls()).toEqual([
+        ["miner_setEtherbase", [ADDRESS]],
+        ["miner_start", [1]],
+      ]);
       expect(output()).not.toContain("warning:");
     });
 
@@ -201,6 +218,28 @@ describe("mineCommand", () => {
         expect(out).toContain("Balance      : 2.0 ETH");
       },
     );
+
+    // Issue #210: "none set" is a state of the node, not a missing method.
+    it("shows none set on a node with no etherbase yet", async () => {
+      node.rpc.eth_coinbase = etherbaseUnset;
+
+      await runSucceeding("status");
+
+      const out = output();
+      expect(out).toContain("Etherbase    : none set\n");
+      expect(out).not.toContain("not your session wallet");
+      expect(out).toContain("Balance      : 2.0 ETH");
+    });
+
+    it("still fails on another -32000 answer to eth_coinbase", async () => {
+      node.rpc.eth_coinbase = otherServerError;
+
+      const errors = await runFailing("status");
+
+      expect(errors).toContain("mine status failed");
+      expect(errors).toContain("internal error");
+      expect(output()).not.toContain("none set");
+    });
 
     it("fails on a network error instead of showing n/a", async () => {
       node.rpc.eth_hashrate = connectionError;

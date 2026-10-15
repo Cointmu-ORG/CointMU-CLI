@@ -1,0 +1,37 @@
+{
+  "source": "Issue #210 repro: ethers 6.17.0 from the cointmu-cli 1.7.0 tarball (4100ec6), eth_mining + eth_coinbase sent the way `mine start` sends them, against a JSON-RPC stub on 127.0.0.1:8585 that answers eth_coinbase like geth 1.10.26 with no etherbase set. `error` is the thrown error's own properties (stack left out); it has no `info`, and the batch only shows on the wire.",
+  "wire": {
+    "request": [
+      { "method": "eth_chainId", "params": [], "id": 1, "jsonrpc": "2.0" },
+      { "method": "eth_mining", "params": [], "id": 2, "jsonrpc": "2.0" },
+      { "method": "eth_coinbase", "params": [], "id": 3, "jsonrpc": "2.0" }
+    ],
+    "response": [
+      { "jsonrpc": "2.0", "id": 1, "result": "0x778" },
+      { "jsonrpc": "2.0", "id": 2, "result": false },
+      {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "error": {
+          "code": -32000,
+          "message": "etherbase must be explicitly specified"
+        }
+      }
+    ]
+  },
+  "error": {
+    "message": "could not coalesce error (error={ \"code\": -32000, \"message\": \"etherbase must be explicitly specified\" }, payload={ \"id\": 3, \"jsonrpc\": \"2.0\", \"method\": \"eth_coinbase\", \"params\": [  ] }, code=UNKNOWN_ERROR, version=6.17.0)",
+    "code": "UNKNOWN_ERROR",
+    "error": {
+      "code": -32000,
+      "message": "etherbase must be explicitly specified"
+    },
+    "payload": {
+      "method": "eth_coinbase",
+      "params": [],
+      "id": 3,
+      "jsonrpc": "2.0"
+    },
+    "shortMessage": "could not coalesce error"
+  }
+}

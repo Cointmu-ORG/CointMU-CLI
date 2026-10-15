@@ -5,6 +5,7 @@ import {
   ETH,
   unsupported,
   connectionError,
+  etherbaseUnset,
   node,
   extend,
   FakeProvider,
@@ -105,6 +106,18 @@ describe("mineCommand", () => {
       expect(lines.at(-1)).toContain("hashrate n/a");
       expect(count(lines, "etherbase")).toBe(0);
       expect(count(lines, "mining stopped")).toBe(0);
+    });
+
+    // Issue #210: a geth restart without --miner.etherbase leaves none set.
+    it("takes an etherbase that is no longer set as no change", async () => {
+      const { lines } = await watch(
+        () => (node.rpc.eth_coinbase = etherbaseUnset),
+        () => extend(1, OTHER),
+        () => (node.rpc.eth_coinbase = ADDRESS),
+      );
+
+      expect(count(lines, "etherbase")).toBe(0);
+      expect(count(lines, "connection lost")).toBe(0);
     });
 
     it("reports an etherbase takeover exactly once, however many polls see it", async () => {

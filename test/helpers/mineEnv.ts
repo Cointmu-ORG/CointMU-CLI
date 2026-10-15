@@ -34,6 +34,38 @@ export const unsupported = {
     }),
 };
 
+interface CapturedRpcError {
+  message: string;
+  error: { code: number; message: string };
+  [prop: string]: unknown;
+}
+
+// What ethers threw for eth_coinbase on a geth-shaped node with no etherbase
+// set yet (#210), dumped from the real error during the repro.
+const etherbaseCapture: { error: CapturedRpcError } = JSON.parse(
+  fs.readFileSync(
+    path.resolve(__dirname, "../fixtures/geth-etherbase-unset.json"),
+    "utf8",
+  ),
+);
+
+/** The captured error, with the node's message swapped for `serverMessage`. */
+function capturedGethError(serverMessage: string): Error {
+  const captured = etherbaseCapture.error;
+  const { message, ...props } = structuredClone(captured);
+  props.error.message = serverMessage;
+  return Object.assign(
+    new Error(message.replace(captured.error.message, serverMessage)),
+    props,
+  );
+}
+
+export const etherbaseUnset = () =>
+  capturedGethError(etherbaseCapture.error.error.message);
+
+// -32000 is geth's code for any server error, not only a missing etherbase.
+export const otherServerError = () => capturedGethError("internal error");
+
 export const connectionError = () =>
   Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:8585"), {
     code: "ECONNREFUSED",
@@ -179,6 +211,22 @@ export async function runFailing(...args: string[]) {
   await expect(run(...args)).rejects.toThrow("exited");
   expect(exit).toHaveBeenCalledWith(1);
   return error.mock.calls.flat().join("\n");
+}
+
+/**
+ * Runs a command that is expected to succeed. A fail() exit becomes an
+ * assertion that shows what was printed, not a dead worker.
+ */
+export async function runSucceeding(...args: string[]) {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(process, "exit").mockImplementation(() => {
+    throw new Error("exited");
+  });
+  const printed = await run(...args).then(
+    () => "",
+    () => error.mock.calls.flat().join("\n"),
+  );
+  expect(printed).toBe("");
 }
 
 export const minerCalls = () => sent.filter(([m]) => m.startsWith("miner_"));

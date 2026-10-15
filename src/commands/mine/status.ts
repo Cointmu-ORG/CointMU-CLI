@@ -42,6 +42,40 @@ export async function optional<T>(request: Promise<T>): Promise<T | null> {
   }
 }
 
+/**
+ * geth's answer to eth_coinbase while no etherbase is set. -32000 is its code
+ * for any server error, so the message has to match as well.
+ */
+const ETHERBASE_UNSET_CODE = -32000;
+const ETHERBASE_UNSET_MESSAGE = "etherbase must be explicitly specified";
+
+function isEtherbaseUnset(error: unknown): boolean {
+  const e = error as { error?: { code?: unknown; message?: unknown } } | null;
+  return (
+    e?.error?.code === ETHERBASE_UNSET_CODE &&
+    e.error.message === ETHERBASE_UNSET_MESSAGE
+  );
+}
+
+/**
+ * The node's etherbase. A fresh geth node with no accounts has none until
+ * `mine start` sets it, so that is a state to show, not a failure.
+ *
+ * @param {JsonRpcProvider} provider - Provider for the active network.
+ * @returns {Promise<string | null | false>} The address, false when none is
+ *   set yet, or null when the node has no eth_coinbase.
+ */
+export async function readCoinbase(
+  provider: JsonRpcProvider,
+): Promise<string | null | false> {
+  try {
+    return await optional<string>(provider.send("eth_coinbase", []));
+  } catch (error) {
+    if (isEtherbaseUnset(error)) return false;
+    throw error;
+  }
+}
+
 export function sameAddress(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
@@ -77,7 +111,8 @@ export function formatAge(seconds: number): string {
 export interface MiningStatus {
   mining: boolean | null;
   hashrate: bigint | null;
-  coinbase: string | null;
+  /** false: no etherbase set yet; null: the node has no eth_coinbase. */
+  coinbase: string | null | false;
   block: Block;
   balance: bigint;
 }
@@ -100,7 +135,7 @@ export async function readStatus(
   const [mining, hashrate, coinbase, balance] = await Promise.all([
     optional<boolean>(provider.send("eth_mining", [])),
     optional<string>(provider.send("eth_hashrate", [])),
-    optional<string>(provider.send("eth_coinbase", [])),
+    readCoinbase(provider),
     provider.getBalance(address, block.number),
   ]);
 
