@@ -234,6 +234,7 @@ describe("resolveConsoleContext", () => {
     writeSessionFile();
     const spies = spyOnDecryption();
     mockPassword(async () => ({ password: SESSION_PASSWORD }));
+    process.stdin.isTTY = true;
 
     const ctx = await resolve({ yes: true });
     ctx.provider.destroy();
@@ -248,6 +249,7 @@ describe("resolveConsoleContext", () => {
     writeConfig();
     writeSessionFile();
     mockPassword(async () => ({ password: "wrong horse 1" }));
+    process.stdin.isTTY = true;
 
     const error = await resolve({ yes: true }).catch((e: Error) => e);
 

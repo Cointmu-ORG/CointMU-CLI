@@ -267,6 +267,7 @@ export function decryptSessionKey(
  * @param {boolean} [options.prompt=true] - Set false to skip the password
  *   prompt (used for `deploy --config` / `deploy --ping` dry runs).
  * @returns {Promise<string | undefined>} The resolved private key, if any.
+ * @throws {Error} When the password would be needed but stdin is not a TTY.
  */
 export async function resolvePrivateKey(
   options: { prompt?: boolean } = {},
@@ -284,6 +285,13 @@ export async function resolvePrivateKey(
   }
   if (options.prompt === false) {
     return undefined;
+  }
+  // inquirer cannot read a masked answer from a pipe: an open one hangs forever.
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      "cannot prompt for the session password in a non-interactive session.\n" +
+        "\x1b[2mhint:\x1b[0m run this in a terminal, or set PRIVATE_KEY.",
+    );
   }
 
   const inquirer = (await import("inquirer")).default;
