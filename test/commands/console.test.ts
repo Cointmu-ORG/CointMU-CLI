@@ -6,6 +6,28 @@ import { ethers } from "ethers";
 import { encryptSessionKey } from "../../src/utils/session";
 import { TEST_PBKDF2_ITERATIONS } from "../helpers/testPbkdf2";
 import { consoleCommand } from "../../src/commands/console";
+import {
+  PRIVATE_KEY,
+  SESSION_PASSWORD,
+  ADDRESS,
+  ABI,
+  expectNoKeyLeak,
+} from "../helpers/consoleEnv";
+import {
+  TOKEN,
+  RUNTIME_IMM_ARTIFACT,
+  RUNTIME_IMM_CHAIN,
+  tmpDir,
+  out,
+  provider,
+  signer,
+  setCode,
+  getDeployedSetUp,
+  getDeployedTearDown,
+  writeArtifact,
+  writeRecord,
+  load,
+} from "../helpers/consoleGetDeployed";
 
 // The REPL loop itself (repl.start, the preloaded context, the exit handler)
 // is not covered here: driving it needs a real stdin and would leave vitest
@@ -13,45 +35,9 @@ import { consoleCommand } from "../../src/commands/console";
 // Everything that can actually be wrong - artifact loading and the
 // network/signer resolution - is reachable without opening a REPL.
 
-// well-known Ganache test key — never fund this
-const PRIVATE_KEY =
-  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-const SESSION_PASSWORD = "correct horse";
-const ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-
-const ABI = [
-  {
-    inputs: [],
-    name: "totalSupply",
-    outputs: [{ type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-];
-
-/** Every file under dir, recursively. */
-function allFiles(dir: string): string[] {
-  return fs
-    .readdirSync(dir, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.join(entry.parentPath, entry.name));
-}
-
-/**
- * The signer's key, with or without 0x, is nowhere in texts (what was printed,
- * errors thrown) or in any file under dir (HOME and the project).
- */
-function expectNoKeyLeak(texts: string[], dir: string): void {
-  const haystacks = [
-    texts.join("\n"),
-    ...allFiles(dir).map((f) => fs.readFileSync(f, "utf8")),
-  ].map((t) => t.toLowerCase());
-  for (const secret of [PRIVATE_KEY, PRIVATE_KEY.slice(2)]) {
-    for (const text of haystacks) {
-      expect(text).not.toContain(secret.toLowerCase());
-    }
-  }
-}
+// getDeployed(name) resolves the address from deployments/<network>/ and
+// checks the record against the chain first. The provider is a fake object:
+// only getNetwork and getCode are ever asked.
 
 describe("getContract", () => {
   let tmpDir: string;
@@ -425,102 +411,9 @@ describe("consoleCommand", () => {
   });
 });
 
-// getDeployed(name) resolves the address from deployments/<network>/ and
-// checks the record against the chain first. The provider is a fake object:
-// only getNetwork and getCode are ever asked.
 describe("getDeployed", () => {
-  const TOKEN = "0x00000000000000000000000000000000000000c1";
-  /** Runtime code as it sits on-chain, and as the artifact has it. */
-  const RUNTIME = "0x6080604052348015600f57600080fd5b50";
-  /** With a 32-byte immutable at byte 2: zero in the artifact, set on-chain. */
-  const RUNTIME_IMM_ARTIFACT = `0x6080${"00".repeat(32)}5b`;
-  const RUNTIME_IMM_CHAIN = `0x6080${"ab".repeat(32)}5b`;
-
-  let tmpDir: string;
-  let out: string[];
-  let code: string;
-  let liveChainId: bigint;
-  const provider = {
-    getNetwork: async () => ({ chainId: liveChainId }),
-    getCode: vi.fn(async () => code),
-  };
-  const signer = new ethers.Wallet(PRIVATE_KEY);
-
-  beforeEach(() => {
-    vi.resetModules();
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-getdeployed-"));
-    vi.stubEnv("HOME", tmpDir);
-    vi.stubEnv("USERPROFILE", tmpDir);
-    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
-    out = [];
-    for (const method of ["log", "warn", "error"] as const) {
-      vi.spyOn(console, method).mockImplementation((...a: unknown[]) => {
-        out.push(a.map(String).join(" "));
-      });
-    }
-    code = RUNTIME;
-    liveChainId = 1912n;
-    provider.getCode.mockClear();
-    writeArtifact("Token", RUNTIME);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllEnvs();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  function writeArtifact(
-    name: string,
-    runtime: string | undefined,
-    immutableReferences: unknown = {},
-  ): void {
-    fs.mkdirSync(path.join(tmpDir, "artifacts"), { recursive: true });
-    fs.writeFileSync(
-      path.join(tmpDir, "artifacts", `${name}.json`),
-      JSON.stringify({
-        abi: ABI,
-        evm: {
-          bytecode: { object: "60aa" },
-          ...(runtime && {
-            deployedBytecode: { object: runtime, immutableReferences },
-          }),
-        },
-      }),
-    );
-  }
-
-  function writeRecord(
-    network: string,
-    overrides: Record<string, unknown> = {},
-    name = "Token",
-  ): string {
-    const dir = path.join(tmpDir, "deployments", network);
-    fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, `${name}.json`);
-    fs.writeFileSync(
-      file,
-      JSON.stringify({
-        format: 1,
-        contract: name,
-        network,
-        chainId: 1912,
-        address: TOKEN,
-        deployer: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-        txHash: `0x${"11".repeat(32)}`,
-        blockNumber: 3,
-        timestamp: "2026-10-13T08:00:00.000Z",
-        codeHash: ethers.keccak256(code),
-        ...overrides,
-      }),
-    );
-    return file;
-  }
-
-  async function load(network = "local") {
-    const { makeGetDeployed } = await import("../../src/commands/console");
-    return makeGetDeployed({ provider, signer, network });
-  }
+  beforeEach(getDeployedSetUp);
+  afterEach(getDeployedTearDown);
 
   it("resolves the recorded contract and says where the address came from", async () => {
     writeRecord("local");
@@ -556,7 +449,7 @@ describe("getDeployed", () => {
 
   it("refuses a stale record with no code behind it", async () => {
     writeRecord("local");
-    code = "0x";
+    setCode("0x");
 
     await expect((await load())("Token")).rejects.toThrow(
       `the record for Token on 'local' is stale: there is no contract at ${TOKEN} (was the devnet restarted?).`,
@@ -565,7 +458,7 @@ describe("getDeployed", () => {
 
   it("refuses a stale record whose address now holds other code", async () => {
     writeRecord("local");
-    code = "0x6001";
+    setCode("0x6001");
 
     await expect((await load())("Token")).rejects.toThrow(
       `the record for Token on 'local' is stale: the code at ${TOKEN} is not the code that was recorded.`,
@@ -576,7 +469,7 @@ describe("getDeployed", () => {
   // pointing at someone else's contract passes the staleness checks; only
   // the local artifact can catch it.
   it("refuses code that is not what the artifact compiles to, without suggesting a way around it", async () => {
-    code = "0x60806040deadbeef";
+    setCode("0x60806040deadbeef");
     writeRecord("local");
 
     const error = await (
@@ -594,7 +487,7 @@ describe("getDeployed", () => {
   });
 
   it("masks immutables, and only as solc emits them", async () => {
-    code = RUNTIME_IMM_CHAIN;
+    setCode(RUNTIME_IMM_CHAIN);
     writeRecord("local");
     writeArtifact("Token", RUNTIME_IMM_ARTIFACT, {
       "7": [{ start: 2, length: 32 }],
@@ -616,7 +509,7 @@ describe("getDeployed", () => {
     writeArtifact("Token", `0x6080${"ab".repeat(32)}00`, {
       "7": [{ start: 2, length: 32 }],
     });
-    code = `0x6080${"cd".repeat(32)}00`;
+    setCode(`0x6080${"cd".repeat(32)}00`);
     writeRecord("local");
     await expect((await load())("Token")).rejects.toThrow(
       /no longer matches the deployed code/,
@@ -705,9 +598,9 @@ describe("getDeployed", () => {
 
     writeRecord("local");
     await attempt("Token");
-    code = "0x";
+    setCode("0x");
     await attempt("Token");
-    code = "0x6001";
+    setCode("0x6001");
     writeRecord("local");
     await attempt("Token");
     await attempt("Ghost");
