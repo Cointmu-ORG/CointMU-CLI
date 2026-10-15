@@ -1,4 +1,5 @@
 import { activeNetwork, getDynamicNetwork } from "../../utils/network";
+import { pingNetwork } from "../deploy";
 
 /**
  * Pings a network to check connectivity and latency.
@@ -12,9 +13,13 @@ export async function runNetworkPing(name?: string): Promise<void> {
         "pass a network name, or run `cmu wallet use <name>` first.",
       );
 
-  console.log(`Pinging ${networkName} (${rpcUrl})...`);
+  // Fails within its timeout when the node is down; a bare provider prints
+  // ethers' retry notice and a raw error, or hangs on a silent endpoint.
+  await pingNetwork(rpcUrl, networkName);
   const { ethers } = await import("ethers");
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
+    staticNetwork: true,
+  });
 
   const startTime = Date.now();
   const blockNumber = await provider.getBlockNumber();

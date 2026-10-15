@@ -61,13 +61,17 @@ export async function pingNetwork(
 
   const { ethers } = await import("ethers");
   console.log(`Pinging ${rpcUrl}...`);
+  let timer: NodeJS.Timeout | undefined;
   try {
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const networkData: any = await Promise.race([
       provider.getNetwork(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout")), NETWORK_TIMEOUT_MS),
-      ),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("Timeout")),
+          NETWORK_TIMEOUT_MS,
+        );
+      }),
     ]);
     console.log(
       `Connected to '${name ?? networkData.name}' (chain ID ${networkData.chainId}).`,
@@ -77,6 +81,9 @@ export async function pingNetwork(
       `RPC endpoint ${rpcUrl} is unreachable (timed out after ${NETWORK_TIMEOUT_MS}ms).\n` +
         "\x1b[2mhint:\x1b[0m check the node is running and the endpoint is correct - `cmu network list`.",
     );
+  } finally {
+    // A pending timer would hold the process open after a successful ping.
+    clearTimeout(timer);
   }
 }
 

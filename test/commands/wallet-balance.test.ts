@@ -27,6 +27,9 @@ describe("wallet balance", () => {
     }
     writeSession("local");
     const { ethers } = await import("ethers");
+    vi.spyOn(ethers.JsonRpcProvider.prototype, "getNetwork").mockResolvedValue(
+      ethers.Network.from(1912),
+    );
     vi.spyOn(ethers.JsonRpcProvider.prototype, "getBalance").mockResolvedValue(
       15n * 10n ** 17n,
     );
@@ -63,6 +66,28 @@ describe("wallet balance", () => {
 
     await expect(runWalletBalance()).rejects.toThrow(
       "network 'local' has an invalid symbol",
+    );
+    expect(getBalance).not.toHaveBeenCalled();
+  });
+
+  // Issue #214: a bare provider printed ethers' retry notice and a raw error.
+  it("reports a node that is down the way other commands do", async () => {
+    const { ethers } = await import("ethers");
+    vi.spyOn(ethers.JsonRpcProvider.prototype, "getNetwork").mockRejectedValue(
+      new Error("connect ECONNREFUSED 127.0.0.1:9999"),
+    );
+    const getBalance = vi
+      .spyOn(ethers.JsonRpcProvider.prototype, "getBalance")
+      .mockResolvedValue(0n);
+    fs.writeFileSync(
+      path.join(tmpDir, ".cmu-networks.json"),
+      JSON.stringify([{ name: "local", rpcUrl: RPC_URL }]),
+    );
+    writeSession("local");
+    const { runWalletBalance } = await import("../../src/commands/wallet/info");
+
+    await expect(runWalletBalance()).rejects.toThrow(
+      `RPC endpoint ${RPC_URL} is unreachable`,
     );
     expect(getBalance).not.toHaveBeenCalled();
   });

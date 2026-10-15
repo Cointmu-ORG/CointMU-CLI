@@ -1,6 +1,7 @@
 import { coinSymbol } from "../../utils/coinSymbol";
 import { getDynamicNetwork } from "../../utils/network";
 import { requireSession } from "../../utils/session";
+import { pingNetwork } from "../deploy";
 
 /**
  * Fetch and display the native token balance of the logged-in wallet.
@@ -13,9 +14,12 @@ export async function runWalletBalance(): Promise<void> {
 
   const network = await getDynamicNetwork(session.activeNetwork);
   const symbol = coinSymbol(network);
-  const provider = new ethers.JsonRpcProvider(network.rpcUrl);
+  // After the symbol, so a broken one fails without dialling the node.
+  await pingNetwork(network.rpcUrl, network.name);
+  const provider = new ethers.JsonRpcProvider(network.rpcUrl, undefined, {
+    staticNetwork: true,
+  });
 
-  console.log(`Connecting to ${network.name} (${network.rpcUrl})...`);
   const balance = await provider.getBalance(session.address);
 
   console.log("---------------------------");
