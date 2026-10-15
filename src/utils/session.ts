@@ -12,7 +12,7 @@ const DIGEST = "sha256";
 const JSON_SPACES = 2;
 
 /** Owner read/write only. The session file holds an encrypted private key. */
-const SESSION_FILE_MODE = 0o600;
+export const SESSION_FILE_MODE = 0o600;
 
 /**
  * PBKDF2-HMAC-SHA256 work factor for new sessions. 600k is the OWASP 2023

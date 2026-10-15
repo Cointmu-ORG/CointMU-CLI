@@ -66,6 +66,17 @@ describe("generateConfigFiles", () => {
       expect(lines).toContain(".cmu-session.*.tmp");
     });
 
+    // #209: `wallet use` keeps a session it cannot open as
+    // .cmu-session.bak-<time>, encrypted key and all.
+    it(`ignores the session's backups for ${language}`, async () => {
+      await generateConfigFiles(tmpDir, language);
+
+      const lines = fs
+        .readFileSync(path.join(tmpDir, ".gitignore"), "utf8")
+        .split("\n");
+      expect(lines).toContain(".cmu-session.bak-*");
+    });
+
     it(`ignores only the local devnet's deployment records for ${language}`, async () => {
       await generateConfigFiles(tmpDir, language);
 

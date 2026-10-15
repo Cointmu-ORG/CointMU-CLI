@@ -132,5 +132,6 @@ graphify-out
 # CointMU local session & network state (holds an encrypted private key)
 .cmu-session
 .cmu-session.*.tmp
+.cmu-session.bak-*
 .cmu-networks.json
 .cmu-wallets.json

@@ -3,7 +3,12 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { stripVTControlCharacters } from "util";
-import { encryptSessionKey, type SessionData } from "../../src/utils/session";
+import * as crypto from "crypto";
+import {
+  encryptSessionKey,
+  LEGACY_PBKDF2_ITERATIONS,
+  type SessionData,
+} from "../../src/utils/session";
 
 export const PASSWORD = "correct horse 9";
 // Hardhat account #1, so the address in the assertions is a known value.
@@ -156,6 +161,83 @@ export function writeKeySession(
   const text = `${JSON.stringify(session, null, 2)}\n`;
   fs.writeFileSync(sessionFile(), text);
   return text;
+}
+
+// cmu 1.3.1 `wallet login` (95a3eef^): AES-256-CBC with a 16-byte IV, and no
+// authTag or iterations field.
+const CBC_ALGORITHM = "aes-256-cbc";
+const CBC_SALT_BYTES = 16;
+const CBC_IV_BYTES = 16;
+const CBC_KEY_BYTES = 32;
+
+/**
+ * Writes a session as cmu 1.3.1 left it: the key under AES-256-CBC with
+ * PBKDF2-SHA256 at 100k, a format this version can no longer open (#209).
+ *
+ * @param {string} [address] - The address the session names.
+ * @param {string} [key] - The key to encrypt into it, with PASSWORD.
+ * @returns {string} The file's exact contents, to compare against later.
+ */
+export function writeCbcSession(address = ADDRESS_B, key = KEY_B): string {
+  const salt = crypto.randomBytes(CBC_SALT_BYTES);
+  const iv = crypto.randomBytes(CBC_IV_BYTES);
+  const aesKey = crypto.pbkdf2Sync(
+    PASSWORD,
+    salt,
+    LEGACY_PBKDF2_ITERATIONS,
+    CBC_KEY_BYTES,
+    "sha256",
+  );
+  const cipher = crypto.createCipheriv(CBC_ALGORITHM, aesKey, iv);
+  const session = {
+    address,
+    activeNetwork: "local",
+    encryptedKey: cipher.update(key, "utf8", "hex") + cipher.final("hex"),
+    salt: salt.toString("hex"),
+    iv: iv.toString("hex"),
+  };
+  const text = `${JSON.stringify(session, null, 2)}\n`;
+  fs.writeFileSync(sessionFile(), text);
+  return text;
+}
+
+/**
+ * Writes a session for KEY_B with a hand-edit typo: a stray `x` before the
+ * encryptedKey's opening quote. V8's JSON error quotes the text around it -
+ * the start of the ciphertext - so a parse error passed on to the output
+ * shows up in expectNoSessionFileLeak().
+ *
+ * @returns {string} The file's exact contents, to compare against later.
+ */
+export function writeBrokenSession(): string {
+  const text = writeKeySession(ADDRESS_B).replace(
+    '"encryptedKey": "',
+    '"encryptedKey": x"',
+  );
+  fs.writeFileSync(sessionFile(), text);
+  return text;
+}
+
+/** Hex characters of a session field a quoted fragment would show. */
+const FRAGMENT_CHARS = 8;
+
+/**
+ * Nothing printed during the test quotes the session file: no fragment of its
+ * encryptedKey, or of its salt and iv where it has them.
+ *
+ * @param {string} text - The session file's contents, as written.
+ */
+export function expectNoSessionFileLeak(text: string): void {
+  const printed = everything.join("\n").toLowerCase();
+  const valueOf = (field: string) =>
+    new RegExp(`"${field}": x?"([0-9a-f]+)"`).exec(text)?.[1];
+  if (!valueOf("encryptedKey")) {
+    throw new Error("the session file has no encryptedKey");
+  }
+  for (const field of ["encryptedKey", "salt", "iv"]) {
+    const value = valueOf(field);
+    if (value) expect(printed).not.toContain(value.slice(0, FRAGMENT_CHARS));
+  }
 }
 
 /** Every file under dir, recursively. */

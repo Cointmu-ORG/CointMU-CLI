@@ -2,11 +2,14 @@ import { saveWallet, type WalletEntry } from "../../utils/walletStorage";
 import {
   encryptSessionKey,
   LEGACY_PBKDF2_ITERATIONS,
-  readSession,
 } from "../../utils/session";
 import { promptPrivateKey, promptNewPassword } from "./prompts";
 import { sameAddress, checkNewWalletName } from "./savedWallets";
-import { sessionHoldsOpenableKey } from "./activeSession";
+import {
+  parseSession,
+  sessionHoldsOpenableKey,
+  UNPARSEABLE_SESSION,
+} from "./activeSession";
 
 /**
  * `wallet save <name> --session`: copies this project's session key into the
@@ -25,7 +28,19 @@ async function saveSessionKey(
   name: string,
   wallets: WalletEntry[],
 ): Promise<void> {
-  const session = await readSession();
+  const session = await parseSession();
+  if (session === UNPARSEABLE_SESSION) {
+    throw new Error(
+      ".cmu-session is not valid JSON, so cmu cannot read a key from it.\n" +
+        "\x1b[2mhint:\x1b[0m fix the file, then run this command again.",
+    );
+  }
+  if (session?.encryptedKey && !sessionHoldsOpenableKey(session)) {
+    throw new Error(
+      `this project's .cmu-session holds an encrypted key for ${session.address} that this version of cmu cannot open or save (written by cmu 1.3.1 or older, or incomplete).\n` +
+        "\x1b[2mhint:\x1b[0m keep a copy of the file somewhere safe; `cmu wallet use` also keeps one as .cmu-session.bak-<time> before replacing it.",
+    );
+  }
   if (!session || !sessionHoldsOpenableKey(session)) {
     throw new Error(
       "this project's .cmu-session holds no key to save.\n" +
