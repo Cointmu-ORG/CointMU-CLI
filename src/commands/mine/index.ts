@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import type { JsonRpcProvider } from "ethers";
+import { coinSymbol } from "../../utils/coinSymbol";
 import { fail } from "../../utils/errors";
 import { getDynamicNetwork } from "../../utils/network";
 import { requireSession } from "../../utils/session";
@@ -70,6 +71,9 @@ async function runMiner(
     staticNetwork: true,
   });
   const starting = method === "miner_start";
+  // Only the watch prints an amount. Read before any miner call, so a broken
+  // symbol cannot fail the watch after mining has already started.
+  const symbol = options.watch ? coinSymbol(network) : undefined;
 
   if (starting) {
     await warnIfForeignEtherbase(provider, session.address);
@@ -99,7 +103,7 @@ async function runMiner(
   );
   const controller = new AbortController();
   process.once("SIGINT", () => controller.abort());
-  await watchMining(provider, session.address, controller.signal);
+  await watchMining(provider, session.address, controller.signal, { symbol });
   console.log(
     `Stopped watching. Mining is still running on ${network.name} - stop it with \`cmu mine stop\`.`,
   );
@@ -123,6 +127,7 @@ async function runMineStatus(): Promise<void> {
     staticNetwork: true,
   });
 
+  const symbol = coinSymbol(network);
   const status = await readStatus(provider, session.address);
   const { block, coinbase, mining } = status;
   const foreign = coinbase !== null && !sameAddress(coinbase, session.address);
@@ -140,7 +145,7 @@ async function runMineStatus(): Promise<void> {
   console.log(`Latest block : #${block.number}, ${formatAge(age)} ago`);
   console.log(`Difficulty   : ${block.difficulty}`);
   console.log(`Wallet       : ${session.address}`);
-  console.log(`Balance      : ${ethers.formatEther(status.balance)} ETH`);
+  console.log(`Balance      : ${ethers.formatEther(status.balance)} ${symbol}`);
   console.log("---------------------");
 }
 

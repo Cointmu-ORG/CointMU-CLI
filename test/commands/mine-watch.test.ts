@@ -14,6 +14,7 @@ import {
   mineTearDown,
   run,
   minerCalls,
+  writeNetworksFile,
 } from "../helpers/mineEnv";
 
 describe("mineCommand", () => {
@@ -21,6 +22,12 @@ describe("mineCommand", () => {
   afterEach(mineTearDown);
 
   describe("watchMining", () => {
+    /** The coin symbol the next watch() labels amounts with; unset = default. */
+    let symbol: string | undefined;
+    beforeEach(() => {
+      symbol = undefined;
+    });
+
     /**
      * Drives the watch one poll per script entry: entry i runs after poll i,
      * before poll i + 1. The watch is aborted after the last poll.
@@ -30,16 +37,14 @@ describe("mineCommand", () => {
       const controller = new AbortController();
       const delays: number[] = [];
       let i = 0;
-      await watchMining(
-        new FakeProvider() as any,
-        ADDRESS,
-        controller.signal,
-        async (ms) => {
+      await watchMining(new FakeProvider() as any, ADDRESS, controller.signal, {
+        symbol,
+        sleep: async (ms) => {
           delays.push(ms);
           if (i < script.length) script[i++]();
           else controller.abort();
         },
-      );
+      });
       return {
         delays,
         lines: log.mock.calls.map((c: unknown[]) => String(c[0])),
@@ -78,6 +83,16 @@ describe("mineCommand", () => {
       const { lines } = await watch(() => extend(1, ADDRESS));
 
       expect(lines.at(-1)).toContain("balance 3.0 ETH (change +2.0)");
+    });
+
+    // Issue #228.
+    it("labels the balance with the network's symbol", async () => {
+      node.balance = (n) => (n >= 11 ? 3n * ETH : 1n * ETH);
+      symbol = "CMU";
+
+      const { lines } = await watch(() => extend(1, ADDRESS));
+
+      expect(lines.at(-1)).toContain("balance 3.0 CMU (change +2.0)");
     });
 
     it("degrades to n/a on a node without eth_hashrate and reports no etherbase change", async () => {
@@ -216,4 +231,35 @@ describe("mineCommand", () => {
     );
     expect(minerCalls().map(([m]) => m)).not.toContain("miner_stop");
   });
+
+  // Issue #228: the symbol comes from the session's saved network.
+  it.each([
+    ["saved with a symbol", { symbol: "CMU" }, "balance 0.0 CMU"],
+    ["saved before symbols", {}, "balance 0.0 ETH"],
+  ])(
+    "start --watch labels the balance of a network %s",
+    async (_l, extra, text) => {
+      writeNetworksFile([
+        { name: "local", rpcUrl: "http://127.0.0.1:8585", ...extra },
+      ]);
+      vi.spyOn(process, "exit").mockImplementation((() => {}) as any);
+      let onSigint: (() => void) | undefined;
+      vi.spyOn(process, "once").mockImplementation(((
+        event: string,
+        handler: () => void,
+      ) => {
+        if (event === "SIGINT") onSigint = handler;
+        return process;
+      }) as any);
+
+      const running = run("start", "--watch");
+      await vi.waitFor(() =>
+        expect(output()).toContain("mined by you since #10"),
+      );
+      onSigint!();
+      await running;
+
+      expect(output()).toContain(text);
+    },
+  );
 });
