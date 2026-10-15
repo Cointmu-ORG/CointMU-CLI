@@ -250,6 +250,40 @@ describe("networkCommand wiring", () => {
       );
     });
 
+    it("says which symbol an update without --symbol kept", async () => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      await run(
+        "save",
+        "http://127.0.0.1:9000",
+        "--name",
+        "kampus",
+        "--symbol",
+        "tCMU",
+      );
+      log.mockClear();
+
+      await run("save", "http://127.0.0.1:9001", "--name", "kampus");
+
+      expect(saved()).toContainEqual({
+        name: "kampus",
+        rpcUrl: "http://127.0.0.1:9001",
+        symbol: "tCMU",
+      });
+      expect((log as any).mock.calls.flat()).toContain(
+        "Saved network 'kampus' (http://127.0.0.1:9001, symbol tCMU kept)",
+      );
+    });
+
+    it("says the seeded local network kept CMU when only its URL is saved", async () => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await run("save", "http://127.0.0.1:8585", "--name", "local");
+
+      expect((log as any).mock.calls.flat()).toContain(
+        "Saved network 'local' (http://127.0.0.1:8585, symbol CMU kept)",
+      );
+    });
+
     it("keeps the stored symbol case as typed", async () => {
       vi.spyOn(console, "log").mockImplementation(() => {});
 

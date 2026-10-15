@@ -78,11 +78,13 @@ describe("networkStorage symbol", () => {
     );
     const { saveNetwork } = await storage();
 
-    await saveNetwork("kampus", "http://127.0.0.1:9001");
+    const entry = await saveNetwork("kampus", "http://127.0.0.1:9001");
 
     expect(read()).toEqual([
       { name: "kampus", rpcUrl: "http://127.0.0.1:9001", symbol: "CMU" },
     ]);
+    // Returned as written, so `network save` can say the symbol was kept.
+    expect(entry).toEqual(read()[0]);
   });
 
   it("replaces the stored symbol when an update gives one", async () => {

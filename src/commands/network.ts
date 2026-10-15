@@ -1,5 +1,10 @@
 import { Command } from "commander";
-import { coinSymbol, isValidSymbol, SYMBOL_RULE } from "../utils/coinSymbol";
+import {
+  coinSymbol,
+  isValidSymbol,
+  savedSymbolNote,
+  SYMBOL_RULE,
+} from "../utils/coinSymbol";
 import { fail } from "../utils/errors";
 import {
   activeNetwork,
@@ -107,9 +112,9 @@ async function runNetworkSave(
     );
   }
 
-  await saveNetwork(options.name, url, symbol);
+  const saved = await saveNetwork(options.name, url, symbol);
   console.log(
-    `Saved network '${options.name}' (${url}${symbol === undefined ? "" : `, symbol ${symbol}`})`,
+    `Saved network '${options.name}' (${url}${savedSymbolNote(symbol, saved)})`,
   );
 }
 

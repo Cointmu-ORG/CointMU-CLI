@@ -3,6 +3,7 @@ import {
   coinSymbol,
   DEFAULT_SYMBOL,
   isValidSymbol,
+  savedSymbolNote,
 } from "../../src/utils/coinSymbol";
 
 // Issue #228: the label printed next to every amount, per network.
@@ -58,6 +59,28 @@ describe("coinSymbol", () => {
   it("names the command that fixes it, with the saved endpoint filled in", () => {
     expect(() => coinSymbol({ ...network, symbol: "c-m" })).toThrow(
       "cmu network save http://127.0.0.1:9000 --name kampus --symbol <SYMBOL>",
+    );
+  });
+});
+
+describe("savedSymbolNote", () => {
+  it("names the symbol that was given", () => {
+    expect(savedSymbolNote("CMU", { symbol: "CMU" })).toBe(", symbol CMU");
+  });
+
+  it("says which symbol an update without --symbol kept", () => {
+    expect(savedSymbolNote(undefined, { symbol: "tCMU" })).toBe(
+      ", symbol tCMU kept",
+    );
+  });
+
+  it("adds nothing for an entry without a symbol", () => {
+    expect(savedSymbolNote(undefined, {})).toBe("");
+  });
+
+  it("quotes a kept hand-edited symbol instead of printing it raw", () => {
+    expect(savedSymbolNote(undefined, { symbol: "\x1b[31mX" })).toBe(
+      ', symbol "\\u001b[31mX" kept',
     );
   });
 });

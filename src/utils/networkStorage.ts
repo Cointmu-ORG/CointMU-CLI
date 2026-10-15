@@ -60,29 +60,30 @@ export async function loadNetworks(): Promise<NetworkEntry[]> {
  * @param {string} rpcUrl - The RPC URL.
  * @param {string} [symbol] - The coin symbol, already validated. Left out, a
  *   new entry gets no symbol key and an existing one keeps its symbol.
- * @returns {Promise<void>}
+ * @returns {Promise<NetworkEntry>} The entry as written, kept symbol included.
  */
 export async function saveNetwork(
   name: string,
   rpcUrl: string,
   symbol?: string,
-): Promise<void> {
+): Promise<NetworkEntry> {
   const filePath = getNetworksFilePath();
   const networks = await loadNetworks();
   const existingIndex = networks.findIndex((n) => n.name === name);
   const symbolField = symbol === undefined ? {} : { symbol };
 
+  const entry: NetworkEntry =
+    existingIndex >= 0
+      ? { ...networks[existingIndex], rpcUrl, ...symbolField }
+      : { name, rpcUrl, ...symbolField };
   if (existingIndex >= 0) {
-    networks[existingIndex] = {
-      ...networks[existingIndex],
-      rpcUrl,
-      ...symbolField,
-    };
+    networks[existingIndex] = entry;
   } else {
-    networks.push({ name, rpcUrl, ...symbolField });
+    networks.push(entry);
   }
 
   await writeNetworks(filePath, networks);
+  return entry;
 }
 
 /**

@@ -23,6 +23,26 @@ export function isValidSymbol(value: unknown): value is string {
 }
 
 /**
+ * The symbol part of the `network save` confirmation: the one given, the one
+ * an update kept, or nothing for an entry without one.
+ * @param {string | undefined} given - The --symbol value, already validated.
+ * @param {object} saved - The entry as written, from saveNetwork().
+ * @returns {string} e.g. ", symbol CMU", ", symbol CMU kept" or "".
+ */
+export function savedSymbolNote(
+  given: string | undefined,
+  saved: { symbol?: unknown },
+): string {
+  if (given !== undefined) return `, symbol ${given}`;
+  if (saved.symbol === undefined) return "";
+  // A hand-edited value is quoted, so nothing it holds reaches the terminal raw.
+  const shown = isValidSymbol(saved.symbol)
+    ? saved.symbol
+    : JSON.stringify(saved.symbol);
+  return `, symbol ${shown} kept`;
+}
+
+/**
  * The coin symbol of a saved network, ETH when it was saved without one.
  *
  * The symbol is re-checked here because ~/.cmu-networks.json can be edited by
