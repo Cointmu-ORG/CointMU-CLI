@@ -244,4 +244,60 @@ describe("runExplorer", () => {
       run({ contract: ADDRESS, yes: true }),
     ).resolves.toBeUndefined();
   });
+
+  // Issue #228: the balance unit comes from networks.<name>.symbol.
+  describe("balance symbol", () => {
+    function writeLocalConfig(fields: string): void {
+      fs.writeFileSync(
+        path.join(tmpDir, "cmu.config.js"),
+        `module.exports = { defaultNetwork: "local", networks: { local: ` +
+          `{ url: "http://127.0.0.1:8585", chainId: 1912${fields} } } };`,
+      );
+    }
+
+    async function printedBalance(): Promise<string> {
+      mockEthers({
+        getCode: async () => "0x",
+        getBalance: async () => 10n ** 18n,
+      });
+      await run({ contract: ADDRESS, yes: true });
+      const printed = vi.mocked(console.log).mock.calls.join("\n");
+      return printed.split("\n").find((l) => l.startsWith("Balance")) ?? "";
+    }
+
+    it("uses the symbol set in cmu.config", async () => {
+      writeLocalConfig(`, symbol: "CMU"`);
+
+      expect(await printedBalance()).toBe(
+        "Balance      : 1.0 CMU (1000000000000000000 wei)",
+      );
+    });
+
+    it("falls back to ETH for a config without one", async () => {
+      writeLocalConfig("");
+
+      expect(await printedBalance()).toBe(
+        "Balance      : 1.0 ETH (1000000000000000000 wei)",
+      );
+    });
+
+    it("uses CMU for the built-in local devnet when there is no config", async () => {
+      expect(await printedBalance()).toBe(
+        "Balance      : 1.0 CMU (1000000000000000000 wei)",
+      );
+    });
+
+    it("refuses an invalid symbol in cmu.config, naming the key", async () => {
+      writeLocalConfig(`, symbol: "C-M"`);
+      mockEthers({
+        getNetwork: async () => {
+          throw new Error("must not connect");
+        },
+      });
+
+      await expect(run({ contract: ADDRESS, yes: true })).rejects.toThrow(
+        /invalid symbol "C-M"[\s\S]*networks\.local\.symbol in cmu\.config\.js/,
+      );
+    });
+  });
 });

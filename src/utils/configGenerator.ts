@@ -1,6 +1,11 @@
 import { writeFile } from "fs/promises";
 import * as path from "path";
-import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
+import {
+  LOCAL_CHAIN_ID,
+  LOCAL_NETWORK_NAME,
+  LOCAL_RPC_URL,
+  LOCAL_SYMBOL,
+} from "./defaults";
 import { JS_CONFIG_FILE, TS_CONFIG_FILE } from "./trust";
 
 const TYPESCRIPT_LANG = "typescript";
@@ -20,6 +25,7 @@ const cmuConfig = (isTypeScript: boolean) => `${
     ${LOCAL_NETWORK_NAME}: {
       url: "${LOCAL_RPC_URL}",
       chainId: ${LOCAL_CHAIN_ID},
+      symbol: "${LOCAL_SYMBOL}",
     },
     // Set this to your own CointMU mainnet RPC endpoint before deploying.
     // Keep it on https://: a plaintext http:// endpoint can be intercepted and
@@ -27,6 +33,7 @@ const cmuConfig = (isTypeScript: boolean) => `${
     mainnet: {
       url: "",
       chainId: ${LOCAL_CHAIN_ID},
+      symbol: "${LOCAL_SYMBOL}",
     },
   },
   wallet: {

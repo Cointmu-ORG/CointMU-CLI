@@ -87,7 +87,8 @@ export function formatBlock(block: Block, networkName: string): string {
  * What it can check cheaply - the code hash the record was taken with - is
  * shown next to each one.
  *
- * @param {string} networkName - The network it was read from.
+ * @param {object} network - The network it was read from: its name, and the
+ *   coin symbol the balance is labelled with.
  * @param {object[]} [records] - Deployment records on this network that name
  *   the address, from findRecordsByAddress().
  * @returns {string} The printable report.
@@ -96,7 +97,7 @@ export function formatContract(
   address: string,
   code: string,
   balance: bigint,
-  networkName: string,
+  network: { name: string; symbol: string },
   records: { record: DeploymentRecord; file: string }[] = [],
 ): string {
   const { formatEther, keccak256 } = require("ethers");
@@ -120,10 +121,10 @@ export function formatContract(
     .join("");
 
   return (
-    `\n--- Address on '${networkName}' ---\n` +
+    `\n--- Address on '${network.name}' ---\n` +
     `Address      : ${address}\n` +
     `Bytecode     : ${bytecode}\n` +
-    `Balance      : ${formatEther(balance)} (${balance} wei)\n` +
+    `Balance      : ${formatEther(balance)} ${network.symbol} (${balance} wei)\n` +
     recorded
   );
 }
@@ -215,13 +216,7 @@ export async function runExplorer(
         contract as string,
       );
       console.log(
-        formatContract(
-          contract as string,
-          code,
-          balance,
-          network.name,
-          records,
-        ),
+        formatContract(contract as string, code, balance, network, records),
       );
     }
   } finally {
