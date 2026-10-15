@@ -5,6 +5,7 @@ import {
   savedSymbolNote,
   SYMBOL_RULE,
 } from "../../utils/coinSymbol";
+import { LOCAL_NETWORK_NAME } from "../../utils/defaults";
 import { fail } from "../../utils/errors";
 import {
   activeNetwork,
@@ -98,6 +99,14 @@ async function runNetworkSave(
  * @returns {Promise<void>} Resolves when the network is deleted.
  */
 async function runNetworkDelete(name: string): Promise<void> {
+  // Every fallback (no session, `wallet use`) points at it, and only a missing
+  // networks file seeds it again.
+  if (name === LOCAL_NETWORK_NAME) {
+    throw new Error(
+      `network '${LOCAL_NETWORK_NAME}' is the built-in fallback and cannot be deleted.\n` +
+        `\x1b[2mhint:\x1b[0m point it at another endpoint with \`cmu network save <url> --name ${LOCAL_NETWORK_NAME}\`.`,
+    );
+  }
   if ((await readSession())?.activeNetwork === name) {
     throw new Error(
       `network '${name}' is currently active and cannot be deleted.\n` +

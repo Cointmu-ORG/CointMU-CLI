@@ -1,6 +1,6 @@
 import * as path from "path";
 import { readFile, writeFile } from "fs/promises";
-import { LOCAL_NETWORK_NAME } from "../../utils/defaults";
+import { LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "../../utils/defaults";
 import { loadNetworks } from "../../utils/networkStorage";
 import { loadWallets } from "../../utils/walletStorage";
 import {
@@ -21,7 +21,9 @@ const BACKUP_SUFFIX = ".bak-";
  * The activeNetwork a new session should carry: the one the existing session
  * selected, as long as it is still saved. Falls back to the local devnet for a
  * first session, an unreadable session file, or a pick that has since been
- * deleted - and says so in that last case, since the user did choose it.
+ * deleted - and says so in that last case, since the user did choose it. A
+ * local network that is no longer saved is warned about on every fallback,
+ * with the command that re-adds it.
  *
  * @returns {Promise<string>} The network name the new session should record.
  */
@@ -31,16 +33,22 @@ async function carriedOverNetwork(): Promise<string> {
     previous = (await readSession())?.activeNetwork;
   } catch {
     // A corrupt session file must not block `use` - it is the way out of it.
-    return LOCAL_NETWORK_NAME;
+    previous = undefined;
   }
-  if (!previous) return LOCAL_NETWORK_NAME;
+  const saved = (await loadNetworks()).map((n) => n.name);
+  if (previous && saved.includes(previous)) return previous;
 
-  if ((await loadNetworks()).some((n) => n.name === previous)) return previous;
-
-  console.log(
-    `\x1b[33mwarning:\x1b[0m network '${previous}' is no longer saved - ` +
-      `active network reset to ${LOCAL_NETWORK_NAME}.`,
-  );
+  if (!saved.includes(LOCAL_NETWORK_NAME)) {
+    console.log(
+      `\x1b[33mwarning:\x1b[0m network '${LOCAL_NETWORK_NAME}' is not saved - ` +
+        `re-add it with \`cmu network save ${LOCAL_RPC_URL} --name ${LOCAL_NETWORK_NAME}\`.`,
+    );
+  } else if (previous) {
+    console.log(
+      `\x1b[33mwarning:\x1b[0m network '${previous}' is no longer saved - ` +
+        `active network reset to ${LOCAL_NETWORK_NAME}.`,
+    );
+  }
   return LOCAL_NETWORK_NAME;
 }
 
