@@ -111,7 +111,7 @@ Commands:
     use <name>                Make a saved wallet the active session in this project
     list                      List saved wallets
     delete <name>             Delete a saved wallet
-    transfer|tf <to> <amount> Send ETH from the session wallet (-y skips the confirmation)
+    transfer|tf <to> <amount> Send the network's native coin from the session wallet (-y skips the confirmation)
   create [options] [project]  Initializes a new CointMU workspace with pre-configured templates
   node [options]              Manages the local EVM node for development and testing
     connect                   Pings the configured RPC endpoint to test connectivity
@@ -125,6 +125,7 @@ Commands:
     status                    Shows mining state, hashrate, etherbase and your balance
   network [options]           Manage active RPC networks locally
     save <url> -n <name>      Save a new network or update an existing one
+                              (--symbol <SYMBOL>: coin symbol amounts are labelled with)
     use <name>                Switch the active network to the specified name
     list                      List all saved networks
     delete <name>             Delete a saved network
@@ -140,6 +141,17 @@ Commands:
 > subcommands above instead — `cmu network save <url> --name <name>` in place of
 > `cmu network --save <url> --name <name>`, and so on. `cmu network` on its own
 > still lists the saved networks.
+
+**Coin symbol.** Amounts (`wallet balance`, `wallet transfer`, `mine status`,
+`explorer --contract`) are labelled with the network's symbol. Set it with
+`cmu network save <url> --name <name> --symbol CMU` (1-11 letters or digits,
+stored as typed); saving again without `--symbol` keeps it. A network saved
+without one shows `ETH`, so networks files saved before symbols read as they did. A
+new `~/.cmu-networks.json` labels `local` as `CMU`; to label an older `local`
+the same way, run `cmu network save http://127.0.0.1:8585 --name local --symbol CMU`.
+`cmu explorer` reads `networks.<name>.symbol` from `cmu.config` instead, and new
+projects are scaffolded with `symbol: "CMU"`. The symbol is only a label: amounts
+always have 18 decimals.
 
 ## 🔐 Trust Model
 
@@ -380,7 +392,7 @@ the prompts above refuse to run there. Use Windows Terminal, PowerShell or
 `cmd`, or prefix the command with `winpty` (`winpty cmu wallet save dev`,
 `winpty cmu wallet create --save dev`).
 
-## 💸 Sending ETH
+## 💸 Sending coins
 
 ```bash
 cmu wallet transfer 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC 1.5
@@ -393,13 +405,14 @@ everything it can before asking for anything:
 
 - `<to>` must be a `0x`-prefixed 40-digit hex address. ENS names are not
   resolved, and a mixed-case address with a wrong checksum is rejected.
-- `<amount>` is in ETH: a plain positive decimal such as `1`, `0.5` or
+- `<amount>` is in the network's native coin (the summary shows its symbol,
+  see `--symbol` above): a plain positive decimal such as `1`, `0.5` or
   `0.000000000000000001`, at most 18 decimals. No sign, exponent,
   separators, `1.` or `.5`.
 - The balance must cover the amount **plus the maximum fee**. The fee is
   capped up front (EIP-1559 `maxFeePerGas`, or `gasPrice` on a chain
   without it), so the actual fee is never higher than the one shown.
-- The recipient must accept plain ETH. If a contract would reject the
+- The recipient must accept a plain coin transfer. If a contract would reject the
   transfer, it stops here.
 
 Only then does it ask for the session password, show a summary (network,
