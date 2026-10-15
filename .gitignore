@@ -26,6 +26,9 @@ coverage
 # nyc test coverage
 .nyc_output
 
+# Vitest output (e.g. JSON reporter files)
+.vitest/
+
 # Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
 .grunt
 
@@ -128,5 +131,6 @@ graphify-out
 
 # CointMU local session & network state (holds an encrypted private key)
 .cmu-session
+.cmu-session.*.tmp
 .cmu-networks.json
 .cmu-wallets.json
