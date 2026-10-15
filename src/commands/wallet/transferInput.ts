@@ -47,12 +47,13 @@ export async function parseTransferAddress(to: string): Promise<string> {
 export async function parseTransferAmount(amount: string): Promise<bigint> {
   if (/^[0-9]+\.[0-9]{19,}$/.test(amount)) {
     throw new Error(
-      `amount '${amount}' has more than 18 decimals - 1 wei is 0.000000000000000001 ETH.`,
+      // Unit-neutral: parsed before the network, and so its symbol, is known.
+      `amount '${amount}' has more than 18 decimals - the smallest unit (1 wei) is 0.000000000000000001.`,
     );
   }
   if (!AMOUNT_PATTERN.test(amount)) {
     throw new Error(
-      `invalid amount ${JSON.stringify(amount)} - expected a positive decimal ETH value like 0.5.\n` +
+      `invalid amount ${JSON.stringify(amount)} - expected a positive decimal amount like 0.5.\n` +
         "\x1b[2mhint:\x1b[0m no sign, exponent, separators or bare leading/trailing dot: write 1 or 0.5.",
     );
   }

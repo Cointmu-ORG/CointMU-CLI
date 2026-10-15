@@ -1,5 +1,6 @@
 import type { Block, JsonRpcProvider } from "ethers";
 import { setTimeout as delay } from "timers/promises";
+import { DEFAULT_SYMBOL } from "../../utils/coinSymbol";
 import {
   WARNING,
   sameAddress,
@@ -137,15 +138,22 @@ function errorText(error: unknown): string {
  * @param {JsonRpcProvider} provider - Provider for the active network.
  * @param {string} address - The session wallet the rewards should go to.
  * @param {AbortSignal} signal - Aborted on Ctrl-C.
- * @param {Function} [sleep] - Waits between polls; injectable for tests.
+ * @param {object} [options]
+ * @param {string} [options.symbol] - Coin symbol the balance is labelled with.
+ * @param {Function} [options.sleep] - Waits between polls; injectable for tests.
  * @returns {Promise<void>} Resolves once aborted.
  */
 export async function watchMining(
   provider: JsonRpcProvider,
   address: string,
   signal: AbortSignal,
-  sleep: (ms: number, signal: AbortSignal) => Promise<unknown> = (ms, s) =>
-    delay(ms, undefined, { signal: s }),
+  {
+    symbol = DEFAULT_SYMBOL,
+    sleep = (ms, s) => delay(ms, undefined, { signal: s }),
+  }: {
+    symbol?: string;
+    sleep?: (ms: number, signal: AbortSignal) => Promise<unknown>;
+  } = {},
 ): Promise<void> {
   const { formatEther } = await import("ethers");
   const tty = Boolean(process.stdout.isTTY);
@@ -190,7 +198,7 @@ export async function watchMining(
       statusLine =
         `#${state.head}  hashrate ${formatHashrate(status.hashrate)}  ` +
         `mined by you since #${state.startHeight}: ${mined}  ` +
-        `balance ${formatEther(status.balance)} ETH (change ${change >= 0n ? "+" : ""}${formatEther(change)})`;
+        `balance ${formatEther(status.balance)} ${symbol} (change ${change >= 0n ? "+" : ""}${formatEther(change)})`;
 
       events.forEach(print);
       if (tty) process.stdout.write(`${CLEAR_LINE}${statusLine}`);

@@ -1,6 +1,12 @@
 import * as path from "path";
 import { loadNetworks, type NetworkEntry } from "./networkStorage";
-import { LOCAL_CHAIN_ID, LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
+import { DEFAULT_SYMBOL, isValidSymbol, SYMBOL_RULE } from "./coinSymbol";
+import {
+  LOCAL_CHAIN_ID,
+  LOCAL_NETWORK_NAME,
+  LOCAL_RPC_URL,
+  LOCAL_SYMBOL,
+} from "./defaults";
 import { readSession, requireSession, resolvePrivateKey } from "./session";
 import {
   findProjectConfig,
@@ -13,6 +19,8 @@ export interface NetworkConfig {
   name: string;
   url: string;
   chainId: number;
+  /** Coin symbol amounts are labelled with: networks.<name>.symbol, else ETH. */
+  symbol: string;
   privateKey: string | undefined;
 }
 
@@ -125,6 +133,7 @@ export async function getDeployNetwork(
       name: LOCAL_NETWORK_NAME,
       url: LOCAL_RPC_URL,
       chainId: LOCAL_CHAIN_ID,
+      symbol: LOCAL_SYMBOL,
       privateKey: await resolvePrivateKey({ prompt: !options.noPrompt }),
     };
   }
@@ -153,11 +162,19 @@ export async function getDeployNetwork(
         `\x1b[2mhint:\x1b[0m set networks.${networkName}.url in ${configFile}.`,
     );
   }
+  // Optional; checked with the url for the same reason.
+  if (network.symbol !== undefined && !isValidSymbol(network.symbol)) {
+    throw new Error(
+      `network '${networkName}' has an invalid symbol ${JSON.stringify(network.symbol)} - ${SYMBOL_RULE}.\n` +
+        `\x1b[2mhint:\x1b[0m fix networks.${networkName}.symbol in ${configFile}, or remove it to use ${DEFAULT_SYMBOL}.`,
+    );
+  }
 
   return {
     name: networkName,
     url: network.url,
     chainId: network.chainId,
+    symbol: network.symbol ?? DEFAULT_SYMBOL,
     privateKey:
       config.wallet?.privateKey ||
       (await resolvePrivateKey({ prompt: !options.noPrompt })),

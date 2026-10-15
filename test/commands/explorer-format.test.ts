@@ -63,18 +63,30 @@ describe("formatBlock", () => {
 });
 
 describe("formatContract", () => {
+  const LOCAL = { name: "local", symbol: "ETH" };
+
   it("says an empty code result is not a contract", () => {
-    const out = formatContract(ADDRESS, "0x", 0n, "local");
+    const out = formatContract(ADDRESS, "0x", 0n, LOCAL);
 
     expect(out).toMatch(/not a contract/);
-    expect(out).toContain("0.0 (0 wei)");
+    expect(out).toContain("0.0 ETH (0 wei)");
   });
 
   it("reports the bytecode size and the balance when there is code", () => {
-    const out = formatContract(ADDRESS, "0x60806040", 10n ** 18n, "local");
+    const out = formatContract(ADDRESS, "0x60806040", 10n ** 18n, LOCAL);
 
     expect(out).toContain("4 bytes");
-    expect(out).toContain("1.0 (1000000000000000000 wei)");
+    expect(out).toContain("1.0 ETH (1000000000000000000 wei)");
+  });
+
+  // Issue #228: the unit is the network's symbol.
+  it("labels the balance with the network's symbol", () => {
+    const out = formatContract(ADDRESS, "0x", 10n ** 18n, {
+      name: "local",
+      symbol: "CMU",
+    });
+
+    expect(out).toContain("Balance      : 1.0 CMU (1000000000000000000 wei)");
   });
 
   const record = (code: string) => ({
@@ -94,7 +106,7 @@ describe("formatContract", () => {
   });
 
   it("names an address a record matches, with the code check", () => {
-    const out = formatContract(ADDRESS, "0x60806040", 0n, "local", [
+    const out = formatContract(ADDRESS, "0x60806040", 0n, LOCAL, [
       record("0x60806040"),
     ]);
 
@@ -105,7 +117,7 @@ describe("formatContract", () => {
   });
 
   it("adds nothing for an address no record names", () => {
-    expect(formatContract(ADDRESS, "0x60806040", 0n, "local", [])).not.toMatch(
+    expect(formatContract(ADDRESS, "0x60806040", 0n, LOCAL, [])).not.toMatch(
       /Recorded as|Record check/,
     );
   });
@@ -113,12 +125,12 @@ describe("formatContract", () => {
   // Read-only: a stale record is labelled, not refused.
   it("marks a stale record instead of refusing", () => {
     expect(
-      formatContract(ADDRESS, "0x6001", 0n, "local", [record("0x60806040")]),
+      formatContract(ADDRESS, "0x6001", 0n, LOCAL, [record("0x60806040")]),
     ).toContain(
       "Record check : code differs from the record - the record is stale",
     );
     expect(
-      formatContract(ADDRESS, "0x", 0n, "local", [record("0x60806040")]),
+      formatContract(ADDRESS, "0x", 0n, LOCAL, [record("0x60806040")]),
     ).toContain("Record check : no code at the address - the record is stale");
   });
 });

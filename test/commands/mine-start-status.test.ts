@@ -16,6 +16,7 @@ import {
   run,
   runFailing,
   minerCalls,
+  writeNetworksFile,
 } from "../helpers/mineEnv";
 
 // `mine start` and `mine stop` share one code path. Only start may touch the
@@ -95,6 +96,29 @@ describe("mineCommand", () => {
       );
     });
 
+    // Issue #228: only the watch prints an amount, so only it reads the symbol,
+    // and it does so before any miner call.
+    describe("with a hand-edited symbol", () => {
+      beforeEach(() => {
+        writeNetworksFile([
+          { name: "local", rpcUrl: "http://127.0.0.1:8585", symbol: "C M" },
+        ]);
+      });
+
+      it("start --watch refuses before touching the miner", async () => {
+        const errors = await runFailing("start", "--watch");
+
+        expect(errors).toContain("network 'local' has an invalid symbol");
+        expect(minerCalls()).toEqual([]);
+      });
+
+      it("stop still stops the miner", async () => {
+        await run("stop");
+
+        expect(sent).toEqual([["miner_stop", []]]);
+      });
+    });
+
     it("passes other miner errors through unchanged", async () => {
       node.rpc.miner_start = connectionError;
 
@@ -126,6 +150,29 @@ describe("mineCommand", () => {
       expect(out).toContain("Balance      : 2.0 ETH");
       // Read-only: nothing that changes the node.
       expect(minerCalls()).toEqual([]);
+    });
+
+    // Issue #228. The ETH case is the test above: mineSetUp() writes a
+    // networks file from before symbols.
+    it("labels the balance with the symbol saved with the network", async () => {
+      writeNetworksFile([
+        { name: "local", rpcUrl: "http://127.0.0.1:8585", symbol: "CMU" },
+      ]);
+
+      await run("status");
+
+      expect(output()).toContain("Balance      : 2.0 CMU");
+    });
+
+    it("refuses a hand-edited symbol before reading the node", async () => {
+      writeNetworksFile([
+        { name: "local", rpcUrl: "http://127.0.0.1:8585", symbol: "C M" },
+      ]);
+
+      const errors = await runFailing("status");
+
+      expect(errors).toContain("network 'local' has an invalid symbol");
+      expect(sent).toEqual([]);
     });
 
     it("flags an etherbase that is not the session wallet", async () => {

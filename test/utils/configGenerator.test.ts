@@ -34,6 +34,16 @@ describe("generateConfigFiles", () => {
       expect(config).toContain("https://");
     });
 
+    // Issue #228: both scaffolded networks are the CointMU chain.
+    it(`labels both scaffolded networks CMU for ${language}`, async () => {
+      await generateConfigFiles(tmpDir, language);
+      const config = fs.readFileSync(path.join(tmpDir, file), "utf8");
+      const mainnet = config.indexOf("mainnet:");
+
+      expect(config.slice(0, mainnet)).toContain('symbol: "CMU"');
+      expect(config.slice(mainnet)).toContain('symbol: "CMU"');
+    });
+
     it(`writes ${file}, .env.example and .gitignore for ${language}`, async () => {
       await generateConfigFiles(tmpDir, language);
 

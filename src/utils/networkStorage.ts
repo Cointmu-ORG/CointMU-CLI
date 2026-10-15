@@ -2,7 +2,7 @@ import { existsSync } from "fs";
 import { readFile, writeFile } from "fs/promises";
 import { homedir } from "os";
 import * as path from "path";
-import { LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "./defaults";
+import { LOCAL_NETWORK_NAME, LOCAL_RPC_URL, LOCAL_SYMBOL } from "./defaults";
 
 const NETWORKS_FILE_NAME = ".cmu-networks.json";
 const JSON_SPACES = 2;
@@ -10,6 +10,8 @@ const JSON_SPACES = 2;
 export interface NetworkEntry {
   name: string;
   rpcUrl: string;
+  /** Coin symbol; absent in files from before 1.7 - read it via coinSymbol(). */
+  symbol?: string;
 }
 
 /**
@@ -44,7 +46,7 @@ export async function loadNetworks(): Promise<NetworkEntry[]> {
 
   if (!existsSync(filePath)) {
     const defaultNetworks: NetworkEntry[] = [
-      { name: LOCAL_NETWORK_NAME, rpcUrl: LOCAL_RPC_URL },
+      { name: LOCAL_NETWORK_NAME, rpcUrl: LOCAL_RPC_URL, symbol: LOCAL_SYMBOL },
     ];
     await writeNetworks(filePath, defaultNetworks);
     return defaultNetworks;
@@ -56,20 +58,32 @@ export async function loadNetworks(): Promise<NetworkEntry[]> {
  * Saves a new network or updates an existing one by name.
  * @param {string} name - The network name.
  * @param {string} rpcUrl - The RPC URL.
- * @returns {Promise<void>}
+ * @param {string} [symbol] - The coin symbol, already validated. Left out, a
+ *   new entry gets no symbol key and an existing one keeps its symbol.
+ * @returns {Promise<NetworkEntry>} The entry as written, kept symbol included.
  */
-export async function saveNetwork(name: string, rpcUrl: string): Promise<void> {
+export async function saveNetwork(
+  name: string,
+  rpcUrl: string,
+  symbol?: string,
+): Promise<NetworkEntry> {
   const filePath = getNetworksFilePath();
   const networks = await loadNetworks();
   const existingIndex = networks.findIndex((n) => n.name === name);
+  const symbolField = symbol === undefined ? {} : { symbol };
 
+  const entry: NetworkEntry =
+    existingIndex >= 0
+      ? { ...networks[existingIndex], rpcUrl, ...symbolField }
+      : { name, rpcUrl, ...symbolField };
   if (existingIndex >= 0) {
-    networks[existingIndex].rpcUrl = rpcUrl;
+    networks[existingIndex] = entry;
   } else {
-    networks.push({ name, rpcUrl });
+    networks.push(entry);
   }
 
   await writeNetworks(filePath, networks);
+  return entry;
 }
 
 /**

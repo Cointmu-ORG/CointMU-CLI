@@ -1,4 +1,10 @@
 import { Command } from "commander";
+import {
+  coinSymbol,
+  isValidSymbol,
+  savedSymbolNote,
+  SYMBOL_RULE,
+} from "../utils/coinSymbol";
 import { fail } from "../utils/errors";
 import {
   activeNetwork,
@@ -43,6 +49,7 @@ async function runNetworkInfo(): Promise<void> {
   console.log("--- Active network ---");
   console.log(`Network      : ${network.name}`);
   console.log(`RPC endpoint : ${network.rpcUrl}`);
+  console.log(`Symbol       : ${coinSymbol(network)}`);
   console.log("----------------------");
 }
 
@@ -76,12 +83,13 @@ async function runNetworkPing(name?: string): Promise<void> {
 /**
  * Saves a network under a name, or updates the endpoint of an existing one.
  * @param {string} url - The RPC endpoint to save.
- * @param {object} options - CLI options; `name` is required.
+ * @param {object} options - CLI options; `name` is required, `symbol` sets
+ *   the coin symbol (an update without it keeps the saved one).
  * @returns {Promise<void>} Resolves when the network is saved.
  */
 async function runNetworkSave(
   url: string,
-  options: { name?: string; verbose?: boolean } = {},
+  options: { name?: string; symbol?: string; verbose?: boolean } = {},
 ): Promise<void> {
   if (!options.name) {
     throw new Error(
@@ -96,8 +104,18 @@ async function runNetworkSave(
     );
   }
 
-  await saveNetwork(options.name, url);
-  console.log(`Saved network '${options.name}' (${url})`);
+  const { symbol } = options;
+  if (symbol !== undefined && !isValidSymbol(symbol)) {
+    throw new Error(
+      `invalid symbol '${symbol}' - ${SYMBOL_RULE}.\n` +
+        `\x1b[2mhint:\x1b[0m e.g. \`cmu network save ${url} --name ${options.name} --symbol CMU\`.`,
+    );
+  }
+
+  const saved = await saveNetwork(options.name, url, symbol);
+  console.log(
+    `Saved network '${options.name}' (${url}${savedSymbolNote(symbol, saved)})`,
+  );
 }
 
 /**
@@ -225,6 +243,12 @@ networkCommand
   .command("save <url>")
   .description("Save a new network or update an existing one")
   .option("-n, --name <name>", "Name to save the network under")
+  // No short flag: -s is the deprecated root --save, and commander would hand
+  // it to the root even after `save` (see below).
+  .option(
+    "--symbol <symbol>",
+    "Coin symbol amounts are labelled with (1-11 letters or digits; default ETH)",
+  )
   // The deprecated root flags still declare -n/--name, and commander binds a
   // flag to the command that declares it even when it appears after a
   // subcommand name. Merge the root's options so `network save <url> --name x`
