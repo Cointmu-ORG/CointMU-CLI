@@ -1,3 +1,4 @@
+import { coinSymbol } from "../../utils/coinSymbol";
 import { getDynamicNetwork } from "../../utils/network";
 import { requireSession } from "../../utils/session";
 
@@ -11,6 +12,7 @@ export async function runWalletBalance(): Promise<void> {
   const { ethers } = await import("ethers");
 
   const network = await getDynamicNetwork(session.activeNetwork);
+  const symbol = coinSymbol(network);
   const provider = new ethers.JsonRpcProvider(network.rpcUrl);
 
   console.log(`Connecting to ${network.name} (${network.rpcUrl})...`);
@@ -18,7 +20,7 @@ export async function runWalletBalance(): Promise<void> {
 
   console.log("---------------------------");
   console.log(`Address : ${session.address}`);
-  console.log(`Balance : ${ethers.formatEther(balance)} ETH`);
+  console.log(`Balance : ${ethers.formatEther(balance)} ${symbol}`);
   console.log("---------------------------");
 }
 

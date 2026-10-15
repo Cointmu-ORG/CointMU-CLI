@@ -82,6 +82,20 @@ describe("transfer amount parsing", () => {
     );
   });
 
+  // Issue #228: parsed before the network is known, so no coin is named.
+  it.each([
+    [
+      "1.0000000000000000001",
+      "the smallest unit (1 wei) is 0.000000000000000001.",
+    ],
+    ["x", "expected a positive decimal amount like 0.5."],
+  ])("names no coin when rejecting %j", async (amount, text) => {
+    const { parseTransferAmount } = await walletCommands();
+    const error = await parseTransferAmount(amount).catch((e: Error) => e);
+    expect(String(error)).toContain(text);
+    expect(String(error)).not.toContain("ETH");
+  });
+
   it.each([
     ["0.000000000000000001", 1n],
     ["1.5", 1500000000000000000n],

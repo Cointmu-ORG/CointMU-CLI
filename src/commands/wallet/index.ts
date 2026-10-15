@@ -219,7 +219,7 @@ walletCommand
 walletCommand
   .command("transfer <to> <amount>")
   .alias("tf")
-  .description("Send ETH from the session wallet")
+  .description("Send the network's native coin from the session wallet")
   .option("-y, --yes", "Send without asking for confirmation")
   // The exit code comes from the return value: exit 2 (sent, unconfirmed)
   // must not be flattened into the 0 other provider-holding commands force.

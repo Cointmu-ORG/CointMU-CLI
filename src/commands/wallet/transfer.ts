@@ -1,4 +1,5 @@
 import { pingNetwork } from "../deploy";
+import { coinSymbol } from "../../utils/coinSymbol";
 import { getDynamicNetwork } from "../../utils/network";
 import { loadWallets } from "../../utils/walletStorage";
 import { decryptSessionKey, requireSession } from "../../utils/session";
@@ -79,6 +80,8 @@ export async function runWalletTransfer(
   const from = session.address;
 
   const network = await getDynamicNetwork(session.activeNetwork);
+  // Before any RPC: a broken symbol fails without dialling the node.
+  const symbol = coinSymbol(network);
   // Fails within its timeout when the node is down; a bare provider would
   // retry network detection forever.
   await pingNetwork(network.rpcUrl, network.name);
@@ -97,7 +100,7 @@ export async function runWalletTransfer(
   // cannot cover, which would read as "the recipient rejects it".
   if (balance < value) {
     throw new Error(
-      `insufficient balance: ${ethers.formatEther(balance)} ETH, the transfer needs ${ethers.formatEther(value)} ETH plus fee.`,
+      `insufficient balance: ${ethers.formatEther(balance)} ${symbol}, the transfer needs ${ethers.formatEther(value)} ${symbol} plus fee.`,
     );
   }
   let gasLimit: bigint;
@@ -106,7 +109,7 @@ export async function runWalletTransfer(
   } catch (error) {
     throw new Error(
       `${to} would reject this transfer - the node could not estimate it (${shortError(error)}).\n` +
-        "\x1b[2mhint:\x1b[0m a contract without a payable receive() or fallback() cannot take plain ETH.",
+        `\x1b[2mhint:\x1b[0m a contract without a payable receive() or fallback() cannot take plain ${symbol}.`,
       { cause: error },
     );
   }
@@ -128,7 +131,7 @@ export async function runWalletTransfer(
   const maxFee = gasLimit * price;
   if (balance < value + maxFee) {
     throw new Error(
-      `balance ${ethers.formatEther(balance)} ETH covers the amount but not the max fee (${ethers.formatEther(maxFee)} ETH).`,
+      `balance ${ethers.formatEther(balance)} ${symbol} covers the amount but not the max fee (${ethers.formatEther(maxFee)} ${symbol}).`,
     );
   }
 
@@ -153,7 +156,9 @@ export async function runWalletTransfer(
     warn(`${to} is the sending wallet - this only spends the fee.`);
   }
   if (code !== "0x") {
-    warn(`${to} is a contract - plain ETH can be rejected or locked by it.`);
+    warn(
+      `${to} is a contract - plain ${symbol} can be rejected or locked by it.`,
+    );
   }
 
   requireInteractive(
@@ -199,8 +204,10 @@ export async function runWalletTransfer(
     `From    : ${signer.address} (.cmu-session${savedAs ? `, saved as '${savedAs}'` : ""})`,
   );
   console.log(`To      : ${to}`);
-  console.log(`Amount  : ${ethers.formatEther(value)} ETH (${value} wei)`);
-  console.log(`Max fee : ${ethers.formatEther(maxFee)} ETH`);
+  console.log(
+    `Amount  : ${ethers.formatEther(value)} ${symbol} (${value} wei)`,
+  );
+  console.log(`Max fee : ${ethers.formatEther(maxFee)} ${symbol}`);
   console.log("----------------");
 
   if (!options.yes) {
@@ -258,7 +265,7 @@ export async function runWalletTransfer(
   const newBalance = await provider.getBalance(from);
   console.log("---------------------------");
   console.log(`Block   : ${receipt?.blockNumber}`);
-  console.log(`Balance : ${ethers.formatEther(newBalance)} ETH`);
+  console.log(`Balance : ${ethers.formatEther(newBalance)} ${symbol}`);
   console.log("---------------------------");
   return TRANSFER_SENT;
 }
