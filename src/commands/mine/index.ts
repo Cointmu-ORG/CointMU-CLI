@@ -11,6 +11,7 @@ import {
   sameAddress,
   formatHashrate,
   formatAge,
+  readCoinbase,
   readStatus,
   sendMiner,
 } from "./status";
@@ -37,7 +38,7 @@ async function warnIfForeignEtherbase(
 ): Promise<void> {
   const [mining, coinbase] = await Promise.all([
     optional<boolean>(provider.send("eth_mining", [])),
-    optional<string>(provider.send("eth_coinbase", [])),
+    readCoinbase(provider),
   ]);
   if (mining && coinbase && !sameAddress(coinbase, address)) {
     console.log(`${WARNING} this node is already mining to ${coinbase}.`);
@@ -130,7 +131,8 @@ async function runMineStatus(): Promise<void> {
   const symbol = coinSymbol(network);
   const status = await readStatus(provider, session.address);
   const { block, coinbase, mining } = status;
-  const foreign = coinbase !== null && !sameAddress(coinbase, session.address);
+  const foreign =
+    typeof coinbase === "string" && !sameAddress(coinbase, session.address);
   const age = Date.now() / 1000 - block.timestamp;
 
   console.log("--- Mining status ---");
@@ -140,7 +142,7 @@ async function runMineStatus(): Promise<void> {
   );
   console.log(`Hashrate     : ${formatHashrate(status.hashrate)}`);
   console.log(
-    `Etherbase    : ${coinbase ?? "n/a"}${foreign ? " (not your session wallet - rewards go there)" : ""}`,
+    `Etherbase    : ${coinbase === false ? "none set" : (coinbase ?? "n/a")}${foreign ? " (not your session wallet - rewards go there)" : ""}`,
   );
   console.log(`Latest block : #${block.number}, ${formatAge(age)} ago`);
   console.log(`Difficulty   : ${block.difficulty}`);

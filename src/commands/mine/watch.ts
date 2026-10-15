@@ -34,14 +34,15 @@ interface WatchState {
 /**
  * Events for a change in the node's etherbase or mining flag since the last
  * poll - one per change, not one per poll. An unsupported method (null) is
- * never a change.
+ * never a change, and neither is an etherbase that is no longer set (false,
+ * after a geth restart): no rewards go anywhere until one is.
  */
 function nodeEvents(state: WatchState, status: MiningStatus): string[] {
   const events: string[] = [];
   const { mining, coinbase } = status;
 
   if (
-    coinbase !== null &&
+    typeof coinbase === "string" &&
     state.coinbase !== null &&
     !sameAddress(coinbase, state.coinbase)
   ) {
@@ -59,7 +60,7 @@ function nodeEvents(state: WatchState, status: MiningStatus): string[] {
     );
   }
 
-  if (coinbase !== null) state.coinbase = coinbase;
+  if (typeof coinbase === "string") state.coinbase = coinbase;
   if (mining !== null) state.mining = mining;
   return events;
 }
