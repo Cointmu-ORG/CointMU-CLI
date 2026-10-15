@@ -11,16 +11,11 @@ import {
   formatContract,
   parseBlockNumber,
 } from "../../src/commands/explorer";
+import { PRIVATE_KEY, SESSION_PASSWORD, ADDRESS } from "../helpers/explorerEnv";
 
 // No real RPC anywhere in this file. The pure halves (parsing, formatting) run
 // directly, and the one path that needs a node - a block that does not exist -
 // gets a stubbed ethers instead, the way deploy.test.ts stubs it.
-
-// well-known Ganache test key — never fund this
-const PRIVATE_KEY =
-  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-const SESSION_PASSWORD = "correct horse";
-const ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
 describe("parseBlockNumber", () => {
   it("accepts non-negative decimal integers", () => {
@@ -130,6 +125,18 @@ describe("formatContract", () => {
     expect(
       formatContract(ADDRESS, "0x", 0n, "local", [record("0x60806040")]),
     ).toContain("Record check : no code at the address - the record is stale");
+  });
+});
+
+describe("explorerCommand", () => {
+  it("offers both lookups alongside --network", () => {
+    const flags = explorerCommand.options.map((option) => option.flags);
+
+    expect(explorerCommand.name()).toBe("explorer");
+    expect(flags).toContain("-b, --block <number>");
+    expect(flags).toContain("-c, --contract <address>");
+    expect(flags).toContain("-n, --network <name>");
+    expect(flags).toContain("-y, --yes");
   });
 });
 
@@ -369,17 +376,5 @@ describe("runExplorer", () => {
     await expect(
       run({ contract: ADDRESS, yes: true }),
     ).resolves.toBeUndefined();
-  });
-});
-
-describe("explorerCommand", () => {
-  it("offers both lookups alongside --network", () => {
-    const flags = explorerCommand.options.map((option) => option.flags);
-
-    expect(explorerCommand.name()).toBe("explorer");
-    expect(flags).toContain("-b, --block <number>");
-    expect(flags).toContain("-c, --contract <address>");
-    expect(flags).toContain("-n, --network <name>");
-    expect(flags).toContain("-y, --yes");
   });
 });
