@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs";
 import {
   decryptSessionKey,
@@ -20,7 +20,10 @@ import {
   readWallets,
   sessionFile,
   writeKeySession,
+  writeCbcSession,
+  writeBrokenSession,
   expectNoKeyLeak,
+  expectNoSessionFileLeak,
   setUp,
   tearDown,
 } from "../helpers/walletEnv";
@@ -156,20 +159,36 @@ describe("wallet save --session", () => {
   it.each([
     ["there is no session", () => {}, "holds no key to save"],
     ["the session holds no key", () => writeSession("local"), "holds no key"],
-    [
-      "the session predates AES-GCM",
-      () => writeKeySession(ADDRESS_B, KEY_B, { authTag: undefined }),
-      "holds no key",
-    ],
-    [
-      "the session is corrupt",
-      () => fs.writeFileSync(sessionFile(), "{ not json"),
-      "JSON",
-    ],
   ])("refuses when %s", async (_, setup, message) => {
     setup();
     await expect(saveSession("keep")).rejects.toThrow(message);
     expect(fs.existsSync(walletsFile())).toBe(false);
+  });
+
+  // #209: both used to read as "holds no key" or a raw JSON error, although
+  // each file can still hold a recoverable key.
+  it("refuses a session from cmu 1.3.1, naming what it holds", async () => {
+    writeCbcSession();
+
+    await expect(saveSession("keep")).rejects.toThrow(
+      `this project's .cmu-session holds an encrypted key for ${ADDRESS_B} that this version of cmu cannot open or save (written by cmu 1.3.1 or older, or incomplete).`,
+    );
+    expect(fs.existsSync(walletsFile())).toBe(false);
+  });
+
+  it("refuses an unparseable session without quoting it", async () => {
+    const before = writeBrokenSession();
+    const { fail } = await import("../../src/utils/errors");
+    vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+
+    await saveSession("keep").catch(fail("wallet save", { verbose: true }));
+
+    expect(output()).toContain(
+      ".cmu-session is not valid JSON, so cmu cannot read a key from it.",
+    );
+    expect(fs.existsSync(walletsFile())).toBe(false);
+    expect(fs.readFileSync(sessionFile(), "utf8")).toBe(before);
+    expectNoSessionFileLeak(before);
   });
 
   it.each([

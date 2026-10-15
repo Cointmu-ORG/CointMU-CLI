@@ -137,6 +137,8 @@ describe("replacing an unsaved session", () => {
         expectUntouched(before, write);
       });
 
+      // A corrupt or pre-GCM session is not one of these since #209: see
+      // wallet-replace-unopenable.test.ts.
       it.each([
         ["there is no session", async () => {}],
         [
@@ -153,15 +155,7 @@ describe("replacing an unsaved session", () => {
             await save("b", KEY_B);
           },
         ],
-        [
-          "the session is corrupt",
-          async () => fs.writeFileSync(sessionFile(), "{ not json"),
-        ],
         ["the session holds no key", async () => writeSession("local")],
-        [
-          "the session predates AES-GCM",
-          async () => writeKeySession(ADDRESS_B, KEY_B, { authTag: undefined }),
-        ],
       ])("replaces silently when %s", async (_, setup) => {
         await setup();
 

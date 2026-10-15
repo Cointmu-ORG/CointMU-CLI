@@ -63,6 +63,7 @@ coverage/
 # CointMU local session & network state (encrypted key / local-only config)
 .cmu-session
 .cmu-session.*.tmp
+.cmu-session.bak-*
 .cmu-networks.json
 .cmu-wallets.json
 
