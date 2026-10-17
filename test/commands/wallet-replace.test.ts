@@ -106,7 +106,11 @@ describe("replacing an unsaved session", () => {
           false,
           `aborted: .cmu-session was not changed; it still holds ${ADDRESS_B}.`,
         ],
-        ["Ctrl-C", ctrlC(), "force closed the prompt"],
+        [
+          "Ctrl-C",
+          ctrlC(),
+          `aborted: .cmu-session was not changed; it still holds ${ADDRESS_B}.`,
+        ],
       ])(
         "leaves the session untouched on %s, without prompting for a secret",
         async (_, replace, message) => {

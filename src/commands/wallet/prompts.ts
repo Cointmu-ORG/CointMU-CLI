@@ -96,19 +96,28 @@ export async function promptNewPassword(
   return password;
 }
 
+/** What save and create --save say when their prompts are cancelled. */
+export const NOTHING_SAVED = "aborted: nothing was saved.";
+
 /**
  * Runs a prompt, turning Ctrl-C (inquirer's ExitPromptError) into the same
- * "aborted" a No answer gives, so either way it is plain that nothing left.
+ * "aborted" a No answer gives, so either way it is plain that nothing changed.
+ * A closed input (Ctrl-D) throws the same error and gets the same message.
  *
  * @param {() => Promise<T>} prompt - The prompt to run.
+ * @param {string} aborted - The message to throw instead, naming what the
+ *   command left alone.
  * @returns {Promise<T>} Its answers.
  */
-export async function promptOrAbort<T>(prompt: () => Promise<T>): Promise<T> {
+export async function promptOrAbort<T>(
+  prompt: () => Promise<T>,
+  aborted: string,
+): Promise<T> {
   try {
     return await prompt();
   } catch (error) {
     if (error instanceof Error && error.name === "ExitPromptError") {
-      throw new Error("aborted: nothing was sent.", { cause: error });
+      throw new Error(aborted, { cause: error });
     }
     throw error;
   }

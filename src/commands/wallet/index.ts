@@ -2,7 +2,7 @@ import { Command, Option } from "commander";
 import { fail } from "../../utils/errors";
 import { saveWallet } from "../../utils/walletStorage";
 import { encryptSessionKey } from "../../utils/session";
-import { promptNewPassword } from "./prompts";
+import { promptNewPassword, promptOrAbort, NOTHING_SAVED } from "./prompts";
 import { checkNewWalletName } from "./savedWallets";
 import { runWalletSave } from "./save";
 import { runWalletUse } from "./use";
@@ -93,7 +93,10 @@ export async function runWalletCreate(
  */
 async function runWalletCreateSaved(name: string): Promise<void> {
   await checkNewWalletName(name);
-  const password = await promptNewPassword("Wallet password:", true);
+  const password = await promptOrAbort(
+    () => promptNewPassword("Wallet password:", true),
+    NOTHING_SAVED,
+  );
 
   const { ethers } = await import("ethers");
   const wallet = ethers.Wallet.createRandom();
