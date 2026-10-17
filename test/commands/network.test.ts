@@ -34,9 +34,9 @@ describe("isValidRpcUrl", () => {
   });
 });
 
-// The --save/--use/--list/--delete flags became subcommands in 1.4.0. The flags
-// still run the same handlers behind a deprecation notice until 2.0.0, so these
-// pin the mapping rather than the wording.
+// The --save/--use/--list/--delete flags became subcommands in 1.3.6. The flags
+// still run the same handlers behind a deprecation notice, so these pin the
+// mapping rather than the wording.
 
 describe("networkCommand wiring", () => {
   let tmpDir: string;
@@ -214,7 +214,11 @@ describe("networkCommand wiring", () => {
       const output = (warn as any).mock.calls.flat().join("\n");
       expect(output).toContain("warning:");
       expect(output).toContain(`\`cmu network ${flag}\` is deprecated`);
-      expect(output).toContain("2.0.0");
+      // No removal release is promised: the notice ends at "deprecated".
+      const notice = output
+        .split("\n")
+        .find((line) => line.includes("is deprecated"));
+      expect(notice).toMatch(/ is deprecated$/);
       expect(output).toContain("hint:");
       expect(output).toContain(`cmu network ${replacement}`);
     },

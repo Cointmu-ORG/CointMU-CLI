@@ -166,11 +166,11 @@ async function runNetworkList(): Promise<void> {
 }
 
 /**
- * Maps the pre-1.4 flag form onto the subcommands that replaced it.
+ * Maps the pre-1.3.6 flag form onto the subcommands that replaced it.
  *
  * `cmu network` with no flags has always listed the saved networks, so it still
  * does. Anything else prints a deprecation notice and runs the same handler the
- * subcommand would; the flags are removed in 2.0.0.
+ * subcommand would.
  *
  * @param {object} options - CLI options from the legacy flags.
  * @returns {Promise<void>} Resolves when the mapped handler completes.
@@ -185,7 +185,7 @@ async function runNetworkLegacy(options: {
 }): Promise<void> {
   const deprecated = (flag: string, replacement: string) => {
     console.warn(
-      `\n\x1b[33mwarning:\x1b[0m \`cmu network ${flag}\` is deprecated and will be removed in 2.0.0`,
+      `\n\x1b[33mwarning:\x1b[0m \`cmu network ${flag}\` is deprecated`,
     );
     console.warn(
       `\x1b[2mhint:\x1b[0m use \`cmu network ${replacement}\` instead.\n`,
@@ -212,7 +212,7 @@ async function runNetworkLegacy(options: {
 
 export const networkCommand = new Command("network")
   .description("Manage saved RPC networks")
-  // Deprecated in 1.4.0, removed in 2.0.0; see runNetworkLegacy().
+  // Deprecated since 1.3.6; see runNetworkLegacy().
   .option("-s, --save <url>", "Deprecated: use `cmu network save`")
   .option("-n, --name <name>", "Name of the network to save")
   .option("-u, --use <name>", "Deprecated: use `cmu network use`")
