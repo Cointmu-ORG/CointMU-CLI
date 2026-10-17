@@ -1,6 +1,6 @@
 import { loadWallets } from "../../utils/walletStorage";
 import { decryptSessionKey } from "../../utils/session";
-import { requireInteractive } from "./prompts";
+import { requireInteractive, promptOrAbort } from "./prompts";
 import { sameAddress, findWallet } from "./savedWallets";
 import { storeSession } from "./activeSession";
 
@@ -25,14 +25,18 @@ export async function runWalletUse(name: string): Promise<void> {
   const { address, activeNetwork } = await storeSession(async () => {
     requireInteractive("a password");
     const inquirer = (await import("inquirer")).default;
-    const { password } = await inquirer.prompt([
-      {
-        type: "password",
-        name: "password",
-        message: `Password for wallet '${name}':`,
-        mask: "*",
-      },
-    ]);
+    const { password } = await promptOrAbort(
+      () =>
+        inquirer.prompt([
+          {
+            type: "password",
+            name: "password",
+            message: `Password for wallet '${name}':`,
+            mask: "*",
+          },
+        ]),
+      "aborted: .cmu-session was not changed.",
+    );
 
     let privateKey: string;
     try {

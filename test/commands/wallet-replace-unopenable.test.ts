@@ -120,7 +120,7 @@ describe.each([
 
   it.each([
     ["no", false, "aborted: .cmu-session was not changed"],
-    ["Ctrl-C", ctrlC(), "force closed the prompt"],
+    ["Ctrl-C", ctrlC(), "aborted: .cmu-session was not changed"],
   ])(
     "leaves it untouched on %s, without asking for a password",
     async (__, replace, message) => {

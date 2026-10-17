@@ -11,7 +11,7 @@ import {
   type SessionData,
   writeSessionFile,
 } from "../../utils/session";
-import { requireInteractive } from "./prompts";
+import { requireInteractive, promptOrAbort } from "./prompts";
 import { sameAddress } from "./savedWallets";
 
 /** Appended to .cmu-session, then a timestamp, to name a backup (#209). */
@@ -177,18 +177,21 @@ async function confirmSessionReplace(): Promise<boolean> {
   for (const line of lines) console.log(line);
   requireInteractive("confirmation", noTerminal);
   const inquirer = (await import("inquirer")).default;
-  const { replace } = await inquirer.prompt([
-    {
-      type: "confirm",
-      name: "replace",
-      message: "Replace it anyway?",
-      default: false,
-    },
-  ]);
-  if (!replace) {
-    const holds = previous ? `; it still holds ${previous}` : "";
-    throw new Error(`aborted: .cmu-session was not changed${holds}.`);
-  }
+  const holds = previous ? `; it still holds ${previous}` : "";
+  const declined = `aborted: .cmu-session was not changed${holds}.`;
+  const { replace } = await promptOrAbort(
+    () =>
+      inquirer.prompt([
+        {
+          type: "confirm",
+          name: "replace",
+          message: "Replace it anyway?",
+          default: false,
+        },
+      ]),
+    declined,
+  );
+  if (!replace) throw new Error(declined);
   return risk.kind !== "openable";
 }
 

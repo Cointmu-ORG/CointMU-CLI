@@ -3,7 +3,12 @@ import {
   encryptSessionKey,
   LEGACY_PBKDF2_ITERATIONS,
 } from "../../utils/session";
-import { promptPrivateKey, promptNewPassword } from "./prompts";
+import {
+  promptPrivateKey,
+  promptNewPassword,
+  promptOrAbort,
+  NOTHING_SAVED,
+} from "./prompts";
 import { sameAddress, checkNewWalletName } from "./savedWallets";
 import {
   parseSession,
@@ -89,7 +94,7 @@ export async function runWalletSave(
   const wallets = await checkNewWalletName(name);
   if (options.session) return saveSessionKey(name, wallets);
 
-  const privateKey = await promptPrivateKey();
+  const privateKey = await promptOrAbort(promptPrivateKey, NOTHING_SAVED);
   const { ethers } = await import("ethers");
   const { address } = new ethers.Wallet(privateKey);
 
@@ -100,7 +105,10 @@ export async function runWalletSave(
     );
   }
 
-  const password = await promptNewPassword("Wallet password:", true);
+  const password = await promptOrAbort(
+    () => promptNewPassword("Wallet password:", true),
+    NOTHING_SAVED,
+  );
   await saveWallet({
     name,
     address,

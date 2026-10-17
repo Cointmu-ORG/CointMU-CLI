@@ -26,6 +26,9 @@ export const TRANSFER_SENT = 0;
  */
 export const TRANSFER_UNCONFIRMED = 2;
 
+/** What a declined or cancelled transfer says. */
+const NOTHING_SENT = "aborted: nothing was sent.";
+
 /**
  * The short message of an ethers error, without the request payloads its full
  * message carries.
@@ -166,15 +169,17 @@ export async function runWalletTransfer(
     "transfer signs with the .cmu-session key and needs its password; run it in a terminal.",
   );
   const inquirer = (await import("inquirer")).default;
-  const { password } = await promptOrAbort(() =>
-    inquirer.prompt([
-      {
-        type: "password",
-        name: "password",
-        message: `Session password for ${from}:`,
-        mask: "*",
-      },
-    ]),
+  const { password } = await promptOrAbort(
+    () =>
+      inquirer.prompt([
+        {
+          type: "password",
+          name: "password",
+          message: `Session password for ${from}:`,
+          mask: "*",
+        },
+      ]),
+    NOTHING_SENT,
   );
   const signer = new ethers.Wallet(
     decryptSessionKey(password, session),
@@ -211,18 +216,20 @@ export async function runWalletTransfer(
   console.log("----------------");
 
   if (!options.yes) {
-    const { proceed } = await promptOrAbort(() =>
-      inquirer.prompt([
-        {
-          type: "confirm",
-          name: "proceed",
-          message: "Send this transaction?",
-          default: false,
-        },
-      ]),
+    const { proceed } = await promptOrAbort(
+      () =>
+        inquirer.prompt([
+          {
+            type: "confirm",
+            name: "proceed",
+            message: "Send this transaction?",
+            default: false,
+          },
+        ]),
+      NOTHING_SENT,
     );
     if (!proceed) {
-      throw new Error("aborted: nothing was sent.");
+      throw new Error(NOTHING_SENT);
     }
   }
 

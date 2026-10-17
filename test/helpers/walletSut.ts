@@ -62,6 +62,16 @@ export function ctrlC(): Error {
   });
 }
 
+/**
+ * What inquirer throws for Ctrl-C itself. ctrlC() above carries the message a
+ * closed input (Ctrl-D on an empty line) gets; both are ExitPromptError.
+ */
+export function sigint(): Error {
+  return Object.assign(new Error("User force closed the prompt with SIGINT"), {
+    name: "ExitPromptError",
+  });
+}
+
 export async function save(
   name: string,
   privateKey = KEY,

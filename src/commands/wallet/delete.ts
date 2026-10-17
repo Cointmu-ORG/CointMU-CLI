@@ -1,5 +1,5 @@
 import { deleteWallet, loadWallets } from "../../utils/walletStorage";
-import { requireInteractive } from "./prompts";
+import { requireInteractive, promptOrAbort } from "./prompts";
 import { sameAddress, findWallet } from "./savedWallets";
 import { sessionAddress } from "./activeSession";
 
@@ -24,14 +24,18 @@ export async function runWalletDelete(
       "re-run with --yes to delete without asking.",
     );
     const inquirer = (await import("inquirer")).default;
-    const { proceed } = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "proceed",
-        message: `Delete wallet '${name}' (${wallet.address})? cmu keeps no other copy of its key.`,
-        default: false,
-      },
-    ]);
+    const { proceed } = await promptOrAbort(
+      () =>
+        inquirer.prompt([
+          {
+            type: "confirm",
+            name: "proceed",
+            message: `Delete wallet '${name}' (${wallet.address})? cmu keeps no other copy of its key.`,
+            default: false,
+          },
+        ]),
+      "aborted: nothing was deleted.",
+    );
     if (!proceed) {
       console.log("Nothing deleted.");
       return;

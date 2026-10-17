@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
-// Must stay the first import: imports are hoisted, so anything below this line
-// (commander included) loads before a version check placed further down runs.
+// Must stay the first imports: imports are hoisted, so anything below these
+// lines (commander included) loads before a version check placed further down
+// runs. The colour gate has no dependencies and goes first so the preflight's
+// error is gated too.
+import "./colorGate";
 import "./preflight";
 
 import * as path from "path";

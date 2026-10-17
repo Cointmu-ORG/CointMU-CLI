@@ -135,10 +135,10 @@ Commands:
   help [command]              display help for command
 ```
 
-> **Deprecated in 1.4.0:** `cmu network` used to take `--save`, `--use`, `--list`
+> **Deprecated in 1.3.6:** `cmu network` used to take `--save`, `--use`, `--list`
 > and `--delete` as flags. They still work and still do the same thing, but they
-> now print a deprecation notice and will be removed in **2.0.0**. Use the
-> subcommands above instead — `cmu network save <url> --name <name>` in place of
+> now print a deprecation notice. Use the subcommands above instead —
+> `cmu network save <url> --name <name>` in place of
 > `cmu network --save <url> --name <name>`, and so on. `cmu network` on its own
 > still lists the saved networks.
 
