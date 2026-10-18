@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { maskUrl } from "../utils/maskUrl";
 import { getDynamicNetwork } from "../utils/network";
 import {
   ACCOUNT_COUNT,
@@ -80,7 +81,7 @@ async function runNodeConnect(options: {
   const networkConfig = await getDynamicNetwork(options.network);
   const rpcUrl = networkConfig.rpcUrl;
 
-  console.log(`Pinging ${rpcUrl}...`);
+  console.log(`Pinging ${maskUrl(rpcUrl)}...`);
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const network = await provider.getNetwork();
   const blockNumber = await provider.getBlockNumber();

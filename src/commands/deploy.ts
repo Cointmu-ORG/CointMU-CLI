@@ -5,6 +5,7 @@ import { Command } from "commander";
 import { startRecording } from "../utils/deployments";
 import { fail } from "../utils/errors";
 import { run } from "../utils/exec";
+import { maskUrl } from "../utils/maskUrl";
 import { getDeployNetwork } from "../utils/network";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 import { runCompile } from "./compile";
@@ -60,7 +61,7 @@ export async function pingNetwork(
   }
 
   const { ethers } = await import("ethers");
-  console.log(`Pinging ${rpcUrl}...`);
+  console.log(`Pinging ${maskUrl(rpcUrl)}...`);
   let timer: NodeJS.Timeout | undefined;
   try {
     const provider = new ethers.JsonRpcProvider(rpcUrl);
@@ -78,7 +79,7 @@ export async function pingNetwork(
     );
   } catch {
     throw new Error(
-      `RPC endpoint ${rpcUrl} is unreachable (timed out after ${NETWORK_TIMEOUT_MS}ms).\n` +
+      `RPC endpoint ${maskUrl(rpcUrl)} is unreachable (timed out after ${NETWORK_TIMEOUT_MS}ms).\n` +
         "\x1b[2mhint:\x1b[0m check the node is running and the endpoint is correct - `cmu network list`.",
     );
   } finally {
@@ -167,7 +168,7 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
 
   console.log(`\n--- Deploy configuration ---`);
   console.log(`Network      : ${network.name}`);
-  console.log(`RPC endpoint : ${network.url}`);
+  console.log(`RPC endpoint : ${maskUrl(network.url)}`);
   console.log(`Chain ID     : ${network.chainId}`);
   // Kept as a field rather than dropped: the line existing but reading
   // "unavailable" is what tells the user no key was found, not a gap.

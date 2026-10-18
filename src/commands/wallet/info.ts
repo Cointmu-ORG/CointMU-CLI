@@ -1,4 +1,5 @@
 import { coinSymbol } from "../../utils/coinSymbol";
+import { maskUrl } from "../../utils/maskUrl";
 import { getDynamicNetwork } from "../../utils/network";
 import { requireSession } from "../../utils/session";
 import { pingNetwork } from "../deploy";
@@ -40,6 +41,6 @@ export async function runWalletInfo(): Promise<void> {
   console.log("--- Active session ---");
   console.log(`Address      : ${session.address}`);
   console.log(`Network      : ${network.name}`);
-  console.log(`RPC endpoint : ${network.rpcUrl}`);
+  console.log(`RPC endpoint : ${maskUrl(network.rpcUrl)}`);
   console.log("----------------------");
 }

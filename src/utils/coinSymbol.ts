@@ -1,3 +1,5 @@
+import { urlForHint } from "./maskUrl";
+
 /**
  * The label printed next to every amount. Only ever a label: wei, formatEther()
  * and the 18 decimals are the same on every network.
@@ -61,6 +63,6 @@ export function coinSymbol(network: {
   if (isValidSymbol(network.symbol)) return network.symbol;
   throw new Error(
     `network '${network.name}' has an invalid symbol ${JSON.stringify(network.symbol)} in ~/.cmu-networks.json - ${SYMBOL_RULE}.\n` +
-      `\x1b[2mhint:\x1b[0m set it again with \`cmu network save ${network.rpcUrl} --name ${network.name} --symbol <SYMBOL>\`.`,
+      `\x1b[2mhint:\x1b[0m set it again with \`cmu network save ${urlForHint(network.rpcUrl)} --name ${network.name} --symbol <SYMBOL>\`.`,
   );
 }

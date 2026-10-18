@@ -1,5 +1,8 @@
 import { defineConfig } from "tsup";
 import { execSync } from "child_process";
+import { ethers } from "ethers";
+import solc from "solc";
+import solcPackage from "solc/package.json" with { type: "json" };
 
 // Stamped into the bundle so `cmu version` can identify a build. Resolved from
 // git rather than a generated file that had to be committed on every release.
@@ -25,5 +28,11 @@ export default defineConfig({
   shims: true,
   define: {
     __CMU_BUILD_ID__: JSON.stringify(buildId),
+    // So `cmu version` need not load either at runtime; see commands/version.ts.
+    __CMU_SOLC_VERSION__: JSON.stringify({
+      pkg: solcPackage.version,
+      full: solc.version(),
+    }),
+    __CMU_ETHERS_VERSION__: JSON.stringify(ethers.version),
   },
 });

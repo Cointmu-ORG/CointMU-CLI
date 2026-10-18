@@ -3,6 +3,7 @@ import * as path from "path";
 import { Command } from "commander";
 import { readRecord, verifyDeployed } from "../utils/deployments";
 import { fail } from "../utils/errors";
+import { maskUrl } from "../utils/maskUrl";
 import { getDeployNetwork } from "../utils/network";
 import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
 import { pingNetwork } from "./deploy";
@@ -217,7 +218,7 @@ export async function runConsole(options: ConsoleOptions = {}): Promise<void> {
 
   console.log(`\n--- Console configuration ---`);
   console.log(`Network      : ${network.name}`);
-  console.log(`RPC endpoint : ${network.url}`);
+  console.log(`RPC endpoint : ${maskUrl(network.url)}`);
   console.log(`Chain ID     : ${network.chainId}`);
   console.log(`Signer       : ${signerLabel(signer, options)}`);
   console.log(

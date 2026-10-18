@@ -1,4 +1,5 @@
 import * as path from "path";
+import { maskUrlsInText } from "../maskUrl";
 import { RECORD_FORMAT, networkDir, writeRecord } from "./records";
 import { loadArtifactBytecodes, matchArtifact } from "./artifacts";
 
@@ -132,7 +133,7 @@ export async function startRecording(
   } catch (error) {
     provider.destroy();
     console.warn(
-      `${WARNING} deployment records are off for this run: ${error instanceof Error ? error.message : String(error)}`,
+      `${WARNING} deployment records are off for this run: ${maskUrlsInText(error instanceof Error ? error.message : String(error))}`,
     );
     return undefined;
   }
@@ -168,7 +169,7 @@ export async function startRecording(
         });
       } catch (error) {
         console.warn(
-          `${WARNING} could not record the deployments: ${error instanceof Error ? error.message : String(error)}`,
+          `${WARNING} could not record the deployments: ${maskUrlsInText(error instanceof Error ? error.message : String(error))}`,
         );
       } finally {
         provider.destroy();
@@ -233,7 +234,7 @@ export async function recordAndSummarise(
       written.set(n.txHash, path.relative(ctx.cwd, file));
     } catch (error) {
       console.warn(
-        `${WARNING} ${name} was not recorded: ${error instanceof Error ? error.message : String(error)}`,
+        `${WARNING} ${name} was not recorded: ${maskUrlsInText(error instanceof Error ? error.message : String(error))}`,
       );
     }
   }
