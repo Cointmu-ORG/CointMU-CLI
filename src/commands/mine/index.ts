@@ -2,6 +2,7 @@ import { Command } from "commander";
 import type { JsonRpcProvider } from "ethers";
 import { coinSymbol } from "../../utils/coinSymbol";
 import { fail } from "../../utils/errors";
+import { maskUrl } from "../../utils/maskUrl";
 import { getDynamicNetwork } from "../../utils/network";
 import { requireSession } from "../../utils/session";
 import { pingNetwork } from "../deploy";
@@ -144,7 +145,7 @@ async function runMineStatus(): Promise<void> {
   const age = Date.now() / 1000 - block.timestamp;
 
   console.log("--- Mining status ---");
-  console.log(`Network      : ${network.name} (${network.rpcUrl})`);
+  console.log(`Network      : ${network.name} (${maskUrl(network.rpcUrl)})`);
   console.log(
     `Mining       : ${mining === null ? "n/a" : mining ? "yes" : "no"}`,
   );

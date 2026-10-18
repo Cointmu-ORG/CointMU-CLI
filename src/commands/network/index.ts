@@ -7,6 +7,7 @@ import {
 } from "../../utils/coinSymbol";
 import { LOCAL_NETWORK_NAME } from "../../utils/defaults";
 import { fail } from "../../utils/errors";
+import { maskUrl, maskUrlInput, urlForHint } from "../../utils/maskUrl";
 import {
   activeNetwork,
   activeNetworkName,
@@ -50,7 +51,7 @@ async function runNetworkInfo(): Promise<void> {
 
   console.log("--- Active network ---");
   console.log(`Network      : ${network.name}`);
-  console.log(`RPC endpoint : ${network.rpcUrl}`);
+  console.log(`RPC endpoint : ${maskUrl(network.rpcUrl)}`);
   console.log(`Symbol       : ${coinSymbol(network)}`);
   console.log("----------------------");
 }
@@ -74,7 +75,7 @@ async function runNetworkSave(
   }
   if (!isValidRpcUrl(url)) {
     throw new Error(
-      `invalid RPC endpoint '${url}'.\n` +
+      `invalid RPC endpoint '${maskUrlInput(url)}'.\n` +
         "\x1b[2mhint:\x1b[0m pass a full http:// or https:// URL, e.g. `cmu network save http://127.0.0.1:8585 --name local`.",
     );
   }
@@ -83,13 +84,13 @@ async function runNetworkSave(
   if (symbol !== undefined && !isValidSymbol(symbol)) {
     throw new Error(
       `invalid symbol '${symbol}' - ${SYMBOL_RULE}.\n` +
-        `\x1b[2mhint:\x1b[0m e.g. \`cmu network save ${url} --name ${options.name} --symbol CMU\`.`,
+        `\x1b[2mhint:\x1b[0m e.g. \`cmu network save ${urlForHint(url)} --name ${options.name} --symbol CMU\`.`,
     );
   }
 
   const saved = await saveNetwork(options.name, url, symbol);
   console.log(
-    `Saved network '${options.name}' (${url}${savedSymbolNote(symbol, saved)})`,
+    `Saved network '${options.name}' (${maskUrl(url)}${savedSymbolNote(symbol, saved)})`,
   );
 }
 
@@ -158,7 +159,9 @@ async function runNetworkList(): Promise<void> {
   );
   for (const net of networks) {
     const isActive = net.name === activeName ? "[*]   " : "      ";
-    console.log(`| ${isActive} | ${net.name.padEnd(20)} | ${net.rpcUrl}`);
+    console.log(
+      `| ${isActive} | ${net.name.padEnd(20)} | ${maskUrl(net.rpcUrl)}`,
+    );
   }
   console.log(
     "==========================================================================\n",

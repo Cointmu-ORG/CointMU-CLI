@@ -1,5 +1,6 @@
 import { homedir } from "os";
 import { inspect } from "util";
+import { maskUrlsInText } from "./maskUrl";
 
 /** Shell convention for the current user's home directory. */
 const HOME_PLACEHOLDER = "~";
@@ -30,7 +31,9 @@ export function scrubHomeDir(text: string): string {
  * so stack frames and the extra properties ethers and Node attach to their
  * errors are preserved; otherwise only the message is shown. Both forms are
  * scrubbed, because plain messages carry absolute paths just as often as
- * stack traces do ("ENOENT ... open '/home/you/project/...'").
+ * stack traces do ("ENOENT ... open '/home/you/project/...'"). Both also get
+ * their URLs masked: ethers puts the request URL, credentials included, into
+ * its message and its `info`, and a wrapping error carries that on as `cause`.
  *
  * @param {unknown} error - The caught value.
  * @param {boolean} [verbose] - Whether --verbose was passed.
@@ -42,7 +45,7 @@ export function printCliError(error: unknown, verbose?: boolean): void {
     : error instanceof Error
       ? error.message
       : String(error);
-  console.error(scrubHomeDir(text));
+  console.error(maskUrlsInText(scrubHomeDir(text)));
 }
 
 /**

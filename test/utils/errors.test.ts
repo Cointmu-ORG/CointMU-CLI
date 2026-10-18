@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as os from "os";
+import { serverError } from "../helpers/ethersServerError";
 
 // Issue #87 (b): `--verbose` printed raw error objects, so stack frames and
 // file-system messages leaked the absolute path of the user's home directory.
@@ -100,6 +101,63 @@ describe("printCliError", () => {
     printCliError(`failed in ${HOME}/dapp`, false);
 
     expect(spy.mock.calls.flat().join("\n")).toBe("failed in ~/dapp");
+  });
+});
+
+// Issue #213: ethers puts the request URL, credentials included, into its
+// error message and its `info`, and a wrapping error carries it on as `cause`.
+
+describe("printCliError and RPC credentials", () => {
+  const CREDS_URL = "http://user:pw@127.0.0.1:18546/rpc?k=1";
+  const MASKED = "http://user:***@127.0.0.1:18546/rpc?k=***";
+  const PLAIN_URL = "http://127.0.0.1:18546/rpc";
+
+  async function printed(error: unknown, verbose: boolean) {
+    const { printCliError } = await loadWithHome(HOME);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    printCliError(error, verbose);
+    return spy.mock.calls.flat().join("\n");
+  }
+
+  /** Wrapped the way sendMiner() rethrows a node error it does not handle. */
+  const wrapped = (url: string) =>
+    new Error("network 'creds' has no miner_start RPC", {
+      cause: serverError(url),
+    });
+
+  it.each([
+    ["the message", false, () => serverError(CREDS_URL)],
+    ["the inspected error and its info", true, () => serverError(CREDS_URL)],
+    ["the cause's message and info", true, () => wrapped(CREDS_URL)],
+    ["a non-Error value", false, () => `failed: ${CREDS_URL}`],
+  ])("masks credentials in %s", async (_label, verbose, make) => {
+    const output = await printed(make(), verbose);
+
+    expect(output).not.toContain("user:pw");
+    expect(output).not.toContain("k=1");
+    expect(output).toContain(MASKED);
+  });
+
+  it("shows the cause's info under --verbose, masked rather than dropped", async () => {
+    const output = await printed(wrapped(CREDS_URL), true);
+
+    expect(output).toContain("[cause]");
+    expect(output).toContain(`requestUrl: '${MASKED}'`);
+    expect(output).toContain("responseStatus: '401 Unauthorized'");
+  });
+
+  it("prints a URL without credentials as it was", async () => {
+    const output = await printed(serverError(PLAIN_URL), false);
+
+    expect(output).toContain(`"requestUrl": "${PLAIN_URL}"`);
+    expect(output).not.toContain("***");
+  });
+
+  it("prints a URL without credentials as it was under --verbose", async () => {
+    const output = await printed(wrapped(PLAIN_URL), true);
+
+    expect(output).toContain(`requestUrl: '${PLAIN_URL}'`);
+    expect(output).not.toContain("***");
   });
 });
 
