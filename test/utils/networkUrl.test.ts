@@ -3,6 +3,10 @@ import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
 import { stripVTControlCharacters } from "util";
+import {
+  linkRepoTypescript,
+  removeFixtureProject,
+} from "../helpers/fixtureTypescript";
 
 // Issue #186: the empty-url error always named cmu.config.ts, even when the
 // project's config was cmu.config.js, and never named the network. These
@@ -40,17 +44,12 @@ describe("getDeployNetwork config errors", () => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
     vi.resetModules();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    removeFixtureProject(tmpDir);
   });
 
   function writeConfig(file: ConfigFile, defaultNetwork = "local"): void {
     if (file === "cmu.config.ts") {
-      fs.mkdirSync(path.join(tmpDir, "node_modules"));
-      fs.symlinkSync(
-        path.resolve(__dirname, "../../node_modules/typescript"),
-        path.join(tmpDir, "node_modules", "typescript"),
-        "dir",
-      );
+      linkRepoTypescript(tmpDir);
     }
     const exporter =
       file === "cmu.config.ts" ? "export default" : "module.exports =";

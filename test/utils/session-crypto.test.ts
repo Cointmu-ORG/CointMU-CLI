@@ -93,22 +93,28 @@ describe("validatePasswordStrength", () => {
 });
 
 describe("writeSessionFile", () => {
-  it("writes the session file with owner-only permissions", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-perm-"));
-    const file = path.join(dir, ".cmu-session");
-    try {
-      // Pre-create it world-readable to prove chmod tightens an existing file.
-      fs.writeFileSync(file, "{}", { mode: 0o644 });
-      await writeSessionFile(file, {
-        address: "0xTest",
-        activeNetwork: "local",
-        ...encryptSessionKey(PASSWORD, PRIVATE_KEY, TEST_PBKDF2_ITERATIONS),
-      });
-      expect(fs.statSync(file).mode & 0o777).toBe(0o600);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
+  // chmod on Windows only flips the read-only attribute, so the mode reads back
+  // as 0o666 there; owner-only access comes from the ACL, which this cannot
+  // assert. Same as the wallet-guards file permission tests.
+  it.skipIf(process.platform === "win32")(
+    "writes the session file with owner-only permissions",
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-perm-"));
+      const file = path.join(dir, ".cmu-session");
+      try {
+        // Pre-create it world-readable to prove chmod tightens an existing file.
+        fs.writeFileSync(file, "{}", { mode: 0o644 });
+        await writeSessionFile(file, {
+          address: "0xTest",
+          activeNetwork: "local",
+          ...encryptSessionKey(PASSWORD, PRIVATE_KEY, TEST_PBKDF2_ITERATIONS),
+        });
+        expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 
   // #182: a write cut off midway used to leave a truncated .cmu-session, and
   // with it the only copy of a key that was never saved.
