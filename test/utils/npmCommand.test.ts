@@ -3,6 +3,7 @@ import path from "path";
 import {
   CommandHost,
   NpmEntryNotFoundError,
+  ResolvedCommand,
   currentHost,
   resolveCommand,
 } from "../../src/utils/npmCommand";
@@ -41,6 +42,31 @@ function host(
     execPath: NODE_EXE,
     exists: (file) => existing.has(file),
   };
+}
+
+/**
+ * What resolveCommand returns, or the error it throws, so that a resolver
+ * that gives up where it should have found npm fails as a mismatch.
+ */
+function outcome(
+  command: string,
+  args: readonly string[],
+  on: CommandHost,
+): ResolvedCommand | Error {
+  try {
+    return resolveCommand(command, args, on);
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+}
+
+/** A resolution to npm's entry script under `dir`, run through node. */
+function viaNode(
+  dir: string,
+  script: string,
+  args: string[] = [],
+): ResolvedCommand {
+  return { file: NODE_EXE, args: [entry(dir, script), ...args] };
 }
 
 const ODD_ARGS = [
@@ -86,19 +112,21 @@ describe("resolveCommand on win32", () => {
   });
 
   it("runs npm-cli.js from beside the npm.cmd on PATH through node", () => {
-    const win = host(npmInstall(INSTALL_DIR), INSTALL_DIR);
-    expect(resolveCommand("npm", ["audit"], win)).toEqual({
-      file: NODE_EXE,
-      args: [entry(INSTALL_DIR, "npm-cli.js"), "audit"],
-    });
+    // npm beside the running node too: the one on PATH still wins.
+    const win = host(
+      [...npmInstall(INSTALL_DIR), ...npmInstall(NODE_DIR)],
+      INSTALL_DIR,
+    );
+    expect(outcome("npm", ["audit"], win)).toEqual(
+      viaNode(INSTALL_DIR, "npm-cli.js", ["audit"]),
+    );
   });
 
   it("runs npx-cli.js for npx", () => {
     const win = host(npmInstall(INSTALL_DIR), INSTALL_DIR);
-    expect(resolveCommand("npx", ["mocha"], win)).toEqual({
-      file: NODE_EXE,
-      args: [entry(INSTALL_DIR, "npx-cli.js"), "mocha"],
-    });
+    expect(outcome("npx", ["mocha"], win)).toEqual(
+      viaNode(INSTALL_DIR, "npx-cli.js", ["mocha"]),
+    );
   });
 
   it("uses the first npm.cmd on PATH when there are several", () => {
@@ -106,9 +134,7 @@ describe("resolveCommand on win32", () => {
       [...npmInstall("C:\\first"), ...npmInstall("C:\\second")],
       "C:\\second-without-npm;C:\\first;C:\\second",
     );
-    expect(resolveCommand("npm", [], win).args).toEqual([
-      entry("C:\\first", "npm-cli.js"),
-    ]);
+    expect(outcome("npm", [], win)).toEqual(viaNode("C:\\first", "npm-cli.js"));
   });
 
   it("unquotes PATH entries and skips empty and relative ones", () => {
@@ -124,17 +150,14 @@ describe("resolveCommand on win32", () => {
       ],
       `;.;project;"${INSTALL_DIR}";`,
     );
-    expect(resolveCommand("npm", [], win).args).toEqual([
-      entry(INSTALL_DIR, "npm-cli.js"),
-    ]);
+    expect(outcome("npm", [], win)).toEqual(viaNode(INSTALL_DIR, "npm-cli.js"));
   });
 
   it("falls back to the running node's directory when no npm.cmd is on PATH", () => {
     const win = host(npmInstall(NODE_DIR), "C:\\Windows\\System32");
-    expect(resolveCommand("npm", ["view"], win)).toEqual({
-      file: NODE_EXE,
-      args: [entry(NODE_DIR, "npm-cli.js"), "view"],
-    });
+    expect(outcome("npm", ["view"], win)).toEqual(
+      viaNode(NODE_DIR, "npm-cli.js", ["view"]),
+    );
   });
 
   it("falls back to node's directory, not a later npm.cmd, when the first has no entry script", () => {
@@ -147,16 +170,12 @@ describe("resolveCommand on win32", () => {
       ],
       `C:\\shims;${INSTALL_DIR}`,
     );
-    expect(resolveCommand("npm", [], win).args).toEqual([
-      entry(NODE_DIR, "npm-cli.js"),
-    ]);
+    expect(outcome("npm", [], win)).toEqual(viaNode(NODE_DIR, "npm-cli.js"));
   });
 
   it("falls back to node's directory when PATH is unset", () => {
     const win = host(npmInstall(NODE_DIR), undefined);
-    expect(resolveCommand("npx", [], win).args).toEqual([
-      entry(NODE_DIR, "npx-cli.js"),
-    ]);
+    expect(outcome("npx", [], win)).toEqual(viaNode(NODE_DIR, "npx-cli.js"));
   });
 
   it("names both places it searched when neither has the entry script", () => {
@@ -181,12 +200,9 @@ describe("resolveCommand on win32", () => {
     const win = host(npmInstall(INSTALL_DIR), INSTALL_DIR);
     const args = [...ODD_ARGS];
 
-    const resolved = resolveCommand("npm", args, win);
+    const resolved = outcome("npm", args, win);
 
-    expect(resolved.args).toEqual([
-      entry(INSTALL_DIR, "npm-cli.js"),
-      ...ODD_ARGS,
-    ]);
+    expect(resolved).toEqual(viaNode(INSTALL_DIR, "npm-cli.js", ODD_ARGS));
     expect(args).toEqual(ODD_ARGS);
   });
 });
