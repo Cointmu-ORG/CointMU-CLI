@@ -58,7 +58,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.4.1",
     "prettier": "^3.9.6",
-    "tsup": "^8.5.0",
+    "tsup": "^9.0.0",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.68.0",
     "vitest": "^5.0.1"
