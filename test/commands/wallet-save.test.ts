@@ -8,6 +8,7 @@ import {
 import {
   PASSWORD,
   KEY,
+  REAL_PBKDF2_TIMEOUT_MS,
   useRealPbkdf2,
   output,
   clearLogged,
@@ -33,27 +34,31 @@ beforeEach(setUp);
 afterEach(tearDown);
 
 describe("wallet save / list", () => {
-  it("saves an encrypted entry and lists it by name and address", async () => {
-    useRealPbkdf2();
-    await save("deployer");
+  it(
+    "saves an encrypted entry and lists it by name and address",
+    async () => {
+      useRealPbkdf2();
+      await save("deployer");
 
-    const file = readWallets();
-    expect(file.version).toBe(1);
-    expect(file.wallets).toHaveLength(1);
-    const [entry] = file.wallets;
-    expect(entry.name).toBe("deployer");
-    expect(entry.address).toBe(ADDRESS_A);
-    expect(entry.iterations).toBe(600000);
-    expect(decryptSessionKey(PASSWORD, entry)).toBe(KEY);
+      const file = readWallets();
+      expect(file.version).toBe(1);
+      expect(file.wallets).toHaveLength(1);
+      const [entry] = file.wallets;
+      expect(entry.name).toBe("deployer");
+      expect(entry.address).toBe(ADDRESS_A);
+      expect(entry.iterations).toBe(600000);
+      expect(decryptSessionKey(PASSWORD, entry)).toBe(KEY);
 
-    clearLogged();
-    const { runWalletList } = await walletCommands();
-    await runWalletList();
-    expect(output()).toContain("deployer");
-    expect(output()).toContain(ADDRESS_A);
-    expect(output()).not.toContain("[*]");
-    expectNoKeyLeak();
-  });
+      clearLogged();
+      const { runWalletList } = await walletCommands();
+      await runWalletList();
+      expect(output()).toContain("deployer");
+      expect(output()).toContain(ADDRESS_A);
+      expect(output()).not.toContain("[*]");
+      expectNoKeyLeak();
+    },
+    REAL_PBKDF2_TIMEOUT_MS,
+  );
 
   it("says so when nothing is saved, without creating the file", async () => {
     const { runWalletList } = await walletCommands();

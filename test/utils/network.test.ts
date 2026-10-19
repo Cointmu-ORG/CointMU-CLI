@@ -4,6 +4,10 @@ import * as fs from "fs";
 import * as path from "path";
 import { encryptSessionKey } from "../../src/utils/session";
 import { TEST_PBKDF2_ITERATIONS } from "../helpers/testPbkdf2";
+import {
+  linkRepoTypescript,
+  removeFixtureProject,
+} from "../helpers/fixtureTypescript";
 
 // getDynamicNetwork's "never resolve/prompt a private key" regression is
 // covered in session.test.ts. This file covers getDeployNetwork's resolution
@@ -32,7 +36,7 @@ describe("getDeployNetwork private key resolution", () => {
     vi.resetModules();
     if (realIsTTY) Object.defineProperty(process.stdin, "isTTY", realIsTTY);
     else Reflect.deleteProperty(process.stdin, "isTTY");
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    removeFixtureProject(tmpDir);
     if (prevKey === undefined) delete process.env.PRIVATE_KEY;
     else process.env.PRIVATE_KEY = prevKey;
   });
@@ -47,12 +51,7 @@ describe("getDeployNetwork private key resolution", () => {
   }
 
   function writeTsConfig(extra: string): void {
-    fs.mkdirSync(path.join(tmpDir, "node_modules"));
-    fs.symlinkSync(
-      path.resolve(__dirname, "../../node_modules/typescript"),
-      path.join(tmpDir, "node_modules", "typescript"),
-      "dir",
-    );
+    linkRepoTypescript(tmpDir);
     fs.writeFileSync(
       path.join(tmpDir, "cmu.config.ts"),
       `export default { defaultNetwork: "local", ` +
