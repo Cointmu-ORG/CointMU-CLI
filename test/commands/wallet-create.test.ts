@@ -7,6 +7,7 @@ import {
   tmpDir,
   logged,
   everything,
+  REAL_PBKDF2_TIMEOUT_MS,
   useRealPbkdf2,
   output,
   clearLogged,
@@ -79,46 +80,50 @@ describe("wallet create --save", () => {
     expect(output()).not.toContain("Address");
   }
 
-  it("stores the key encrypted and prints a mnemonic that derives it", async () => {
-    useRealPbkdf2();
-    const generated = await spyCreateRandom();
-    const { runWalletCreate } = await walletCommands(ANSWERS);
-    await runWalletCreate({ save: "alice" });
+  it(
+    "stores the key encrypted and prints a mnemonic that derives it",
+    async () => {
+      useRealPbkdf2();
+      const generated = await spyCreateRandom();
+      const { runWalletCreate } = await walletCommands(ANSWERS);
+      await runWalletCreate({ save: "alice" });
 
-    expect(generated).toHaveLength(1);
-    const [wallet] = generated;
-    const [entry] = readWallets().wallets;
-    expect(entry.name).toBe("alice");
-    expect(entry.address).toBe(wallet.address);
-    expect(entry.iterations).toBe(600000);
+      expect(generated).toHaveLength(1);
+      const [wallet] = generated;
+      const [entry] = readWallets().wallets;
+      expect(entry.name).toBe("alice");
+      expect(entry.address).toBe(wallet.address);
+      expect(entry.iterations).toBe(600000);
 
-    const line = logged.find((l) => l.startsWith("Mnemonic : "));
-    expect(line).toBeDefined();
-    const phrase = line!.slice("Mnemonic : ".length);
-    const { ethers } = await import("ethers");
-    expect(ethers.HDNodeWallet.fromPhrase(phrase).privateKey).toBe(
-      decryptSessionKey(PASSWORD, entry),
-    );
-    // Printed once, and the key not at all.
-    expect(everything.join("\n").split(phrase)).toHaveLength(2);
-    expect(output()).toContain(`Address  : ${wallet.address}`);
-    expect(output()).not.toContain("Private key");
-    expectNoKeyLeak([wallet.privateKey]);
+      const line = logged.find((l) => l.startsWith("Mnemonic : "));
+      expect(line).toBeDefined();
+      const phrase = line!.slice("Mnemonic : ".length);
+      const { ethers } = await import("ethers");
+      expect(ethers.HDNodeWallet.fromPhrase(phrase).privateKey).toBe(
+        decryptSessionKey(PASSWORD, entry),
+      );
+      // Printed once, and the key not at all.
+      expect(everything.join("\n").split(phrase)).toHaveLength(2);
+      expect(output()).toContain(`Address  : ${wallet.address}`);
+      expect(output()).not.toContain("Private key");
+      expectNoKeyLeak([wallet.privateKey]);
 
-    // The store holds no mnemonic either; consecutive pairs, as above.
-    const stored = fs.readFileSync(walletsFile(), "utf8");
-    const words = phrase.split(" ");
-    for (let i = 0; i < words.length - 1; i++) {
-      expect(stored).not.toContain(`${words[i]} ${words[i + 1]}`);
-    }
+      // The store holds no mnemonic either; consecutive pairs, as above.
+      const stored = fs.readFileSync(walletsFile(), "utf8");
+      const words = phrase.split(" ");
+      for (let i = 0; i < words.length - 1; i++) {
+        expect(stored).not.toContain(`${words[i]} ${words[i + 1]}`);
+      }
 
-    expect(output()).toContain("cmu keeps no copy");
-    expect(output()).toContain("the mnemonic is the only way");
-    expect(output()).toContain("scrollback");
-    // Saved, not activated.
-    expect(output()).toContain("`cmu wallet use alice`");
-    expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(false);
-  });
+      expect(output()).toContain("cmu keeps no copy");
+      expect(output()).toContain("the mnemonic is the only way");
+      expect(output()).toContain("scrollback");
+      // Saved, not activated.
+      expect(output()).toContain("`cmu wallet use alice`");
+      expect(fs.existsSync(path.join(tmpDir, ".cmu-session"))).toBe(false);
+    },
+    REAL_PBKDF2_TIMEOUT_MS,
+  );
 
   it("saves through the commander action", async () => {
     const exit = vi

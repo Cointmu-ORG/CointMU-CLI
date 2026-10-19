@@ -3,6 +3,10 @@ import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
 import { findImports } from "../../src/commands/compile";
+import {
+  linkRepoTypescript,
+  removeFixtureProject,
+} from "../helpers/fixtureTypescript";
 
 describe("findImports path containment", () => {
   let cwd: string;
@@ -127,20 +131,13 @@ describe("runCompile config loading", () => {
       path.join(tmpDir, "contracts", "Tiny.sol"),
       "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\ncontract Tiny {}\n",
     );
-    // ts-node resolves "typescript" from the project being loaded, so the
-    // fixture needs a real one to resolve.
-    fs.mkdirSync(path.join(tmpDir, "node_modules"));
-    fs.symlinkSync(
-      path.resolve(__dirname, "../../node_modules/typescript"),
-      path.join(tmpDir, "node_modules", "typescript"),
-      "dir",
-    );
+    linkRepoTypescript(tmpDir);
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    removeFixtureProject(tmpDir);
   });
 
   it("loads a real cmu.config.ts instead of warning and falling back", async () => {

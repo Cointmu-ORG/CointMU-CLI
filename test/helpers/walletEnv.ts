@@ -30,6 +30,13 @@ export const realIsTTY = process.stdin.isTTY;
  */
 export const TEST_PBKDF2_ITERATIONS = 1000;
 
+/**
+ * Timeout for a test that encrypts at the real 600k: one save takes about
+ * 4 s on a loaded Linux machine against vitest's 5 s default, and CI's
+ * Windows and macOS runners are slower.
+ */
+export const REAL_PBKDF2_TIMEOUT_MS = 20_000;
+
 /** Undoes the cheap work factor for the next SUT import, for one test. */
 export function useRealPbkdf2(): void {
   vi.doUnmock("../../src/utils/session");
