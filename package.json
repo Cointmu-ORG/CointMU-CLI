@@ -35,6 +35,9 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
+    "lint": "eslint src test tsup.config.ts",
+    "format:check": "prettier --check src test tsup.config.ts",
+    "typecheck": "tsc --noEmit",
     "preversion": "npm run build",
     "version": "node scripts/set-codename.js",
     "prepublishOnly": "npm run build",
