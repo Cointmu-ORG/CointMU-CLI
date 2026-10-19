@@ -1,6 +1,6 @@
 import { spawn } from "child_process";
 import { once } from "node:events";
-import { resolveCommand } from "./npmCommand";
+import { NpmEntryNotFoundError, resolveCommand } from "./npmCommand";
 
 /** A child that started, then exited non-zero or was killed by a signal. */
 export class CommandExitError extends Error {
@@ -11,6 +11,27 @@ export class CommandExitError extends Error {
     super(`${label} exited with code ${exitCode}`);
     this.exitCode = exitCode;
   }
+}
+
+/**
+ * Tells a child that never started from one that ran and failed, for callers
+ * of execFileSync/spawnSync, whose errors do not separate the two. Node's spawn
+ * errors carry a `syscall` of "spawn", "spawn <file>" or "spawnSync <file>";
+ * an error from a child that exited non-zero has none.
+ *
+ * @param {unknown} error - What the call threw, or a spawnSync result's error.
+ * @returns {boolean} Whether the child never started.
+ */
+export function isStartFailure(error: unknown): boolean {
+  if (error instanceof NpmEntryNotFoundError) {
+    return true;
+  }
+  return (
+    error instanceof Error &&
+    "syscall" in error &&
+    typeof error.syscall === "string" &&
+    error.syscall.startsWith("spawn")
+  );
 }
 
 /**

@@ -1,6 +1,8 @@
 import { execFileSync, spawnSync } from "child_process";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import { isStartFailure, startFailure } from "../utils/exec";
+import { resolveCommand } from "../utils/npmCommand";
 import { readPkg } from "../utils/pkg";
 
 const PACKAGE_NAME = "cointmu-cli";
@@ -20,7 +22,8 @@ interface UpdateOptions {
  * Resolves a target version from the npm registry.
  * @param {string} [requested] - A specific semver/range to pin, or undefined for the latest release.
  * @returns {Promise<string>} The resolved version string published on the registry.
- * @throws {Error} If `requested` is not a valid version/range/dist-tag, or is not published.
+ * @throws {Error} If `requested` is not a valid version/range/dist-tag, or is not published,
+ *   or npm cannot be started.
  */
 export async function resolveTargetVersion(
   requested?: string,
@@ -36,9 +39,8 @@ export async function resolveTargetVersion(
   const spec = requested ? `${PACKAGE_NAME}@${requested}` : PACKAGE_NAME;
 
   try {
-    const raw = execFileSync("npm", ["view", spec, "version"], {
-      stdio: "pipe",
-    })
+    const npm = resolveCommand("npm", ["view", spec, "version"]);
+    const raw = execFileSync(npm.file, npm.args, { stdio: "pipe" })
       .toString()
       .trim();
 
@@ -57,6 +59,10 @@ export async function resolveTargetVersion(
     const quoted = last.match(/'([^']+)'/);
     return quoted ? quoted[1] : last;
   } catch (error) {
+    // npm that never started says nothing about the registry.
+    if (isStartFailure(error)) {
+      throw startFailure("npm", error, "cmu update");
+    }
     if (requested) {
       throw new Error(
         `Version "${requested}" is not available on the npm registry for ${PACKAGE_NAME}.\n` +
@@ -100,7 +106,7 @@ export function explainInstallFailure(stderr: string): string {
  * @param {UpdateOptions} options - CLI options.
  * @returns {Promise<void>} Resolves when the update is complete.
  */
-async function runUpdate(options: UpdateOptions = {}): Promise<void> {
+export async function runUpdate(options: UpdateOptions = {}): Promise<void> {
   const current = readPkg().version;
   console.log("Checking the npm registry...");
   const target = await resolveTargetVersion(options.to);
@@ -115,13 +121,12 @@ async function runUpdate(options: UpdateOptions = {}): Promise<void> {
 
   const installArgs = ["install", "-g", `${PACKAGE_NAME}@${target}`];
   console.log(`\nRunning: npm ${installArgs.join(" ")}`);
-  // ponytail: spawnSync (no shell) blocks command injection; win32 needs
-  // "npm.cmd". If Node ever refuses .cmd via spawn, switch to a resolved
-  // npm-cli.js path invoked through process.execPath.
-  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  // spawnSync without a shell blocks command injection; on Windows the
+  // resolver runs npm-cli.js through process.execPath instead of npm.cmd.
+  const npm = resolveCommand("npm", installArgs);
   const install = spawnSync(
-    npm,
-    installArgs,
+    npm.file,
+    npm.args,
     // stderr is piped (not inherited) so EALLOWGIT can be recognised; it is
     // written straight back out below so npm's own output is never swallowed.
     { stdio: ["inherit", "inherit", "pipe"] },
@@ -132,7 +137,7 @@ async function runUpdate(options: UpdateOptions = {}): Promise<void> {
     process.stderr.write(stderr);
   }
   if (install.error) {
-    throw install.error;
+    throw startFailure("npm", install.error, "cmu update");
   }
   if (install.status !== 0) {
     throw new Error(explainInstallFailure(stderr));
