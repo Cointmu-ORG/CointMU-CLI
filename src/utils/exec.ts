@@ -14,6 +14,31 @@ export class CommandExitError extends Error {
 }
 
 /**
+ * Wraps the error of a tool that never started (not on PATH, refused by
+ * spawn, no npm entry script) in one that names the tool and the way out.
+ * Spawn errors do not always name the tool themselves: on Windows, refusing a
+ * .cmd reports only "spawn EINVAL".
+ *
+ * @param {string} tool - The tool as the user knows it ("npm").
+ * @param {unknown} error - Why it did not start; kept as `cause`.
+ * @param {string} rerun - The command to run again once it is fixed.
+ * @returns {Error} The error to throw.
+ */
+export function startFailure(
+  tool: string,
+  error: unknown,
+  rerun: string,
+): Error {
+  const reason = error instanceof Error ? error.message : String(error);
+  return new Error(
+    `${tool} could not be started: ${reason}\n` +
+      `\x1b[2mhint:\x1b[0m make sure Node.js and its npm are installed and on PATH, ` +
+      `then run \`${rerun}\` again.`,
+    { cause: error },
+  );
+}
+
+/**
  * Runs a command to completion with its stdio inherited, rejecting when the
  * child cannot start or exits non-zero.
  *
