@@ -37,20 +37,50 @@ jobs:
     - name: Run Tests
       run: npm test
 
+  # Lint, formatting and types do not vary by OS or Node version, so one leg
+  # covers them. Separate steps so the log shows which gate failed.
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js 22.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run Lint
+      run: npm run lint
+
+    - name: Check Formatting
+      run: npm run format:check
+
+    - name: Run Typecheck
+      run: npm run typecheck
+
   # The one check branch protection requires: its name stays fixed while the
   # matrix legs (and so their check names) change.
   ci-ok:
-    needs: build-and-test
+    needs: [build-and-test, lint]
     if: always()
     runs-on: ubuntu-latest
 
     steps:
-    - name: Require every build-and-test leg to pass
+    - name: Require build-and-test and lint to pass
       env:
-        RESULT: ${{ needs.build-and-test.result }}
+        BUILD_RESULT: ${{ needs.build-and-test.result }}
+        LINT_RESULT: ${{ needs.lint.result }}
       run: |
-        echo "build-and-test finished as $RESULT"
-        test "$RESULT" = "success"
+        echo "build-and-test finished as $BUILD_RESULT"
+        echo "lint finished as $LINT_RESULT"
+        test "$BUILD_RESULT" = "success"
+        test "$LINT_RESULT" = "success"
 
   release:
     needs: ci-ok
