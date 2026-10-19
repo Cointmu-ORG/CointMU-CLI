@@ -1,20 +1,72 @@
 import { spawn } from "child_process";
-import { isAbsolute } from "path";
 import { once } from "node:events";
+import { NpmEntryNotFoundError, resolveCommand } from "./npmCommand";
+
+/** A child that started, then exited non-zero or was killed by a signal. */
+export class CommandExitError extends Error {
+  /** The exit code; null when a signal ended the child. */
+  readonly exitCode: number | null;
+
+  constructor(label: string, exitCode: number | null) {
+    super(`${label} exited with code ${exitCode}`);
+    this.exitCode = exitCode;
+  }
+}
+
+/**
+ * Tells a child that never started from one that ran and failed, for callers
+ * of execFileSync/spawnSync, whose errors do not separate the two. Node's spawn
+ * errors carry a `syscall` of "spawn", "spawn <file>" or "spawnSync <file>";
+ * an error from a child that exited non-zero has none.
+ *
+ * @param {unknown} error - What the call threw, or a spawnSync result's error.
+ * @returns {boolean} Whether the child never started.
+ */
+export function isStartFailure(error: unknown): boolean {
+  if (error instanceof NpmEntryNotFoundError) {
+    return true;
+  }
+  return (
+    error instanceof Error &&
+    "syscall" in error &&
+    typeof error.syscall === "string" &&
+    error.syscall.startsWith("spawn")
+  );
+}
+
+/**
+ * Wraps the error of a tool that never started (not on PATH, refused by
+ * spawn, no npm entry script) in one that names the tool and the way out.
+ * Spawn errors do not always name the tool themselves: on Windows, refusing a
+ * .cmd reports only "spawn EINVAL".
+ *
+ * @param {string} tool - The tool as the user knows it ("npm").
+ * @param {unknown} error - Why it did not start; kept as `cause`.
+ * @param {string} rerun - The command to run again once it is fixed.
+ * @returns {Error} The error to throw.
+ */
+export function startFailure(
+  tool: string,
+  error: unknown,
+  rerun: string,
+): Error {
+  const reason = error instanceof Error ? error.message : String(error);
+  return new Error(
+    `${tool} could not be started: ${reason}\n` +
+      `\x1b[2mhint:\x1b[0m make sure Node.js and its npm are installed and on PATH, ` +
+      `then run \`${rerun}\` again.`,
+    { cause: error },
+  );
+}
 
 /**
  * Runs a command to completion with its stdio inherited, rejecting when the
  * child cannot start or exits non-zero.
  *
- * The one copy of the win32 handling the CLI needs: npm and npx ship there as
- * .cmd shims, so the extension is added, and the shell stays off the way `cmu
- * update` keeps it off - a shell re-parses the arguments, and some of them are
- * file names out of the user's project. Anything that is not an npm shim is
- * passed as an absolute path (process.execPath), which needs neither.
- *
- * ponytail: "<cmd>.cmd" with shell:false, as in `cmu update`. If Node ever
- * refuses .cmd through spawn, resolve the shim and run it through
- * process.execPath rather than turning the shell on.
+ * The shell stays off: it would re-parse the arguments, and some of them are
+ * file names out of the user's project. On Windows that rules out npm's .cmd
+ * shims, so resolveCommand() swaps npm and npx for their entry scripts run
+ * through process.execPath; it reads this process's PATH, not `options.env`.
  *
  * @param {string} command - The executable, or an absolute path to one.
  * @param {string[]} args - The arguments to pass it.
@@ -24,19 +76,17 @@ import { once } from "node:events";
  * @param {string} [options.label] - What to call the command in the failure
  *   message. Defaults to the command itself.
  * @returns {Promise<void>} Resolves when the child exits 0.
- * @throws {Error} When the child cannot start, or exits non-zero.
+ * @throws {CommandExitError} When the child exits non-zero.
+ * @throws {Error} When the child cannot start.
  */
 export async function run(
   command: string,
   args: string[],
   options: { env?: NodeJS.ProcessEnv; cwd?: string; label?: string } = {},
 ): Promise<void> {
-  const executable =
-    process.platform === "win32" && !isAbsolute(command)
-      ? `${command}.cmd`
-      : command;
+  const resolved = resolveCommand(command, args);
 
-  const child = spawn(executable, args, {
+  const child = spawn(resolved.file, resolved.args, {
     stdio: "inherit",
     env: options.env,
     cwd: options.cwd,
@@ -48,6 +98,6 @@ export async function run(
   // never coming.
   const [code] = await once(child, "close");
   if (code !== 0) {
-    throw new Error(`${options.label ?? command} exited with code ${code}`);
+    throw new CommandExitError(options.label ?? command, code);
   }
 }
