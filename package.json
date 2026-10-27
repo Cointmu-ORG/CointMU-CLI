@@ -48,7 +48,7 @@
     "ethers": "6.17.0",
     "hardhat": "3.21.0",
     "inquirer": "^14.2.0",
-    "solc": "0.8.37",
+    "solc": "0.8.38",
     "ts-node": "^10.9.2"
   },
   "devDependencies": {
