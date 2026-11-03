@@ -10,17 +10,29 @@ import {
 } from "../../src/utils/session";
 import { makeSession } from "../helpers/sessionEnv";
 
+/** An empty HOME, so a folder without .cmu-session has no global one to fall back to. */
+function stubEmptyHome(): string {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-empty-home-"));
+  vi.stubEnv("HOME", home);
+  vi.stubEnv("USERPROFILE", home);
+  return home;
+}
+
 describe("readSession", () => {
   let tmpDir: string;
+  let home: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-read-session-"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    home = stubEmptyHome();
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
   });
 
   it("returns null when the project has no session at all", async () => {
@@ -58,15 +70,19 @@ describe("readSession", () => {
 // turned a null readSession() into the same error by hand.
 describe("requireSession", () => {
   let tmpDir: string;
+  let home: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-require-session-"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    home = stubEmptyHome();
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
   });
 
   it("returns the session when there is one", async () => {
@@ -102,11 +118,13 @@ describe("requireSession", () => {
 
 describe("getDynamicNetwork", () => {
   let tmpDir: string;
+  let home: string;
   const prevKey = process.env.PRIVATE_KEY;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-session-"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    home = stubEmptyHome();
     vi.doMock("../../src/utils/networkStorage", () => ({
       loadNetworks: async () => [
         { name: "local", rpcUrl: "http://127.0.0.1:1" },
@@ -124,9 +142,11 @@ describe("getDynamicNetwork", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     vi.resetModules();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
     if (prevKey === undefined) delete process.env.PRIVATE_KEY;
     else process.env.PRIVATE_KEY = prevKey;
   });

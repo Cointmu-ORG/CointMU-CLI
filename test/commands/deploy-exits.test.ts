@@ -22,6 +22,10 @@ describe("runDeploy exits", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-deploy-"));
     fs.mkdirSync(path.join(tmpDir, "deploy"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    // A folder without .cmu-session falls back to ~/.cmu-session: keep that
+    // one in tmpDir too, never the developer's real home.
+    vi.stubEnv("HOME", tmpDir);
+    vi.stubEnv("USERPROFILE", tmpDir);
     vi.spyOn(console, "log").mockImplementation(() => {});
     process.env.PRIVATE_KEY =
       // well-known Ganache test key — never fund this
@@ -29,6 +33,7 @@ describe("runDeploy exits", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     vi.resetModules();
     fs.rmSync(tmpDir, { recursive: true, force: true });
