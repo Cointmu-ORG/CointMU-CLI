@@ -79,7 +79,7 @@ async function saveSessionKey(
   console.log(`Saved wallet '${name}' (${address}) from ${file}.`);
   console.log("It opens with this session's password.");
   console.log(
-    `\x1b[2mhint:\x1b[0m run \`cmu wallet use ${name}\` in a project to make it active there.`,
+    `\x1b[2mhint:\x1b[0m run \`cmu wallet use ${name}\` to make it the active wallet (\`--local\` for one folder only).`,
   );
 }
 
@@ -123,6 +123,6 @@ export async function runWalletSave(
 
   console.log(`Saved wallet '${name}' (${address})`);
   console.log(
-    `\x1b[2mhint:\x1b[0m run \`cmu wallet use ${name}\` in a project to make it active there.`,
+    `\x1b[2mhint:\x1b[0m run \`cmu wallet use ${name}\` to make it the active wallet (\`--local\` for one folder only).`,
   );
 }

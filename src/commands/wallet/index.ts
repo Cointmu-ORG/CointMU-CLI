@@ -74,7 +74,7 @@ export async function runWalletCreate(
   console.log(
     "the address and a mnemonic backup; activate it with `cmu wallet use <name>`.\n",
   );
-  console.log("To keep this wallet encrypted and use it in a project, run:");
+  console.log("To keep this wallet encrypted and make it the active one, run:");
   console.log("  cmu wallet save <name>");
   console.log("  cmu wallet use <name>");
 }
@@ -133,7 +133,7 @@ async function runWalletCreateSaved(name: string): Promise<void> {
   );
   console.log("and CI output. Clear them if this ran anywhere shared.");
   console.log(
-    `\x1b[2mhint:\x1b[0m run \`cmu wallet use ${name}\` in a project to make it active there.`,
+    `\x1b[2mhint:\x1b[0m run \`cmu wallet use ${name}\` to make it the active wallet (\`--local\` for one folder only).`,
   );
 }
 
@@ -187,7 +187,7 @@ walletCommand
   .description("Save a private key as a named, encrypted wallet")
   .option(
     "--session",
-    "Save the key in this project's .cmu-session instead of prompting for one",
+    "Save the key of the active session (this folder's .cmu-session, else ~/.cmu-session) instead of prompting for one",
   )
   .action((name, options, command) =>
     runWalletSave(name, options).catch(
