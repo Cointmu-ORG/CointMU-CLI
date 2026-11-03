@@ -91,7 +91,7 @@ describe("replacing an unsaved session", () => {
         });
         expect(asked.length).toBeGreaterThan(1);
         expect(output()).toContain(
-          `warning:\x1b[0m .cmu-session holds the key for ${ADDRESS_B}, which is not a saved wallet.`,
+          `warning:\x1b[0m ~/.cmu-session holds the key for ${ADDRESS_B}, which is not a saved wallet.`,
         );
         expect(output()).toContain("cannot recover it");
         expect(output()).toContain("`cmu wallet save <name> --session`");
@@ -104,12 +104,12 @@ describe("replacing an unsaved session", () => {
         [
           "no",
           false,
-          `aborted: .cmu-session was not changed; it still holds ${ADDRESS_B}.`,
+          `aborted: ~/.cmu-session was not changed; it still holds ${ADDRESS_B}.`,
         ],
         [
           "Ctrl-C",
           ctrlC(),
-          `aborted: .cmu-session was not changed; it still holds ${ADDRESS_B}.`,
+          `aborted: ~/.cmu-session was not changed; it still holds ${ADDRESS_B}.`,
         ],
       ])(
         "leaves the session untouched on %s, without prompting for a secret",

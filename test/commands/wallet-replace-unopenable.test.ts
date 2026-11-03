@@ -73,7 +73,7 @@ function writeStrayCommaSession(): string {
 }
 
 const UNOPENABLE = `holds an encrypted key for ${ADDRESS_B} that this version of cmu cannot open`;
-const UNREADABLE = ".cmu-session is not valid JSON";
+const UNREADABLE = "~/.cmu-session is not valid JSON";
 
 // #209: #182's check let two files through as "nothing to lose" although the
 // key in them could still be recovered: a session from cmu 1.3.1 or older
@@ -110,7 +110,8 @@ describe.each([
     if (process.platform !== "win32") {
       expect(fs.statSync(backupPath).mode & PERMISSION_BITS).toBe(OWNER_ONLY);
     }
-    expect(output()).toContain(`Kept the old session as ${backup}`);
+    // HOME is tmpDir too, so the file written is the global one.
+    expect(output()).toContain(`Kept the old session as ~/${backup}`);
     expect(output()).toContain("`.cmu-session.bak-*`");
     const session = readSession();
     expect(session.address).not.toBe(ADDRESS_B);
@@ -119,8 +120,8 @@ describe.each([
   });
 
   it.each([
-    ["no", false, "aborted: .cmu-session was not changed"],
-    ["Ctrl-C", ctrlC(), "aborted: .cmu-session was not changed"],
+    ["no", false, "aborted: ~/.cmu-session was not changed"],
+    ["Ctrl-C", ctrlC(), "aborted: ~/.cmu-session was not changed"],
   ])(
     "leaves it untouched on %s, without asking for a password",
     async (__, replace, message) => {
@@ -149,7 +150,7 @@ describe.each([
       "cannot prompt for confirmation in a non-interactive session",
     );
     expect((error as Error).message).toContain(
-      "move .cmu-session somewhere safe",
+      "move ~/.cmu-session somewhere safe",
     );
     expect(output()).toContain(warning);
     expect(asked).toEqual([]);

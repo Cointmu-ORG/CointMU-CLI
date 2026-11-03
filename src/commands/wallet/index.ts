@@ -197,9 +197,17 @@ walletCommand
 
 walletCommand
   .command("use <name>")
-  .description("Make a saved wallet the active session in this project")
+  .description(
+    "Make a saved wallet the active session (~/.cmu-session, or this folder's .cmu-session if it has one)",
+  )
+  .option(
+    "--local",
+    "Write this folder's .cmu-session, creating an override of ~/.cmu-session here",
+  )
   .action((name, options, command) =>
-    runWalletUse(name).catch(fail("wallet use", command.optsWithGlobals())),
+    runWalletUse(name, options).catch(
+      fail("wallet use", command.optsWithGlobals()),
+    ),
   );
 
 walletCommand

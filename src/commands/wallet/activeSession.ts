@@ -1,4 +1,3 @@
-import * as path from "path";
 import { readFile, writeFile } from "fs/promises";
 import { LOCAL_NETWORK_NAME, LOCAL_RPC_URL } from "../../utils/defaults";
 import { loadNetworks } from "../../utils/networkStorage";
@@ -11,6 +10,10 @@ import {
   type SessionData,
   writeSessionFile,
 } from "../../utils/session";
+import {
+  describeSessionFile,
+  getLocalSessionFilePath,
+} from "../../utils/sessionLocation";
 import { requireInteractive, promptOrAbort } from "./prompts";
 import { sameAddress } from "./savedWallets";
 
@@ -18,8 +21,9 @@ import { sameAddress } from "./savedWallets";
 const BACKUP_SUFFIX = ".bak-";
 
 /**
- * The activeNetwork a new session should carry: the one the existing session
- * selected, as long as it is still saved. Falls back to the local devnet for a
+ * The activeNetwork a new session should carry: the one the session in effect
+ * selected, as long as it is still saved - so a new `--local` override starts
+ * on the global session's network. Falls back to the local devnet for a
  * first session, an unreadable session file, or a pick that has since been
  * deleted - and says so in that last case, since the user did choose it. A
  * local network that is no longer saved is warned about on every fallback,
@@ -72,15 +76,16 @@ export const UNPARSEABLE_SESSION = Symbol("unparseable .cmu-session");
  * around the fault, ciphertext included, so it must not reach the output,
  * nor --verbose as the `cause` of another error.
  *
+ * @param {string} [sessionFile] - The file to read; default: the one in effect.
  * @returns {Promise<SessionData | null | typeof UNPARSEABLE_SESSION>} The
  *   session, null if there is none, or UNPARSEABLE_SESSION.
  * @throws {Error} When the file exists but cannot be read at all.
  */
-export async function parseSession(): Promise<
-  SessionData | null | typeof UNPARSEABLE_SESSION
-> {
+export async function parseSession(
+  sessionFile: string = getSessionFilePath(),
+): Promise<SessionData | null | typeof UNPARSEABLE_SESSION> {
   try {
-    return await readSession();
+    return await readSession(sessionFile);
   } catch (error) {
     if (error instanceof SyntaxError) return UNPARSEABLE_SESSION;
     throw error;
@@ -88,16 +93,17 @@ export async function parseSession(): Promise<
 }
 
 /**
- * What replacing .cmu-session could lose. Undefined only when the file
+ * What replacing a session file could lose. Undefined only when the file
  * provably holds no key: absent, blank, or valid JSON without an encryptedKey.
  *
+ * @param {string} sessionFile - The file about to be replaced.
  * @returns {Promise<KeyAtRisk | undefined>} The key at risk, if any.
  * @throws {Error} When the file exists but cannot be read at all.
  */
-async function keyAtRisk(): Promise<KeyAtRisk | undefined> {
-  const session = await parseSession();
+async function keyAtRisk(sessionFile: string): Promise<KeyAtRisk | undefined> {
+  const session = await parseSession(sessionFile);
   if (session === UNPARSEABLE_SESSION) {
-    const text = await readFile(getSessionFilePath(), "utf8");
+    const text = await readFile(sessionFile, "utf8");
     return text.trim() ? { kind: "unreadable" } : undefined;
   }
   if (!session?.encryptedKey) return undefined;
@@ -107,24 +113,25 @@ async function keyAtRisk(): Promise<KeyAtRisk | undefined> {
   return { kind, address };
 }
 
-/** The line that says a copy will be kept, for a key `save` cannot keep. */
-const KEEPS_COPY = `If you replace it, cmu keeps a copy as .cmu-session${BACKUP_SUFFIX}<time> first.`;
-
 /**
  * What to tell the user about a key at risk: the warning lines, and the way
  * out when there is no terminal to ask in.
  *
  * @param {KeyAtRisk} risk - The key the session may hold.
+ * @param {string} file - How to name the file at risk (describeSessionFile).
  * @returns {{lines: string[], noTerminal: string}} The text to print.
  */
-function describeRisk(risk: KeyAtRisk): {
+function describeRisk(
+  risk: KeyAtRisk,
+  file: string,
+): {
   lines: string[];
   noTerminal: string;
 } {
   if (risk.kind === "openable") {
     return {
       lines: [
-        `\x1b[33mwarning:\x1b[0m .cmu-session holds the key for ${risk.address}, which is not a saved wallet.`,
+        `\x1b[33mwarning:\x1b[0m ${file} holds the key for ${risk.address}, which is not a saved wallet.`,
         "Replacing the session deletes that key for good - cmu keeps no other copy and cannot recover it.",
         "\x1b[2mhint:\x1b[0m keep it first with `cmu wallet save <name> --session`, then run this command again.",
       ],
@@ -134,16 +141,16 @@ function describeRisk(risk: KeyAtRisk): {
   }
   const warning =
     risk.kind === "unopenable"
-      ? `.cmu-session holds an encrypted key for ${risk.address ?? "an unreadable address"} that this version of cmu cannot open (written by cmu 1.3.1 or older, or incomplete).`
-      : ".cmu-session is not valid JSON, so cmu cannot tell whether it holds a key.";
+      ? `${file} holds an encrypted key for ${risk.address ?? "an unreadable address"} that this version of cmu cannot open (written by cmu 1.3.1 or older, or incomplete).`
+      : `${file} is not valid JSON, so cmu cannot tell whether it holds a key.`;
   const fix = risk.kind === "unopenable" ? "" : "fix it, or ";
   return {
     lines: [
       `\x1b[33mwarning:\x1b[0m ${warning}`,
-      KEEPS_COPY,
-      `\x1b[2mhint:\x1b[0m to keep it out of the way instead, ${fix}move .cmu-session somewhere safe, then run this command again.`,
+      `If you replace it, cmu keeps a copy as ${file}${BACKUP_SUFFIX}<time> first.`,
+      `\x1b[2mhint:\x1b[0m to keep it out of the way instead, ${fix}move ${file} somewhere safe, then run this command again.`,
     ],
-    noTerminal: `${fix}move .cmu-session somewhere safe first, or run this in a terminal to confirm.`,
+    noTerminal: `${fix}move ${file} somewhere safe first, or run this in a terminal to confirm.`,
   };
 }
 
@@ -158,12 +165,13 @@ function describeRisk(risk: KeyAtRisk): {
  * (#209): it may well hold one. An unreadable store throws: whether the key
  * is safe cannot be told.
  *
+ * @param {string} sessionFile - The file about to be replaced.
  * @returns {Promise<boolean>} True when the file must be backed up before it
  *   is replaced: it holds a key `wallet save --session` cannot keep.
  * @throws {Error} When the user declines, or cannot be asked.
  */
-async function confirmSessionReplace(): Promise<boolean> {
-  const risk = await keyAtRisk();
+async function confirmSessionReplace(sessionFile: string): Promise<boolean> {
+  const risk = await keyAtRisk(sessionFile);
   if (!risk) return false;
   const previous = risk.address;
   if (
@@ -173,12 +181,13 @@ async function confirmSessionReplace(): Promise<boolean> {
     return false;
   }
 
-  const { lines, noTerminal } = describeRisk(risk);
+  const file = describeSessionFile(sessionFile);
+  const { lines, noTerminal } = describeRisk(risk, file);
   for (const line of lines) console.log(line);
   requireInteractive("confirmation", noTerminal);
   const inquirer = (await import("inquirer")).default;
   const holds = previous ? `; it still holds ${previous}` : "";
-  const declined = `aborted: .cmu-session was not changed${holds}.`;
+  const declined = `aborted: ${file} was not changed${holds}.`;
   const { replace } = await promptOrAbort(
     () =>
       inquirer.prompt([
@@ -196,30 +205,33 @@ async function confirmSessionReplace(): Promise<boolean> {
 }
 
 /**
- * Copies .cmu-session to .cmu-session.bak-<time>, owner-only. A copy, not a
- * move: the session stays in place until writeSessionFile's atomic rename
- * replaces it. "wx" refuses to overwrite an earlier backup of the same name.
+ * Copies a session file to <file>.bak-<time> next to it, owner-only. A copy,
+ * not a move: the session stays in place until writeSessionFile's atomic
+ * rename replaces it. "wx" refuses to overwrite an earlier backup of the same
+ * name. Only a backup in the working folder gets the .gitignore hint.
  *
+ * @param {string} sessionFile - The file about to be replaced.
  * @returns {Promise<void>} Resolves once the copy is on disk.
  */
-async function backUpSession(): Promise<void> {
-  const file = getSessionFilePath();
+async function backUpSession(sessionFile: string): Promise<void> {
   // ":" cannot appear in a Windows file name.
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backup = `${file}${BACKUP_SUFFIX}${stamp}`;
+  const backup = `${sessionFile}${BACKUP_SUFFIX}${stamp}`;
   // A umask can only narrow the mode, and the copy is never rewritten.
-  await writeFile(backup, await readFile(file), {
+  await writeFile(backup, await readFile(sessionFile), {
     mode: SESSION_FILE_MODE,
     flag: "wx",
   });
-  console.log(`Kept the old session as ${path.basename(backup)}.`);
+  const file = describeSessionFile(sessionFile);
+  console.log(`Kept the old session as ${file}${BACKUP_SUFFIX}${stamp}.`);
+  if (sessionFile !== getLocalSessionFilePath()) return;
   console.log(
     `\x1b[2mhint:\x1b[0m it holds an encrypted key - keep it out of git: \`.cmu-session${BACKUP_SUFFIX}*\` in .gitignore.`,
   );
 }
 
 /**
- * Writes an encrypted key to .cmu-session, carrying the active network over.
+ * Writes an encrypted key to a session file, carrying the active network over.
  *
  * The one writer of a key into the session, so `use` keeps the network #126
  * was about, and passes the #182 check. The check runs first; `unlock` -
@@ -230,17 +242,20 @@ async function backUpSession(): Promise<void> {
  *
  * @param {() => Promise<{address: string, encrypted: EncryptedKey}>} unlock -
  *   Prompts for whatever is needed and returns the key to store.
+ * @param {string} [sessionFile] - The file to check, back up and write;
+ *   defaults to the one in effect.
  * @returns {Promise<{address: string, activeNetwork: string}>} The address the
  *   session belongs to, and the network it ended up pointing at.
  */
 export async function storeSession(
   unlock: () => Promise<{ address: string; encrypted: EncryptedKey }>,
+  sessionFile: string = getSessionFilePath(),
 ): Promise<{ address: string; activeNetwork: string }> {
-  const mustBackUp = await confirmSessionReplace();
+  const mustBackUp = await confirmSessionReplace(sessionFile);
   const { address, encrypted } = await unlock();
   const activeNetwork = await carriedOverNetwork();
-  if (mustBackUp) await backUpSession();
-  await writeSessionFile(getSessionFilePath(), {
+  if (mustBackUp) await backUpSession(sessionFile);
+  await writeSessionFile(sessionFile, {
     address,
     activeNetwork,
     ...encrypted,
@@ -249,7 +264,7 @@ export async function storeSession(
 }
 
 /**
- * The address this project's .cmu-session belongs to. Needs no password: the
+ * The address the session in effect belongs to. Needs no password: the
  * address is stored in plaintext. An unreadable session counts as none, so it
  * cannot stop `list` or `use` - `use` is a way out of it.
  *

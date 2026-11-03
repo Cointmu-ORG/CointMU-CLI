@@ -1,24 +1,42 @@
 import { loadWallets } from "../../utils/walletStorage";
 import { decryptSessionKey } from "../../utils/session";
+import {
+  describeSessionFile,
+  getGlobalSessionFilePath,
+  getLocalSessionFilePath,
+  getSessionFilePath,
+} from "../../utils/sessionLocation";
 import { requireInteractive, promptOrAbort } from "./prompts";
 import { sameAddress, findWallet } from "./savedWallets";
 import { storeSession } from "./activeSession";
 
 /**
- * Makes a saved wallet the active session of the current project.
+ * Makes a saved wallet the active session: in ~/.cmu-session, which every
+ * folder without its own .cmu-session uses, or in the working folder's
+ * .cmu-session when it has one or `--local` asks for one.
  *
  * The wallet's password is checked by decrypting, and the address is taken
  * from the decrypted key: the stored one is plaintext and not covered by the
- * GCM tag. The ciphertext is then copied into .cmu-session as is - same
+ * GCM tag. The ciphertext is then copied into the session file as is - same
  * plaintext, key and IV, so the copy is byte-identical - and the session opens
  * with the wallet's password. It is a copy: deleting the wallet later does not
  * touch this session.
  *
  * @param {string} name - The wallet to activate.
+ * @param {object} [options]
+ * @param {boolean} [options.local] - Write the working folder's .cmu-session,
+ *   creating the override if there is none yet.
  * @returns {Promise<void>}
  */
-export async function runWalletUse(name: string): Promise<void> {
+export async function runWalletUse(
+  name: string,
+  options: { local?: boolean } = {},
+): Promise<void> {
   const wallet = findWallet(await loadWallets(), name);
+  const target = options.local
+    ? getLocalSessionFilePath()
+    : getSessionFilePath();
+  const file = describeSessionFile(target);
 
   // The stored address is plaintext and not covered by the GCM tag, so unlock
   // re-derives it from the key and refuses a mismatch before anything is written.
@@ -35,7 +53,7 @@ export async function runWalletUse(name: string): Promise<void> {
             mask: "*",
           },
         ]),
-      "aborted: .cmu-session was not changed.",
+      `aborted: ${file} was not changed.`,
     );
 
     let privateKey: string;
@@ -61,7 +79,20 @@ export async function runWalletUse(name: string): Promise<void> {
       address,
       encrypted: { encryptedKey, salt, iv, authTag, iterations },
     };
-  });
+  }, target);
   console.log(`Active wallet is now '${name}' (${address})`);
   console.log(`Active network: ${activeNetwork}`);
+  console.log(`Session: ${file} (${sessionScope(target)})`);
+}
+
+/**
+ * Where a session file applies, for the line `use` ends with.
+ *
+ * @param {string} sessionFile - The file just written.
+ * @returns {string} The folders it is in effect for.
+ */
+function sessionScope(sessionFile: string): string {
+  return sessionFile === getGlobalSessionFilePath()
+    ? "every folder without its own .cmu-session"
+    : "this folder only; ~/.cmu-session is unchanged";
 }

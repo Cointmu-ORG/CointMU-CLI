@@ -244,6 +244,14 @@ export function readJson(file: string): Record<string, unknown> {
   return JSON.parse(readText(file));
 }
 
+/** "done", or the message it failed with: an assertion, not a crash, either way. */
+export async function outcome(run: Promise<void>): Promise<string> {
+  return run.then(
+    () => "done",
+    (error: Error) => error.message,
+  );
+}
+
 /** Mocks inquirer to answer by question name; an unexpected one throws. */
 function mockPrompts(answers: Record<string, unknown>): void {
   asked = [];
@@ -270,6 +278,13 @@ export async function walletSut(answers: Record<string, unknown> = {}) {
   return import("../../src/commands/wallet");
 }
 
+/** A fresh `wallet info` / `wallet balance` module; they prompt for nothing. */
+export async function walletInfoSut() {
+  vi.resetModules();
+  mockPrompts({});
+  return import("../../src/commands/wallet/info");
+}
+
 /** A fresh session module whose prompts answer from `answers`. */
 export async function sessionSut(answers: Record<string, unknown> = {}) {
   vi.resetModules();
@@ -283,10 +298,16 @@ export async function locationSut() {
   return import("../../src/utils/sessionLocation");
 }
 
-/** Runs `cmu network <argv...>` the way the CLI would. */
+/**
+ * Runs `cmu network <argv...>` the way the CLI would. A failure ends in
+ * process.exit(1) there; here it rejects, so outcome() can report it.
+ */
 export async function runNetwork(...argv: string[]): Promise<void> {
   vi.resetModules();
   mockPrompts({});
+  vi.spyOn(process, "exit").mockImplementation((code) => {
+    throw new Error(`process.exit(${code})`);
+  });
   const { networkCommand } = await import("../../src/commands/network");
   await networkCommand.parseAsync(argv, { from: "user" });
 }

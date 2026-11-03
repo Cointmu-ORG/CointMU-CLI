@@ -24,6 +24,7 @@ import {
   requireSession,
   writeSessionFile,
 } from "../../utils/session";
+import { describeSessionFile } from "../../utils/sessionLocation";
 import { runNetworkPing } from "./ping";
 
 /**
@@ -136,9 +137,13 @@ async function runNetworkUse(name: string): Promise<void> {
 
   const session = await requireSession();
 
+  // The file the session was read from: a folder's override, else global.
+  const sessionFile = getSessionFilePath();
   session.activeNetwork = network.name;
-  await writeSessionFile(getSessionFilePath(), session);
-  console.log(`Active network is now ${network.name}`);
+  await writeSessionFile(sessionFile, session);
+  console.log(
+    `Active network is now ${network.name} (${describeSessionFile(sessionFile)})`,
+  );
 }
 
 /**

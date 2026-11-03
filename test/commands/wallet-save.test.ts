@@ -134,7 +134,7 @@ describe("wallet save --session", () => {
     expect(decryptSessionKey(PASSWORD, entry)).toBe(KEY_B);
     expect(fs.readFileSync(sessionFile(), "utf8")).toBe(session);
     expect(output()).toContain(
-      `Saved wallet 'keep' (${ADDRESS_B}) from .cmu-session.`,
+      `Saved wallet 'keep' (${ADDRESS_B}) from ~/.cmu-session.`,
     );
     expect(output()).toContain("session's password");
     expect(output()).not.toContain(entry.encryptedKey as string);
@@ -176,7 +176,7 @@ describe("wallet save --session", () => {
     writeCbcSession();
 
     await expect(saveSession("keep")).rejects.toThrow(
-      `this project's .cmu-session holds an encrypted key for ${ADDRESS_B} that this version of cmu cannot open or save (written by cmu 1.3.1 or older, or incomplete).`,
+      `~/.cmu-session holds an encrypted key for ${ADDRESS_B} that this version of cmu cannot open or save (written by cmu 1.3.1 or older, or incomplete).`,
     );
     expect(fs.existsSync(walletsFile())).toBe(false);
   });

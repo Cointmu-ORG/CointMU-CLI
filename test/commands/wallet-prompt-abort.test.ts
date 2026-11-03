@@ -29,7 +29,8 @@ afterEach(tearDown);
 // a closed input) instead of saying that nothing changed, as transfer does.
 
 const NOTHING_SAVED = "aborted: nothing was saved.";
-const SESSION_UNCHANGED = "aborted: .cmu-session was not changed.";
+// HOME is the working folder here, so the session is the global one.
+const SESSION_UNCHANGED = "aborted: ~/.cmu-session was not changed.";
 const NOTHING_DELETED = "aborted: nothing was deleted.";
 
 type Route = {
@@ -102,7 +103,7 @@ const routes: Record<string, Route> = {
     answers: {},
     cancelAt: "replace",
     run: useDeployer,
-    message: `aborted: .cmu-session was not changed; it still holds ${ADDRESS_B}.`,
+    message: `aborted: ~/.cmu-session was not changed; it still holds ${ADDRESS_B}.`,
   },
   "use, replacing a session that is not valid JSON": {
     setup: async () => {

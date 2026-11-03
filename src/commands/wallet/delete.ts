@@ -2,6 +2,10 @@ import { deleteWallet, loadWallets } from "../../utils/walletStorage";
 import { requireInteractive, promptOrAbort } from "./prompts";
 import { sameAddress, findWallet } from "./savedWallets";
 import { sessionAddress } from "./activeSession";
+import {
+  describeSessionFile,
+  getSessionFilePath,
+} from "../../utils/sessionLocation";
 
 /**
  * Deletes a saved wallet after confirmation. Sessions that already `use` it
@@ -45,11 +49,10 @@ export async function runWalletDelete(
   await deleteWallet(name);
   console.log(`Deleted wallet '${name}'.`);
   if (sameAddress(await sessionAddress(), wallet.address)) {
-    console.log(
-      "This project's .cmu-session keeps its own copy and still works.",
-    );
+    const file = describeSessionFile(getSessionFilePath());
+    console.log(`${file} keeps its own copy and still works.`);
   }
   console.log(
-    `\x1b[2mhint:\x1b[0m projects that already ran \`cmu wallet use ${name}\` keep their own encrypted copy in .cmu-session.`,
+    `\x1b[2mhint:\x1b[0m a session made with \`cmu wallet use ${name}\` - ~/.cmu-session or a folder's .cmu-session - keeps its own encrypted copy.`,
   );
 }
