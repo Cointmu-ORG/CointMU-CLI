@@ -1,7 +1,7 @@
 {
   "name": "cointmu-cli",
-  "version": "1.7.3",
-  "codename": "Monsun",
+  "version": "1.7.4",
+  "codename": "Aurora",
   "description": "Primary development toolkit for the CointMU blockchain",
   "keywords": [
     "cointmu",
