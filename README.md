@@ -428,9 +428,13 @@ cmu wallet delete admin      # asks first; --yes skips the question
   was and exits 1; replacing it deletes that key for good. Keep it first with
   `cmu wallet save <name> --session`: it copies the encrypted key into
   `~/.cmu-wallets.json` without decrypting it, so it needs no terminal and
-  the saved wallet opens with the session's password. A session with no
-  readable key (missing, corrupt, or from before AES-GCM) is replaced without
-  a question.
+  the saved wallet opens with the session's password. A key this version of
+  cmu cannot open (written by cmu 1.3.1 or older, before AES-GCM) gets the
+  same question, and so does a file that is not valid JSON, since cmu cannot
+  tell whether it holds a key. On yes, `use` first copies that file to
+  `.cmu-session.bak-<time>` next to it, owner-only; `save --session` cannot
+  keep such a key. Only a session with no key - missing, blank, or valid JSON
+  without an encrypted key - is replaced without a question.
 
 **Prompts need a terminal.** `save`, `create --save`, `use` and `delete` without `--yes`
 fail with an error when stdin is not a TTY instead of hanging. So does the
