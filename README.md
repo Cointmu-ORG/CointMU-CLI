@@ -40,6 +40,24 @@ cmu update --to 1.3.1
 > (`npm error code EALLOWGIT`). Escape once with `npm install -g cointmu-cli@latest`
 > — from 1.3.3 onward `cmu update` goes through the registry and works normally.
 
+#### Update notice
+
+After `cmu create`, `cmu compile` or `cmu test` succeeds, cmu prints a short
+box on stderr when a newer version is published (patch releases included):
+`Update available <current> → <latest>` and `Run cmu update to update`. It
+uses [update-notifier](https://github.com/sindresorhus/update-notifier): at
+most once a day a background process asks the npm registry for the latest
+version, and the next run shows the result once. The first check runs a day
+after the first such command, so a fresh install shows nothing at first.
+
+No other command shows it or loads the checker, and it never appears when the
+command fails, in CI, when stdout or stderr is not a terminal, or when cmu
+runs through npm or yarn (`npm run`, `npx`). To turn it off, set
+`CMU_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER` (any value). Its state lives
+in `~/.config/configstore/update-notifier-cointmu-cli.json`
+(`%USERPROFILE%\.config\...` on Windows, `$XDG_CONFIG_HOME/configstore/` when
+that is set), not next to the `~/.cmu-*` files.
+
 #### Upgrade note: an existing `~/.cmu-session` becomes the global session
 
 **Who is affected.** Anyone who ran `cmu wallet use` (or `cmu wallet login`

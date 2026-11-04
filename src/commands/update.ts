@@ -5,7 +5,7 @@ import { isStartFailure, startFailure } from "../utils/exec";
 import { resolveCommand } from "../utils/npmCommand";
 import { readPkg } from "../utils/pkg";
 
-const PACKAGE_NAME = "cointmu-cli";
+export const PACKAGE_NAME = "cointmu-cli";
 
 // Accepts semver versions, semver ranges, and npm dist-tags (e.g. "latest").
 // Rejects anything carrying shell metacharacters ($()  ` ; | & ( ) etc.) or a
