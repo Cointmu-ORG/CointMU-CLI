@@ -24,6 +24,10 @@ describe("the session password prompt without a terminal", () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-noninteractive-"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    // A folder without .cmu-session falls back to ~/.cmu-session: keep that
+    // one in tmpDir too, never the developer's real home.
+    vi.stubEnv("HOME", tmpDir);
+    vi.stubEnv("USERPROFILE", tmpDir);
     // Never reset during a test, so the leak check sees everything printed.
     printed = [];
     for (const method of ["log", "warn", "error"] as const) {
@@ -40,6 +44,7 @@ describe("the session password prompt without a terminal", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     vi.doUnmock("inquirer");
     vi.resetModules();

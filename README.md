@@ -40,6 +40,37 @@ cmu update --to 1.3.1
 > (`npm error code EALLOWGIT`). Escape once with `npm install -g cointmu-cli@latest`
 > — from 1.3.3 onward `cmu update` goes through the registry and works normally.
 
+#### Upgrade note: an existing `~/.cmu-session` becomes the global session
+
+**Who is affected.** Anyone who ran `cmu wallet use` (or `cmu wallet login`
+before 1.6.0) with the home directory as the working folder. That wrote
+`~/.cmu-session` (`%USERPROFILE%\.cmu-session` on Windows), which older
+releases read only when cmu ran in the home directory itself.
+
+**What happens.** After the upgrade, that same file is the global session
+([Named Wallets](#-named-wallets)). Every folder without its own
+`.cmu-session` uses its wallet and network - including projects you clone
+later - and `cmu deploy` / `cmu console` there offer its key to the project's
+code once you type its password. There is no prompt or opt-in, and the upgrade
+neither moves nor changes the file. Folders with their own `.cmu-session`
+keep using that file.
+
+**How to check.** Run `cmu wallet info` in a project folder without its own
+`.cmu-session`. `Session file : ~/.cmu-session` means the global file is in
+effect there, and `Address` names its wallet. If there is no global session,
+`cmu wallet info` there fails with `no active session`.
+
+**How to keep it separate.**
+
+- Move it out of the home directory, for example
+  `mv ~/.cmu-session ~/cmu-session.old`, or into the project it was meant for
+  as that folder's `.cmu-session`. The file keeps its password. Folders
+  without an override then have no session until you run `cmu wallet use <name>`.
+- Or keep it global and give a folder its own wallet with
+  `cmu wallet use <name> --local`: that writes `./.cmu-session` in that folder
+  only and leaves `~/.cmu-session` unchanged. Run from the home directory,
+  `--local` writes `~/.cmu-session` itself, since there the two are the same file.
+
 ### 💻 Local Development Setup (NPM)
 
 If you are developing or contributing to the CLI itself, you can easily set it up locally:
@@ -107,8 +138,9 @@ Commands:
     balance                   Fetch and display the native token balance of the active wallet
     info                      Display the current active wallet session information
     save|add <name>           Save a private key as a named, encrypted wallet
-                              (--session: save this project's session key instead)
-    use <name>                Make a saved wallet the active session in this project
+                              (--session: save the active session's key instead)
+    use <name>                Make a saved wallet the active session (~/.cmu-session, or
+                              this folder's .cmu-session if it has one; --local: create one)
     list                      List saved wallets
     delete <name>             Delete a saved wallet
     transfer|tf <to> <amount> Send the network's native coin from the session wallet (-y skips the confirmation)
@@ -126,7 +158,7 @@ Commands:
   network [options]           Manage active RPC networks locally
     save <url> -n <name>      Save a new network or update an existing one
                               (--symbol <SYMBOL>: coin symbol amounts are labelled with)
-    use <name>                Switch the active network to the specified name
+    use <name>                Switch the active network to the specified name (in the active session)
     list                      List all saved networks
     delete <name>             Delete a saved network
     info                      Display the active network configuration
@@ -163,6 +195,8 @@ always have 18 decimals.
 - `cmu console` then runs whatever you type at the prompt, with your full environment and the key it decrypted for `signer`.
 
 This is by design and cannot be removed without breaking deployment itself — it is the same trust model as Hardhat, Foundry and Truffle. A deploy script that wants to exfiltrate your key only has to read `process.env.PRIVATE_KEY`, and encrypting `.cmu-session` at rest does not help once the script is running.
+
+**The active wallet follows you into every project.** `cmu wallet use` stores the session in `~/.cmu-session`, and every folder without its own `.cmu-session` uses it - including a repository you cloned a minute ago. Running `cmu deploy` or `cmu console` there offers that wallet's key to the project's code as soon as you type its password. What stands in the way is the same as before: the file list and confirmation below, which come before any project code runs; the password prompt, which names the address and needs a terminal; and the encryption of the key at rest. To keep an unfamiliar project away from your main wallet, give that folder a throwaway one with `cmu wallet use <throwaway> --local`.
 
 **Never run `cmu deploy`, `cmu compile`, `cmu test`, `cmu console` or `cmu explorer` in a project you did not write or do not trust.** Read `deploy/` and `cmu.config.ts` before the first run, the same way you would read any script before executing it.
 
@@ -232,14 +266,17 @@ _(You will be interactively prompted to choose between TypeScript/JavaScript and
 cd my-awesome-dapp
 ```
 
-4. **Pick the wallet for this project**: ⚙️
+4. **Make it the active wallet**: ⚙️
 
 ```bash
 cmu wallet use deployer
 ```
 
-_(`cmu deploy` then asks for that wallet's password. In CI, rename `.env.example`
-to `.env` and set `PRIVATE_KEY` instead - it takes precedence over the wallet.)_
+_(This writes `~/.cmu-session`, so every project without its own `.cmu-session`
+uses `deployer` - you do it once, not per project. `cmu deploy` then asks for
+that wallet's password. `cmu wallet use <name> --local` gives just this folder a
+different wallet. In CI, rename `.env.example` to `.env` and set `PRIVATE_KEY`
+instead - it takes precedence over the wallet.)_
 
 5. **Compile your smart contracts**: 🔨
 
@@ -321,35 +358,56 @@ The explorer is read-only: there is no signer, so it never asks for your session
 
 ## 👛 Named Wallets
 
-Save each key once under a name, then pick one per project:
+Save each key once under a name, then pick the active one:
 
 ```bash
 cmu wallet create --save dev # new wallet: prompts for a password (twice), prints the mnemonic
 cmu wallet save deployer     # existing key: prompts for it and a password (twice)
 cmu wallet save admin        # every wallet has its own password
-cmu wallet save old --session # keep this project's session key; opens with the session password
+cmu wallet save old --session # keep the active session's key; opens with the session password
 cmu wallet list              # names and addresses; no password needed
-cmu wallet use deployer      # prompts for deployer's password
+cmu wallet use deployer      # prompts for deployer's password; active in every project
+cmu wallet use admin --local # this folder only: writes ./.cmu-session
 cmu wallet delete admin      # asks first; --yes skips the question
 ```
 
-- **Saved wallets are global, the active wallet is per project.** Wallets live
-  in `~/.cmu-wallets.json`. `cmu wallet use` writes `.cmu-session` in the
-  current directory, so two projects can use different wallets at the same
-  time. `cmu wallet list` marks the one this project uses.
+- **Saved wallets and the active wallet are global; a folder can override
+  the active one.** Wallets live in `~/.cmu-wallets.json`, the active session
+  in `~/.cmu-session`. A folder with its own `.cmu-session` uses that file
+  instead, and only that file is read there. cmu reads
+  `./.cmu-session` when it exists and `~/.cmu-session` otherwise.
+- **`cmu wallet use` writes the session in effect.** In a folder with its own
+  `.cmu-session` it replaces that one; anywhere else it replaces
+  `~/.cmu-session`, and every folder without an override follows.
+  `--local` creates (or replaces) `./.cmu-session` on purpose, so two projects
+  can use different wallets at the same time. `use` ends by naming the file it
+  wrote. `cmu wallet info` shows which file is in effect, and
+  `cmu wallet list` marks the wallet it holds.
+- **The active network lives in the same file.** `cmu network use` switches
+  it in the session in effect, so a folder's override has its own network.
+  `cmu deploy`, `cmu console` and `cmu explorer` follow `cmu.config.ts`
+  (`defaultNetwork`, `-n`) instead, as before.
+- **Project files stay per project.** `.env` (`PRIVATE_KEY`),
+  `deployments/<network>/` and `cmu.config.*` are read from the project as
+  before; only the active wallet and network moved to `~/.cmu-session`.
+- **Existing project sessions keep working.** A `.cmu-session` already in a
+  project is an override: it is used there, unchanged, and is neither moved
+  nor deleted. To use the global session in that folder, move the file
+  out of the way.
 - **Same encryption as the session.** Each key is stored with AES-256-GCM and a
   PBKDF2-derived key, exactly like `.cmu-session`; only the name and address
-  are stored in plaintext. `use` copies the encrypted key into `.cmu-session`,
-  so `cmu deploy` asks for that wallet's password.
-- **`use` keeps your network.** The active network picked with
-  `cmu network use` carries over.
+  are stored in plaintext. `use` copies the encrypted key into the session
+  file, so `cmu deploy` asks for that wallet's password.
+- **`use` keeps your network.** The active network of the session in effect
+  carries over - into a new `--local` override too.
 - **`create --save` does not activate the wallet.** Run `cmu wallet use <name>`
-  in each project that should sign with it. The private key is never printed;
-  the mnemonic is printed once and is the only backup, since the store keeps
-  just the encrypted key.
-- **Deleting is local to the store.** A project that already ran
-  `cmu wallet use <name>` keeps its own encrypted copy in `.cmu-session` and
-  keeps working. cmu keeps no other copy of a deleted wallet's key.
+  to make it the active wallet (`--local` for one folder). The private key is
+  never printed; the mnemonic is printed once and is the only backup, since
+  the store keeps just the encrypted key.
+- **Deleting is local to the store.** A session made with
+  `cmu wallet use <name>` - `~/.cmu-session` or a folder's `.cmu-session` -
+  keeps its own encrypted copy and keeps working. cmu keeps no other copy of a
+  deleted wallet's key.
 - **Names** are 1-32 lowercase letters, digits, `-` or `_`. Saving under a name
   that is taken is refused - delete the old wallet first.
 - **`cmu wallet login` and `cmu wallet create --login` were removed in
@@ -361,7 +419,9 @@ cmu wallet delete admin      # asks first; --yes skips the question
   change - so `deploy`, `console`, `transfer` and the rest keep using it with
   its password.
 - **A key that is not saved is never replaced without asking.** `use` checks
-  `.cmu-session` before any prompt. If it holds a key whose address is not a
+  the file it is about to write - `~/.cmu-session` or `./.cmu-session`, named
+  in the question - before any prompt. A backup it keeps is written next to
+  that file. If it holds a key whose address is not a
   saved wallet - such as one written by `login` or `create --login` before
   1.6.0 - it names that address and asks
   `Replace it anyway? (y/N)`. Answering no (or Ctrl-C) leaves the file as it
@@ -378,9 +438,10 @@ replace question above; there is no flag to skip it. `save --session` asks
 nothing and works anywhere. In CI, set
 `PRIVATE_KEY` instead - `cmu deploy` uses it before any session.
 
-**File permissions.** On Linux and macOS, `~/.cmu-wallets.json` and
-`.cmu-session` are written with mode `0600` (owner only), and an existing file
-with a looser mode is tightened on the next write. Both are written to a temp
+**File permissions.** On Linux and macOS, `~/.cmu-wallets.json`,
+`~/.cmu-session` and a folder's `.cmu-session` are written with mode `0600`
+(owner only), and an existing file with a looser mode is tightened on the next
+write. On Windows `~` is your user profile folder (`%USERPROFILE%`). All are written to a temp
 file and renamed into place, so an interrupted write leaves the old file
 intact. On Windows, `chmod` only
 toggles the read-only attribute: the file is protected by the ACL it inherits
@@ -399,7 +460,8 @@ cmu wallet transfer 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC 1.5
 cmu wallet tf 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC 0.25 --yes
 ```
 
-`transfer` sends from the wallet in this project's `.cmu-session`, on its
+`transfer` sends from the wallet in the active session (this folder's
+`.cmu-session`, else `~/.cmu-session`; the summary names it), on its
 active network (the same ones `cmu wallet balance` uses). It checks
 everything it can before asking for anything:
 
@@ -425,7 +487,7 @@ which defaults to **No**.
   confirmation.
 - Warnings are printed for the zero address, for sending to yourself, and
   for a recipient that is a contract.
-- The key always comes from `.cmu-session`. `PRIVATE_KEY` (including one
+- The key always comes from the session file. `PRIVATE_KEY` (including one
   loaded from `.env`) is **ignored** here, with a warning, so that the
   account that pays is always the one shown.
 - The session password has to be typed, so `transfer` needs a terminal.

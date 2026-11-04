@@ -50,7 +50,7 @@ describe("wallet delete", () => {
 
     expect(readWallets().wallets).toEqual([]);
     expect(decryptSessionKey(PASSWORD, readSession())).toBe(KEY);
-    expect(output()).toContain("keep their own encrypted copy");
+    expect(output()).toContain("keeps its own encrypted copy");
   });
 
   it("refuses a wallet that is not saved", async () => {

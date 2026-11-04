@@ -3,7 +3,7 @@ import { sameAddress } from "./savedWallets";
 import { sessionAddress } from "./activeSession";
 
 /**
- * Lists the saved wallets, marking the ones this project's session holds.
+ * Lists the saved wallets, marking the ones the session in effect holds.
  * @returns {Promise<void>}
  */
 export async function runWalletList(): Promise<void> {

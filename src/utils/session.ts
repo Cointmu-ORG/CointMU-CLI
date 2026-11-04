@@ -1,10 +1,11 @@
 import * as crypto from "crypto";
-import * as path from "path";
 import { existsSync } from "fs";
 import { chmod, readFile, rename, rm, writeFile } from "fs/promises";
+import { getSessionFilePath } from "./sessionLocation";
+
+export { getSessionFilePath } from "./sessionLocation";
 
 const ALGORITHM = "aes-256-gcm";
-const SESSION_FILE_NAME = ".cmu-session";
 const SALT_BYTES = 16;
 const IV_BYTES = 12; // 96-bit IV is the standard nonce size for AES-GCM
 const KEY_LENGTH = 32;
@@ -30,18 +31,6 @@ export const LEGACY_PBKDF2_ITERATIONS = 100000;
 
 /** Minimum length for a new session password. */
 export const MIN_PASSWORD_LENGTH = 12;
-
-/**
- * Absolute path to the session file in the current project.
- *
- * Resolved on every call rather than memoised at import time: the CLI reads it
- * relative to the working directory, and tests stub process.cwd().
- *
- * @returns {string} The absolute path to .cmu-session.
- */
-export function getSessionFilePath(): string {
-  return path.resolve(process.cwd(), SESSION_FILE_NAME);
-}
 
 const COMMON_WEAK_PASSWORDS = new Set([
   "password",
@@ -74,7 +63,8 @@ export interface EncryptedKey {
 }
 
 /**
- * The parsed .cmu-session of the current project, or null when there is none.
+ * The parsed session in effect - this folder's .cmu-session, else
+ * ~/.cmu-session - or null when there is none.
  *
  * The one read every caller shares: existsSync + readFile + JSON.parse used to
  * be copied into each command that needed the session. Malformed JSON still
@@ -82,10 +72,13 @@ export interface EncryptedKey {
  * cannot be read is not the same thing as no session, and only `wallet use`
  * treats it as recoverable.
  *
+ * @param {string} [sessionFile] - The file to read; defaults to the one in
+ *   effect (see getSessionFilePath()).
  * @returns {Promise<SessionData | null>} The session, or null if absent.
  */
-export async function readSession(): Promise<SessionData | null> {
-  const sessionFile = getSessionFilePath();
+export async function readSession(
+  sessionFile: string = getSessionFilePath(),
+): Promise<SessionData | null> {
   if (!existsSync(sessionFile)) return null;
   return JSON.parse(await readFile(sessionFile, "utf8"));
 }
@@ -258,7 +251,8 @@ export function decryptSessionKey(
  * Resolves a usable private key for the current CLI run.
  *
  * Priority: process.env.PRIVATE_KEY wins (env override, fully backward
- * compatible). Otherwise, if an encrypted .cmu-session exists, prompt once
+ * compatible). Otherwise, if the session in effect (this folder's
+ * .cmu-session, else ~/.cmu-session) holds an encrypted key, prompt once
  * for its password, decrypt, and cache the result in memory for the rest of
  * the process. Returns undefined when neither source is available so callers
  * can keep their existing "not defined" error behavior.

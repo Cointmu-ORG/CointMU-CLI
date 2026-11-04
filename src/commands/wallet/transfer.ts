@@ -3,6 +3,10 @@ import { coinSymbol } from "../../utils/coinSymbol";
 import { getDynamicNetwork } from "../../utils/network";
 import { loadWallets } from "../../utils/walletStorage";
 import { decryptSessionKey, requireSession } from "../../utils/session";
+import {
+  describeSessionFile,
+  getSessionFilePath,
+} from "../../utils/sessionLocation";
 import { requireInteractive, promptOrAbort } from "./prompts";
 import { sameAddress } from "./savedWallets";
 import { parseTransferAddress, parseTransferAmount } from "./transferInput";
@@ -187,9 +191,10 @@ export async function runWalletTransfer(
   );
   // The balance above was checked for the plaintext session address; make
   // sure that is really who signs.
+  const sessionFile = describeSessionFile(getSessionFilePath());
   if (!sameAddress(signer.address, from)) {
     throw new Error(
-      `.cmu-session names ${from}, but its key belongs to another address - the file has been modified.\n` +
+      `${sessionFile} names ${from}, but its key belongs to another address - the file has been modified.\n` +
         "\x1b[2mhint:\x1b[0m run `cmu wallet use <name>` again.",
     );
   }
@@ -206,7 +211,7 @@ export async function runWalletTransfer(
   console.log("\n--- Transfer ---");
   console.log(`Network : ${network.name} (chain ID ${chainId})`);
   console.log(
-    `From    : ${signer.address} (.cmu-session${savedAs ? `, saved as '${savedAs}'` : ""})`,
+    `From    : ${signer.address} (${sessionFile}${savedAs ? `, saved as '${savedAs}'` : ""})`,
   );
   console.log(`To      : ${to}`);
   console.log(

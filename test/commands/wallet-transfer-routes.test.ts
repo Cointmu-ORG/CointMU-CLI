@@ -52,7 +52,7 @@ describe("wallet transfer", () => {
       });
       expect(output()).toContain("Network : local (chain ID 1912)");
       expect(output()).toContain(
-        `From    : ${ADDRESS_A} (.cmu-session, saved as 'deployer')`,
+        `From    : ${ADDRESS_A} (~/.cmu-session, saved as 'deployer')`,
       );
       expect(output()).toContain(`To      : ${TO}`);
       expect(output()).toContain(`Amount  : 1.5 ETH (${AMOUNT_WEI} wei)`);
@@ -72,7 +72,7 @@ describe("wallet transfer", () => {
       expect(sendTransaction.mock.contexts[0]).toMatchObject({
         address: ADDRESS_B,
       });
-      expect(output()).toContain(`From    : ${ADDRESS_B} (.cmu-session)`);
+      expect(output()).toContain(`From    : ${ADDRESS_B} (~/.cmu-session)`);
       expectNoKeyLeak();
     });
 

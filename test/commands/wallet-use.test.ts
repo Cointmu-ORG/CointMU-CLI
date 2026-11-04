@@ -59,7 +59,9 @@ describe("wallet use", () => {
     expect(line("a")).not.toContain("[*]");
   });
 
-  it("keeps each project's active wallet independent", async () => {
+  // The active wallet is global: folders without their own .cmu-session share
+  // ~/.cmu-session (HOME is tmpDir), so the last `use` wins in all of them.
+  it("makes the wallet active in every folder without a session of its own", async () => {
     await save("a");
     await save("b", KEY_B);
     const p1 = path.join(tmpDir, "p1");
@@ -74,8 +76,9 @@ describe("wallet use", () => {
 
     const sessionIn = (dir: string): SessionData =>
       JSON.parse(fs.readFileSync(path.join(dir, ".cmu-session"), "utf8"));
-    expect(sessionIn(p1).address).toBe(ADDRESS_A);
-    expect(sessionIn(p2).address).toBe(ADDRESS_B);
+    expect(fs.existsSync(path.join(p1, ".cmu-session"))).toBe(false);
+    expect(fs.existsSync(path.join(p2, ".cmu-session"))).toBe(false);
+    expect(sessionIn(tmpDir).address).toBe(ADDRESS_B);
   });
 
   // Regression guard for #126 on the new path into the session.

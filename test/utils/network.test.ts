@@ -28,10 +28,15 @@ describe("getDeployNetwork private key resolution", () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-deploy-net-"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    // A folder without .cmu-session falls back to ~/.cmu-session: keep that
+    // one in tmpDir too, never the developer's real home.
+    vi.stubEnv("HOME", tmpDir);
+    vi.stubEnv("USERPROFILE", tmpDir);
     delete process.env.PRIVATE_KEY;
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     vi.resetModules();
     if (realIsTTY) Object.defineProperty(process.stdin, "isTTY", realIsTTY);
@@ -234,9 +239,13 @@ describe("activeNetworkName", () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-active-name-"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    // No session here means none in HOME either.
+    vi.stubEnv("HOME", tmpDir);
+    vi.stubEnv("USERPROFILE", tmpDir);
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     vi.resetModules();
     fs.rmSync(tmpDir, { recursive: true, force: true });
