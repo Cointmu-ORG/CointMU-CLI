@@ -24,7 +24,10 @@ import {
   requireSession,
   writeSessionFile,
 } from "../../utils/session";
-import { describeSessionFile } from "../../utils/sessionLocation";
+import {
+  describeSessionFile,
+  getGlobalSessionFilePath,
+} from "../../utils/sessionLocation";
 import { runNetworkPing } from "./ping";
 
 /**
@@ -109,12 +112,7 @@ async function runNetworkDelete(name: string): Promise<void> {
         `\x1b[2mhint:\x1b[0m point it at another endpoint with \`cmu network save <url> --name ${LOCAL_NETWORK_NAME}\`.`,
     );
   }
-  if ((await readSession())?.activeNetwork === name) {
-    throw new Error(
-      `network '${name}' is currently active and cannot be deleted.\n` +
-        "\x1b[2mhint:\x1b[0m switch away first with `cmu network use <name>`.",
-    );
-  }
+  await refuseNetworkInUse(name);
 
   // false is deleteNetwork()'s "no such network": one lookup, not a check
   // beforehand that the delete then repeats.
@@ -125,6 +123,44 @@ async function runNetworkDelete(name: string): Promise<void> {
     );
   }
   console.log(`Deleted network '${name}'`);
+  console.log(
+    `\x1b[2mhint:\x1b[0m another folder's .cmu-session still on '${name}' is not checked: run \`cmu network use <name>\` there.`,
+  );
+}
+
+/**
+ * Throws when a session `delete` can find has `name` as its active network
+ * (#262): the session in effect, and ~/.cmu-session, which every folder
+ * without an override shares. A .cmu-session in another folder cannot be
+ * found - cmu keeps no list of projects.
+ *
+ * @param {string} name - The network about to be deleted.
+ * @returns {Promise<void>} Resolves when no session it can find uses it.
+ * @throws {Error} Naming each file that uses it and how to switch it away.
+ */
+async function refuseNetworkInUse(name: string): Promise<void> {
+  const inEffect = getSessionFilePath();
+  // One file when there is no override, or when run from the home folder.
+  const files = [...new Set([inEffect, getGlobalSessionFilePath()])];
+  const using: string[] = [];
+  for (const file of files) {
+    if ((await readSession(file))?.activeNetwork === name) using.push(file);
+  }
+  if (using.length === 0) return;
+
+  // `network use` switches the session in effect, so the global file needs
+  // a folder that has no override of its own.
+  const hints = using.map((file) => {
+    const where =
+      file === inEffect
+        ? ""
+        : " in a folder without its own .cmu-session, such as your home folder";
+    return `\x1b[2mhint:\x1b[0m switch ${describeSessionFile(file)} away first with \`cmu network use <name>\`${where}.`;
+  });
+  throw new Error(
+    `network '${name}' is currently active in ${using.map(describeSessionFile).join(" and ")} and cannot be deleted.\n` +
+      hints.join("\n"),
+  );
 }
 
 /**
