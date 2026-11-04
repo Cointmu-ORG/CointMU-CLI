@@ -29,7 +29,12 @@ describe("decryptSessionKey", () => {
 
   it("throws a clear error when the ciphertext was tampered with", () => {
     const session = makeSession();
-    session.encryptedKey = "00" + session.encryptedKey!.slice(2);
+    // #261: flip every bit of the first byte. Overwriting it with a fixed
+    // value left the ciphertext unchanged whenever the random byte already
+    // was that value (1 run in 256), and the intact tag then verified.
+    const first = parseInt(session.encryptedKey!.slice(0, 2), 16) ^ 0xff;
+    session.encryptedKey =
+      first.toString(16).padStart(2, "0") + session.encryptedKey!.slice(2);
     expect(() => decryptSessionKey(PASSWORD, session)).toThrow(
       /Invalid session password/,
     );
