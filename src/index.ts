@@ -10,6 +10,7 @@ import "./preflight";
 import * as path from "path";
 import { Command } from "commander";
 import { readPkg } from "./utils/pkg";
+import { registerUpdateNotice } from "./utils/updateNotice";
 import { ariesCommand } from "./commands/aries";
 import { auditCommand } from "./commands/audit";
 import { compileCommand } from "./commands/compile";
@@ -68,6 +69,7 @@ for (const cmd of [
 ]) {
   program.addCommand(cmd, { hidden: HIDDEN_COMMANDS.has(cmd.name()) });
 }
+registerUpdateNotice(program);
 
 /**
  * Parses process arguments and runs the matching command.
