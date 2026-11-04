@@ -387,6 +387,14 @@ cmu wallet delete admin      # asks first; --yes skips the question
   it in the session in effect, so a folder's override has its own network.
   `cmu deploy`, `cmu console` and `cmu explorer` follow `cmu.config.ts`
   (`defaultNetwork`, `-n`) instead, as before.
+- **`cmu network delete` checks the sessions it can find.** It refuses a
+  network that the session in effect or `~/.cmu-session` has active, names
+  the file, and says how to switch it away; for `~/.cmu-session` from a
+  folder with an override, run `cmu network use <name>` in a folder without
+  one, such as your home folder. A `.cmu-session` in another folder cannot be
+  found - cmu keeps no list of projects - so after a delete such a session
+  may point at a network that is gone. Its commands then fail, saying the
+  network is no longer saved, until `cmu network use <name>` is run there.
 - **Project files stay per project.** `.env` (`PRIVATE_KEY`),
   `deployments/<network>/` and `cmu.config.*` are read from the project as
   before; only the active wallet and network moved to `~/.cmu-session`.
