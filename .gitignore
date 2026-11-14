@@ -135,3 +135,4 @@ graphify-out
 .cmu-session.bak-*
 .cmu-networks.json
 .cmu-wallets.json
+.codegraph
