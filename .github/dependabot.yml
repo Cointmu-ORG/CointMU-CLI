@@ -8,3 +8,10 @@ updates:
       time: "09:00"
       timezone: "UTC"
     open-pull-requests-limit: 10
+    # One PR for all npm bumps instead of one per dependency.
+    groups:
+      npm-dependencies:
+        patterns: ["*"]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
