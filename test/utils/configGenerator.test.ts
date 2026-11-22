@@ -77,6 +77,22 @@ describe("generateConfigFiles", () => {
       expect(lines).toContain(".cmu-session.bak-*");
     });
 
+    // A project that uses the global ~/.cmu-networks.json gets no cmu.config
+    // at all: there is nothing of its own to execute as code.
+    it(`writes no ${file} for a project on the global config, ${language}`, async () => {
+      await generateConfigFiles(tmpDir, language, "global");
+
+      expect(fs.readdirSync(tmpDir).sort()).toEqual(
+        [".env.example", ".gitignore"].sort(),
+      );
+    });
+
+    it(`writes ${file} when the project asks for its own config, ${language}`, async () => {
+      await generateConfigFiles(tmpDir, language, "project");
+
+      expect(fs.existsSync(path.join(tmpDir, file))).toBe(true);
+    });
+
     it(`ignores only the local devnet's deployment records for ${language}`, async () => {
       await generateConfigFiles(tmpDir, language);
 

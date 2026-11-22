@@ -128,7 +128,7 @@ When you scaffold a new project using `cmu create`, the following pristine direc
   - Not detected: contracts created by another contract (factories), contracts deployed with a key other than the one `cmu deploy` injects, and contracts whose artifact still has unlinked library placeholders (listed as `(unrecognised)` in the summary). A deploy that spans more than 1000 blocks is not recorded.
   - Older scaffolds wrote a flat `deployments/<Contract>.json`; CointMU never reads that file.
 - 🛠️ `scripts/`: For ad-hoc utility scripts. Use this sandbox directory for tasks like checking balances, interacting with deployed contracts, or database seeding.
-- ⚙️ `cmu.config.ts`: The main brain/configuration file where you define your target networks, RPC URLs, chain IDs, and compiler versions.
+- ⚙️ `cmu.config.ts` / `cmu.config.js` (only for a project with its own config): where the project defines its target networks, RPC URLs, chain IDs and compiler settings. By default `cmu create` writes none, and the project uses the networks saved in `~/.cmu-networks.json`; see [Global networks and project config](#global-networks-and-project-config).
 - 🔐 `.env`: For sensitive variables like private keys. (A `.env.example` is generated for you automatically!)
 
 The `cmu create` command now offers these templates: `blank`, `erc20`, `erc721`, `erc1155`, `dao`, `marketplace`, `staking`, `airdrop`, `vault`, and `kyberion`.
@@ -203,13 +203,54 @@ the same way, run `cmu network save http://127.0.0.1:8585 --name local --symbol 
 projects are scaffolded with `symbol: "CMU"`. The symbol is only a label: amounts
 always have 18 decimals.
 
+### Global networks and project config
+
+Networks are global by default, the way the active wallet is: a network saved
+with `cmu network save` can be used from any folder. A project can override
+them with a `cmu.config.ts` or `cmu.config.js` of its own. `cmu deploy`,
+`cmu console` and `cmu explorer` pick the network like this:
+
+1. **The folder has a `cmu.config.ts` or `cmu.config.js`.** Only that file is
+   read, exactly as in earlier releases: `-n <name>`, else `defaultNetwork`,
+   else `local`. A network the config does not define is an error, even if
+   `~/.cmu-networks.json` saves one with that name - the override is the whole
+   file, not network by network.
+2. **The folder has no config.** `-n <name>` is looked up in
+   `~/.cmu-networks.json`. The error for a name that is not saved there names
+   that file.
+3. **No config and no `-n`.** The local devnet, as before. The network the
+   session selected with `cmu network use` is not used here: deploying
+   anywhere but the devnet always takes an explicit `-n`.
+
+```bash
+cmu network save https://rpc.example.com --name testnet --symbol CMU
+cmu deploy -n testnet      # in a folder without cmu.config
+```
+
+`~/.cmu-networks.json` stores no chain ID, so for a saved network `cmu deploy`
+asks the node for it before running any deploy script, and passes it on as
+`CMU_CHAIN_ID`. If the node cannot be reached or reports no usable chain ID,
+the deploy stops there, naming the endpoint with any credentials masked.
+`cmu deploy --config` does not contact the node and shows the chain ID as not
+configured.
+
+The network is checked before anything slow or risky: without a config, before
+the trust prompt; with one, right after the prompt (the config is code) and
+before compiling. The session password is asked for last.
+
+`cmu create` asks whether the new project uses the global networks (the
+default) or a config of its own. Without a terminal it does not ask and uses
+the default; `--local-config` writes a `cmu.config` without asking
+(`cmu.config.ts` for TypeScript, `cmu.config.js` for JavaScript). Projects that
+already have a `cmu.config` keep working unchanged.
+
 ## 🔐 Trust Model
 
 `cmu deploy` and `cmu compile` **execute arbitrary code from the project directory**:
 
 - every `.ts`/`.js` file in `deploy/` is run as a program, and receives your decrypted `PRIVATE_KEY` through the environment so it can sign transactions;
 - every test file `cmu test` hands to mocha (`test/**/*.ts`, or `test/**/*.js` for a JavaScript suite) is run as a program, with your full environment — including anything in `.env` — and a `PRIVATE_KEY` for a devnet account;
-- `cmu.config.ts` / `cmu.config.js` is `require()`d from the current working directory, by `cmu compile`, `cmu test`, `cmu deploy`, `cmu console` and `cmu explorer` alike;
+- `cmu.config.ts` / `cmu.config.js`, when the project has one, is `require()`d from the current working directory, by `cmu compile`, `cmu test`, `cmu deploy`, `cmu console` and `cmu explorer` alike. `~/.cmu-networks.json`, which a project without a config uses, is read as JSON and never executed;
 - `cmu console` then runs whatever you type at the prompt, with your full environment and the key it decrypted for `signer`.
 
 This is by design and cannot be removed without breaking deployment itself — it is the same trust model as Hardhat, Foundry and Truffle. A deploy script that wants to exfiltrate your key only has to read `process.env.PRIVATE_KEY`, and encrypting `.cmu-session` at rest does not help once the script is running.
@@ -276,7 +317,7 @@ storing anything. See [Named Wallets](#-named-wallets) for juggling several keys
 cmu create my-awesome-dapp
 ```
 
-_(You will be interactively prompted to choose between TypeScript/JavaScript and select a template like blank, erc20, erc721, erc1155, dao, marketplace, staking, airdrop, vault, or kyberion!)_
+_(You will be interactively prompted to choose between TypeScript/JavaScript and select a template like blank, erc20, erc721, erc1155, dao, marketplace, staking, airdrop, vault, or kyberion, and whether the project uses the global networks in `~/.cmu-networks.json` (the default) or a `cmu.config` of its own. Pass `--local-config` to skip that question and write a `cmu.config`.)_
 
 3. **Navigate into your new project directory**: 📂
 
@@ -308,7 +349,7 @@ cmu compile
 cmu deploy
 ```
 
-_(This will automatically and sequentially execute the scripts in your `deploy/` folder, then print a summary of the contracts they deployed and record each one under `deployments/<network>/`)_
+_(This will automatically and sequentially execute the scripts in your `deploy/` folder, then print a summary of the contracts they deployed and record each one under `deployments/<network>/`. Without `-n` it deploys to the local devnet; in a project without `cmu.config`, `cmu deploy -n <name>` deploys to a network saved with `cmu network save`.)_
 
 7. **Test the connection to your local node**: 📡
 
@@ -403,8 +444,10 @@ cmu wallet delete admin      # asks first; --yes skips the question
   `cmu wallet list` marks the wallet it holds.
 - **The active network lives in the same file.** `cmu network use` switches
   it in the session in effect, so a folder's override has its own network.
-  `cmu deploy`, `cmu console` and `cmu explorer` follow `cmu.config.ts`
-  (`defaultNetwork`, `-n`) instead, as before.
+  `cmu deploy`, `cmu console` and `cmu explorer` do not follow it: they use
+  the project's `cmu.config` (`defaultNetwork`, `-n`) when it has one, else
+  the network `-n` names in `~/.cmu-networks.json`, else the local devnet -
+  see [Global networks and project config](#global-networks-and-project-config).
 - **`cmu network delete` checks the sessions it can find.** It refuses a
   network that the session in effect or `~/.cmu-session` has active, names
   the file, and says how to switch it away; for `~/.cmu-session` from a
@@ -415,7 +458,9 @@ cmu wallet delete admin      # asks first; --yes skips the question
   network is no longer saved, until `cmu network use <name>` is run there.
 - **Project files stay per project.** `.env` (`PRIVATE_KEY`),
   `deployments/<network>/` and `cmu.config.*` are read from the project as
-  before; only the active wallet and network moved to `~/.cmu-session`.
+  before; only the active wallet and network moved to `~/.cmu-session`. A
+  project without `cmu.config.*` takes its networks from
+  `~/.cmu-networks.json`.
 - **Existing project sessions keep working.** A `.cmu-session` already in a
   project is an override: it is used there, unchanged, and is neither moved
   nor deleted. To use the global session in that folder, move the file

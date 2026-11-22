@@ -5,8 +5,8 @@ import {
   type DeploymentRecord,
 } from "../utils/deployments";
 import { fail } from "../utils/errors";
-import { getDeployNetwork } from "../utils/network";
-import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
+import { resolveAroundTrust } from "../utils/deployTarget";
+import { confirmProjectTrust } from "../utils/trust";
 import { pingNetwork } from "./deploy";
 
 interface ExplorerOptions {
@@ -169,19 +169,20 @@ export async function runExplorer(
     );
   }
 
-  // getDeployNetwork() require()s cmu.config.ts, which is arbitrary project
+  // Resolving the network require()s cmu.config.ts, which is arbitrary project
   // code, so gate it the same way `cmu console` does. Only the config file is
   // listed: the explorer runs nothing else from the project.
   // readOnly: the explorer never signs and never unlocks the session, so the
   // PRIVATE_KEY wording `cmu deploy` gets would be untrue here.
-  await confirmProjectTrust([findProjectConfig()], {
-    yes: options.yes,
-    variant: "readOnly",
-  });
-
-  // Read-only by nature - there is no signer here - so the encrypted session
-  // is never touched and the password prompt never fires.
-  const network = await getDeployNetwork(options.network, { noPrompt: true });
+  // Without a config, a bad -n fails before the gate.
+  // Read-only by nature - there is no signer here - so no key is resolved,
+  // the encrypted session is never touched and no password prompt fires.
+  const network = await resolveAroundTrust(options.network, (configPath) =>
+    confirmProjectTrust([configPath], {
+      yes: options.yes,
+      variant: "readOnly",
+    }),
+  );
 
   // Fail here, with the endpoint named, rather than on a raw RPC error.
   await pingNetwork(network.url, network.name);

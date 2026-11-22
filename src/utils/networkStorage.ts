@@ -6,6 +6,8 @@ import * as path from "path";
 import { LOCAL_NETWORK_NAME, LOCAL_RPC_URL, LOCAL_SYMBOL } from "./defaults";
 
 const NETWORKS_FILE_NAME = ".cmu-networks.json";
+/** How messages name the networks file; it always lives in the home folder. */
+export const NETWORKS_FILE_LABEL = `~/${NETWORKS_FILE_NAME}`;
 const JSON_SPACES = 2;
 const TMP_SUFFIX_BYTES = 4;
 

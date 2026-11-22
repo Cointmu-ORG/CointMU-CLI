@@ -2,6 +2,7 @@ import { existsSync } from "fs";
 import * as path from "path";
 import { Command } from "commander";
 import { fail } from "../utils/errors";
+import type { ConfigLocation } from "../utils/configGenerator";
 import { pick, QUOTES } from "../utils/quotes";
 import {
   generateProject,
@@ -12,7 +13,36 @@ import {
 interface CreateOptions {
   template?: string;
   language?: string;
+  /** Write a cmu.config into the project instead of using the global one. */
+  localConfig?: boolean;
   verbose?: boolean;
+}
+
+/** The network config question; global is listed first and is the default. */
+const CONFIG_QUESTION = {
+  type: "select",
+  name: "configLocation",
+  message: "Network config:",
+  choices: [
+    { name: "Global (~/.cmu-networks.json)", value: "global" },
+    { name: "This project (cmu.config)", value: "project" },
+  ],
+  default: "global",
+};
+
+/**
+ * Where the new project's networks come from: --local-config picks a project
+ * cmu.config, a terminal is asked (undefined), and anything else - a script,
+ * a CI job - gets the global default without a question it cannot answer.
+ *
+ * @param {CreateOptions} options - CLI options.
+ * @returns {ConfigLocation | undefined} The location, or undefined to ask.
+ */
+function presetConfigLocation(
+  options: CreateOptions,
+): ConfigLocation | undefined {
+  if (options.localConfig) return "project";
+  return process.stdin.isTTY ? undefined : "global";
 }
 
 const cyan = (text: string) => `\x1b[36m${text}\x1b[0m`;
@@ -96,6 +126,7 @@ export async function runCreate(
 
   let template: string = options.template ?? "";
   let language: string = options.language ?? "";
+  let configLocation = presetConfigLocation(options);
 
   const questions = [];
 
@@ -120,14 +151,20 @@ export async function runCreate(
     });
   }
 
+  if (!configLocation) {
+    questions.push(CONFIG_QUESTION);
+  }
+
   if (questions.length > 0) {
     const answers = (await inquirer.prompt(questions)) as {
       language?: string;
       template?: string;
+      configLocation?: ConfigLocation;
     };
 
     if (!language && answers.language) language = answers.language;
     if (!template && answers.template) template = answers.template;
+    configLocation ??= answers.configLocation;
   }
 
   if (!validTemplates.includes(template)) {
@@ -148,7 +185,7 @@ export async function runCreate(
     );
   }
 
-  await generateProject(projectPath, template, language);
+  await generateProject(projectPath, template, language, configLocation);
 
   printWelcomeBanner(projectName, pick(QUOTES));
 }
@@ -163,6 +200,10 @@ export const createCommand = new Command("create")
   .option(
     "-l, --language <language>",
     "Language to use (typescript, javascript)",
+  )
+  .option(
+    "--local-config",
+    "Write a cmu.config into the project instead of using the global ~/.cmu-networks.json",
   )
   .action((project, options, command) =>
     runCreate(project, options).catch(
