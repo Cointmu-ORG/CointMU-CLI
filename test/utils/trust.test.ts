@@ -226,3 +226,57 @@ describe("findProjectConfig", () => {
     expect(findProjectConfig(tmpDir)).toBe(path.join(tmpDir, "cmu.config.ts"));
   });
 });
+
+// ts-node needs the project's own TypeScript, and TypeScript 7 ships no
+// JavaScript compiler API at all, so both cases must say so up front instead
+// of surfacing whatever ts-node throws.
+describe("loadProjectConfig TypeScript check", () => {
+  let tmpDir: string;
+  let configPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmu-trust-ts-"));
+    configPath = path.join(tmpDir, "cmu.config.ts");
+    fs.writeFileSync(configPath, "export default {};");
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function installFakeTypescript(version: string): void {
+    const dir = path.join(tmpDir, "node_modules", "typescript");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "package.json"),
+      JSON.stringify({ name: "typescript", version }),
+    );
+  }
+
+  it("names the TypeScript 7 it found and how to fix it", async () => {
+    installFakeTypescript("7.0.2");
+    const { loadProjectConfig } = await loadTrust();
+
+    await expect(loadProjectConfig(configPath)).rejects.toThrow(
+      /TypeScript 7\.0\.2[\s\S]*npm install --save-dev typescript@6/,
+    );
+  });
+
+  it("says TypeScript is missing when the project has none", async () => {
+    const { loadProjectConfig } = await loadTrust();
+
+    await expect(loadProjectConfig(configPath)).rejects.toThrow(
+      /no TypeScript was found[\s\S]*npm install --save-dev typescript@6/,
+    );
+  });
+
+  it("does not check TypeScript for a cmu.config.js", async () => {
+    const jsPath = path.join(tmpDir, "cmu.config.js");
+    fs.writeFileSync(jsPath, "module.exports = { defaultNetwork: 'x' };");
+    const { loadProjectConfig } = await loadTrust();
+
+    await expect(loadProjectConfig(jsPath)).resolves.toEqual({
+      defaultNetwork: "x",
+    });
+  });
+});

@@ -83,9 +83,10 @@ export async function runCompile(
     try {
       const cmuConfig = await loadProjectConfig(configPath);
       compilerSettings = cmuConfig?.compiler?.settings ?? {};
-    } catch {
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
       console.warn(
-        `\x1b[33mwarning:\x1b[0m could not load ${path.basename(configPath)}; using default compiler settings.`,
+        `\x1b[33mwarning:\x1b[0m could not load ${path.basename(configPath)}; using default compiler settings.\n${reason}`,
       );
     }
   }
