@@ -4,8 +4,9 @@ import { Command } from "commander";
 import { readRecord, verifyDeployed } from "../utils/deployments";
 import { fail } from "../utils/errors";
 import { maskUrl } from "../utils/maskUrl";
-import { getDeployNetwork } from "../utils/network";
-import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
+import { resolveAroundTrust } from "../utils/deployTarget";
+import { withDeployKey } from "../utils/network";
+import { confirmProjectTrust } from "../utils/trust";
 import { pingNetwork } from "./deploy";
 
 /** Shown in place of an address when --no-signer left the signer out. */
@@ -42,18 +43,21 @@ interface ConsoleOptions {
  *   resolved, or a key is present but unusable.
  */
 export async function resolveConsoleContext(options: ConsoleOptions = {}) {
-  // getDeployNetwork() require()s cmu.config.ts, which is arbitrary project
+  // Resolving the network require()s cmu.config.ts, which is arbitrary project
   // code, so gate it the same way `cmu compile` does. Only the config file is
   // listed: unlike deploy, the console never executes deploy/. --no-signer
   // decrypts nothing, so it gets compile's wording rather than the key warning.
-  await confirmProjectTrust([findProjectConfig()], {
-    yes: options.yes,
-    variant: options.signer === false ? "readOnly" : "default",
-  });
+  // Without a config, a bad -n fails before the gate.
+  const target = await resolveAroundTrust(options.network, (configPath) =>
+    confirmProjectTrust([configPath], {
+      yes: options.yes,
+      variant: options.signer === false ? "readOnly" : "default",
+    }),
+  );
 
   // --no-signer skips the session password prompt entirely, so a read-only
   // console can open in a project whose .cmu-session is locked.
-  const network = await getDeployNetwork(options.network, {
+  const network = await withDeployKey(target, {
     noPrompt: options.signer === false,
   });
 

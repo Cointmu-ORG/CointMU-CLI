@@ -6,8 +6,9 @@ import { startRecording } from "../utils/deployments";
 import { fail } from "../utils/errors";
 import { run } from "../utils/exec";
 import { maskUrl } from "../utils/maskUrl";
-import { getDeployNetwork } from "../utils/network";
-import { confirmProjectTrust, findProjectConfig } from "../utils/trust";
+import { resolveAroundTrust } from "../utils/deployTarget";
+import { withDeployKey } from "../utils/network";
+import { confirmProjectTrust } from "../utils/trust";
 import { runCompile } from "./compile";
 
 const NETWORK_TIMEOUT_MS = 3000;
@@ -55,7 +56,7 @@ export async function pingNetwork(
 ): Promise<number> {
   // An unset url is a broken entry, not an unreachable endpoint: dialing "" only
   // buys the user a NETWORK_TIMEOUT_MS wait and a message with a hole in it.
-  // getDeployNetwork() already rejects a cmu.config network without one, naming
+  // resolveDeployTarget() already rejects a network without one, naming
   // the file, so what still arrives here is a saved network (`wallet transfer`)
   // from a hand-edited .cmu-networks.json - `network save` refuses an empty url.
   if (!rpcUrl) {
@@ -134,12 +135,16 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
   // --config / --ping exit before any deploy script runs; only the project
   // config is loaded on those paths.
   const dryRun = Boolean(options.config || options.ping);
-  await confirmProjectTrust(
-    [
-      findProjectConfig(),
-      ...(dryRun ? [] : scripts.map((s) => path.join(deployDir, s))),
-    ],
-    { yes: options.yes },
+  // The network is resolved before compiling, so a bad -n never costs a
+  // compile - and, without a cmu.config, not even the trust prompt.
+  const target = await resolveAroundTrust(options.network, (configPath) =>
+    confirmProjectTrust(
+      [
+        configPath,
+        ...(dryRun ? [] : scripts.map((s) => path.join(deployDir, s))),
+      ],
+      { yes: options.yes },
+    ),
   );
 
   console.log("Compiling contracts...");
@@ -147,22 +152,21 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
   // being relabelled by the command that triggered the compile.
   await runCompile({ yes: options.yes }).catch(fail("compile", options));
 
-  const network = await getDeployNetwork(options.network, {
-    noPrompt: options.config || options.ping,
-  });
-
   if (options.ping) {
-    await pingNetwork(network.url, network.name);
+    await pingNetwork(target.url, target.name);
     return;
   }
 
   // ~/.cmu-networks.json stores no chain ID, so it is read from the node
-  // before anything uses it. --config never dials and prints it as unknown;
+  // before anything uses it, and before the password prompt so an unreachable
+  // node does not cost one. --config never dials and prints it as unknown;
   // past that early return, chainId is always a number.
   const chainId =
-    network.chainId ??
-    (options.config ? undefined : await pingNetwork(network.url, network.name));
+    target.chainId ??
+    (options.config ? undefined : await pingNetwork(target.url, target.name));
 
+  // The key comes last: resolving it may prompt for the session password.
+  const network = await withDeployKey(target, { noPrompt: options.config });
   const privateKey = network.privateKey;
 
   delete process.env.PRIVATE_KEY;

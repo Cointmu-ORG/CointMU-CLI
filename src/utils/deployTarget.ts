@@ -102,6 +102,33 @@ export async function resolveDeployTarget(
 }
 
 /**
+ * Resolves the target around the trust gate, so a network that cannot be
+ * resolved fails as early as it safely can. Without cmu.config the lookup
+ * reads only JSON and runs before `confirm`: a bad -n never costs the user a
+ * prompt. A config is code, so it is resolved only once `confirm` passed.
+ * Callers compile after this and resolve the key last.
+ *
+ * @param {string | undefined} targetNetwork - The -n value.
+ * @param {Function} confirm - The caller's confirmProjectTrust() call, given
+ *   findProjectConfig()'s result to list.
+ * @returns {Promise<DeployTarget>} The resolved network, without a key.
+ * @throws {Error} When the network cannot be resolved or trust is refused.
+ */
+export async function resolveAroundTrust(
+  targetNetwork: string | undefined,
+  confirm: (configPath: string | null) => Promise<void>,
+): Promise<DeployTarget> {
+  const configPath = findProjectConfig();
+  if (configPath) {
+    await confirm(configPath);
+    return resolveDeployTarget(targetNetwork, configPath);
+  }
+  const target = await resolveDeployTarget(targetNetwork, null);
+  await confirm(null);
+  return target;
+}
+
+/**
  * The network a cmu.config defines. Moved here unchanged from
  * getDeployNetwork(): every message is the same, word for word.
  *
