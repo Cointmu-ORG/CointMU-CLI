@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "fs/promises";
 import * as path from "path";
-import { generateConfigFiles } from "./configGenerator";
+import { type ConfigLocation, generateConfigFiles } from "./configGenerator";
 import { run } from "./exec";
 import { templates } from "../templates";
 
@@ -101,6 +101,7 @@ export async function generateProject(
   projectPath: string,
   template: string,
   language: string,
+  configLocation: ConfigLocation = "project",
 ): Promise<void> {
   const dirs = [
     "contracts",
@@ -135,7 +136,7 @@ describe("Deployment Template Test", function () {
     "utf8",
   );
 
-  await generateConfigFiles(projectPath, language);
+  await generateConfigFiles(projectPath, language, configLocation);
 
   if (language === TYPESCRIPT_LANG) {
     const tsconfig = {

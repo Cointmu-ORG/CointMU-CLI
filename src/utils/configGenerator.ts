@@ -11,6 +11,12 @@ import { JS_CONFIG_FILE, TS_CONFIG_FILE } from "./trust";
 const TYPESCRIPT_LANG = "typescript";
 
 /**
+ * Where a scaffolded project reads its networks from: the global
+ * ~/.cmu-networks.json (no cmu.config is written), or a cmu.config of its own.
+ */
+export type ConfigLocation = "global" | "project";
+
+/**
  * The scaffolded cmu.config, which differs between the two languages only in
  * how it exports the object.
  *
@@ -82,24 +88,31 @@ npm-debug.log*
 
 /**
  * Generates the standard boilerplate configuration files for a scaffolded project.
- * Writes the appropriate `cmu.config` file, `.env.example`, and `.gitignore`
- * to the given directory based on the selected language.
+ * Writes `.env.example` and `.gitignore`, plus the `cmu.config` file for the
+ * selected language when the project keeps its own config.
  *
  * @param {string} projectPath - The absolute path to the target project directory.
  * @param {string} language - The language to use ('typescript' or 'javascript').
+ * @param {ConfigLocation} [location] - "global" writes no cmu.config.
  * @returns {Promise<void>} Resolves when all files have been written successfully.
  */
 export async function generateConfigFiles(
   projectPath: string,
   language: string,
+  location: ConfigLocation = "project",
 ): Promise<void> {
   try {
     const isTypeScript = language === TYPESCRIPT_LANG;
     const files = [
-      [isTypeScript ? TS_CONFIG_FILE : JS_CONFIG_FILE, cmuConfig(isTypeScript)],
       [".env.example", envExampleTemplate],
       [".gitignore", gitignoreTemplate],
     ];
+    if (location === "project") {
+      files.push([
+        isTypeScript ? TS_CONFIG_FILE : JS_CONFIG_FILE,
+        cmuConfig(isTypeScript),
+      ]);
+    }
 
     for (const [name, content] of files) {
       await writeFile(path.join(projectPath, name), content, "utf8");
