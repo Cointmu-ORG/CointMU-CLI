@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import { createRequire } from "module";
 import * as path from "path";
 
 export const TS_CONFIG_FILE = "cmu.config.ts";
@@ -6,6 +7,55 @@ export const JS_CONFIG_FILE = "cmu.config.js";
 
 /** "Option 'moduleResolution=node10' is deprecated", new in TypeScript 6. */
 const TS6_NODE10_DEPRECATION = 5107;
+
+/** TypeScript 7 ships no JavaScript compiler API, so ts-node cannot use it. */
+const MAX_TS_MAJOR = 6;
+const TS_INSTALL_HINT =
+  "\x1b[2mhint:\x1b[0m run `npm install --save-dev typescript@6` in the project.";
+
+/**
+ * The version of the TypeScript a cmu.config.ts would be compiled with,
+ * resolved from the config's own directory the way ts-node resolves it.
+ *
+ * @param {string} configPath - Absolute path to cmu.config.ts.
+ * @returns {string | null} The version, or null when none is installed.
+ */
+function projectTypescriptVersion(configPath: string): string | null {
+  try {
+    const pkg = createRequire(configPath)("typescript/package.json") as {
+      version: string;
+    };
+    return pkg.version;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "MODULE_NOT_FOUND") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Fails with a fix-it message when the project's TypeScript cannot load a
+ * cmu.config.ts, instead of whatever ts-node would throw.
+ *
+ * @param {string} configPath - Absolute path to cmu.config.ts.
+ * @throws {Error} When TypeScript is missing or newer than MAX_TS_MAJOR.
+ */
+function assertUsableTypescript(configPath: string): void {
+  const version = projectTypescriptVersion(configPath);
+  if (version === null) {
+    throw new Error(
+      `${TS_CONFIG_FILE} needs TypeScript, but no TypeScript was found in the project.\n` +
+        `${TS_INSTALL_HINT} Or rename it to ${JS_CONFIG_FILE}.`,
+    );
+  }
+  if (Number.parseInt(version, 10) > MAX_TS_MAJOR) {
+    throw new Error(
+      `${TS_CONFIG_FILE} cannot be loaded with TypeScript ${version}: TypeScript 7 and later have no JavaScript compiler API for ts-node.\n` +
+        TS_INSTALL_HINT,
+    );
+  }
+}
 
 /**
  * Locates the project's cmu.config file, preferring the TypeScript variant.
@@ -43,6 +93,7 @@ export function findProjectConfig(cwd: string = process.cwd()): string | null {
  */
 export async function loadProjectConfig(configPath: string): Promise<any> {
   if (configPath.endsWith(".ts")) {
+    assertUsableTypescript(configPath);
     const tsNode = await import("ts-node");
     tsNode.register({
       transpileOnly: true,
