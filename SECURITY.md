@@ -20,6 +20,8 @@ If the issue is in another CointMU product, report it on that product's reposito
 
 Never put a real seed phrase, private key or password in a report.
 
+We aim to acknowledge reports within 72 hours and to provide a remediation timeline after triage. We will coordinate a disclosure date with you once a fix is available.
+
 ## Scope, Rules and Credit
 
 The scope, the testing rules and how findings are credited are on the [Hall of Fame](https://coint-mu-docs.vercel.app/docs/hall-of-fame.html) page. Test only with your own accounts and on an isolated local chain, never on the shared campus network.
