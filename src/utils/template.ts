@@ -206,7 +206,7 @@ describe("Deployment Template Test", function () {
 
   const devDependencies =
     language === TYPESCRIPT_LANG
-      ? "@types/node mocha chai @types/mocha @types/chai ts-node typescript@5"
+      ? "@types/node mocha chai @types/mocha @types/chai ts-node typescript@6"
       : "mocha chai";
   console.log("Installing dev dependencies...");
   await run("npm", ["install", "--save-dev", ...devDependencies.split(" ")], {
