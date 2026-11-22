@@ -110,11 +110,13 @@ describe("getDeployNetwork config errors", () => {
     );
   });
 
-  it("names both config files when neither exists", async () => {
+  // Without a project config, -n is looked up in ~/.cmu-networks.json; the
+  // error names that file and both config files that could have defined it.
+  it("names the global file and both config files when neither holds the network", async () => {
     const error = await deployNetworkError("mainnet");
 
     expect(error.message).toMatch(
-      /^network 'mainnet' was requested, but no cmu\.config\.ts or cmu\.config\.js was found\./,
+      /^network 'mainnet' is not saved in ~\/\.cmu-networks\.json, and this folder has no cmu\.config\.ts or cmu\.config\.js\./,
     );
   });
 
