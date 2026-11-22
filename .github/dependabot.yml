@@ -8,6 +8,11 @@ updates:
       time: "09:00"
       timezone: "UTC"
     open-pull-requests-limit: 10
+    # typescript-eslint 8.x peer-requires typescript <6.1.0, so a TS major
+    # breaks `npm ci` (#274). Lift once typescript-eslint supports the next one.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     # One PR for all npm bumps instead of one per dependency.
     groups:
       npm-dependencies:
