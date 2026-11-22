@@ -214,12 +214,13 @@ export async function runConsole(options: ConsoleOptions = {}): Promise<void> {
 
   // Fail here, with the endpoint named, rather than opening a REPL in which
   // every call the user types errors out.
-  await pingNetwork(network.url, network.name);
+  const liveChainId = await pingNetwork(network.url, network.name);
 
   console.log(`\n--- Console configuration ---`);
   console.log(`Network      : ${network.name}`);
   console.log(`RPC endpoint : ${maskUrl(network.url)}`);
-  console.log(`Chain ID     : ${network.chainId}`);
+  // ~/.cmu-networks.json stores no chain ID; the node's stands in for it.
+  console.log(`Chain ID     : ${network.chainId ?? liveChainId}`);
   console.log(`Signer       : ${signerLabel(signer, options)}`);
   console.log(
     `Preloaded    : provider, signer, ethers, getContract(name, address), getDeployed(name)`,

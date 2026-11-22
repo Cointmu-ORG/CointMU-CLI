@@ -23,6 +23,10 @@ interface DeployOptions {
 /** Stands in for the deployer address when `--config` finds no key. */
 const NO_KEY_LABEL = "unavailable (no key)";
 
+/** Stands in for the chain ID of a saved network under `--config`. */
+const UNCONFIGURED_CHAIN_LABEL =
+  "not configured (read from the node when deploying)";
+
 /**
  * Masks a private key for console output: the 0x plus three digits that make a
  * key recognisable, and the last four. Anything too short to keep that much
@@ -42,12 +46,13 @@ export function maskPrivateKey(pk: string): string {
  * @param {string} [name] - The resolved network name, as the caller knows it.
  *   ethers has no registered name for the CointMU chain, so without this the
  *   connection is reported as 'unknown'.
- * @returns {Promise<void>} Resolves if connected, throws Error if unreachable.
+ * @returns {Promise<number>} The chain ID the node reported.
+ * @throws {Error} When it is unreachable or reports no usable chain ID.
  */
 export async function pingNetwork(
   rpcUrl: string,
   name?: string,
-): Promise<void> {
+): Promise<number> {
   // An unset url is a broken entry, not an unreachable endpoint: dialing "" only
   // buys the user a NETWORK_TIMEOUT_MS wait and a message with a hole in it.
   // getDeployNetwork() already rejects a cmu.config network without one, naming
@@ -63,9 +68,10 @@ export async function pingNetwork(
   const { ethers } = await import("ethers");
   console.log(`Pinging ${maskUrl(rpcUrl)}...`);
   let timer: NodeJS.Timeout | undefined;
+  let networkData: any;
   try {
     const provider = new ethers.JsonRpcProvider(rpcUrl);
-    const networkData: any = await Promise.race([
+    networkData = await Promise.race([
       provider.getNetwork(),
       new Promise((_, reject) => {
         timer = setTimeout(
@@ -74,9 +80,6 @@ export async function pingNetwork(
         );
       }),
     ]);
-    console.log(
-      `Connected to '${name ?? networkData.name}' (chain ID ${networkData.chainId}).`,
-    );
   } catch {
     throw new Error(
       `RPC endpoint ${maskUrl(rpcUrl)} is unreachable (timed out after ${NETWORK_TIMEOUT_MS}ms).\n` +
@@ -86,6 +89,20 @@ export async function pingNetwork(
     // A pending timer would hold the process open after a successful ping.
     clearTimeout(timer);
   }
+
+  // `cmu deploy` hands this to scripts as CMU_CHAIN_ID; anything that is not
+  // a positive integer would reach them as "NaN" or "undefined".
+  const chainId = Number(networkData?.chainId);
+  if (!Number.isSafeInteger(chainId) || chainId <= 0) {
+    throw new Error(
+      `RPC endpoint ${maskUrl(rpcUrl)} did not report a usable chain ID.\n` +
+        "\x1b[2mhint:\x1b[0m check that it is an Ethereum JSON-RPC endpoint - `cmu network list`.",
+    );
+  }
+  console.log(
+    `Connected to '${name ?? networkData.name}' (chain ID ${chainId}).`,
+  );
+  return chainId;
 }
 
 /**
@@ -139,6 +156,13 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
     return;
   }
 
+  // ~/.cmu-networks.json stores no chain ID, so it is read from the node
+  // before anything uses it. --config never dials and prints it as unknown;
+  // past that early return, chainId is always a number.
+  const chainId =
+    network.chainId ??
+    (options.config ? undefined : await pingNetwork(network.url, network.name));
+
   const privateKey = network.privateKey;
 
   delete process.env.PRIVATE_KEY;
@@ -169,7 +193,7 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
   console.log(`\n--- Deploy configuration ---`);
   console.log(`Network      : ${network.name}`);
   console.log(`RPC endpoint : ${maskUrl(network.url)}`);
-  console.log(`Chain ID     : ${network.chainId}`);
+  console.log(`Chain ID     : ${chainId ?? UNCONFIGURED_CHAIN_LABEL}`);
   // Kept as a field rather than dropped: the line existing but reading
   // "unavailable" is what tells the user no key was found, not a gap.
   console.log(`Deployer     : ${wallet ? wallet.address : NO_KEY_LABEL}`);
@@ -196,13 +220,16 @@ export async function runDeploy(options: DeployOptions): Promise<void> {
   const injectedEnv = {
     ...process.env,
     CMU_RPC_URL: network.url,
-    CMU_CHAIN_ID: String(network.chainId),
+    CMU_CHAIN_ID: String(chainId),
     PRIVATE_KEY: privateKey,
   };
 
   // The scripts cannot report back (their stdio is the terminal's), so what
   // they deployed is read off the chain afterwards - see utils/deployments.
-  const recording = await startRecording(network, wallet!.address);
+  const recording = await startRecording(
+    { ...network, chainId },
+    wallet!.address,
+  );
 
   try {
     for (const script of scripts) {
