@@ -4,6 +4,9 @@ import * as path from "path";
 export const TS_CONFIG_FILE = "cmu.config.ts";
 export const JS_CONFIG_FILE = "cmu.config.js";
 
+/** "Option 'moduleResolution=node10' is deprecated", new in TypeScript 6. */
+const TS6_NODE10_DEPRECATION = 5107;
+
 /**
  * Locates the project's cmu.config file, preferring the TypeScript variant.
  * This file is `require()`d from the current working directory, so it is
@@ -45,6 +48,9 @@ export async function loadProjectConfig(configPath: string): Promise<any> {
       transpileOnly: true,
       compiler: "typescript",
       compilerOptions: { module: "CommonJS" },
+      // TS 6 turns ts-node's implied moduleResolution=node10 into error TS5107;
+      // "ignoreDeprecations": "6.0" would instead be rejected by TS 5.
+      ignoreDiagnostics: [TS6_NODE10_DEPRECATION],
     });
   }
   const mod = require(configPath);
